@@ -30,6 +30,9 @@ import { TextField } from 'azure-devops-ui/TextField';
 import { IColor } from 'azure-devops-ui/Utilities/Color';
 import { Spinner, SpinnerSize } from 'azure-devops-ui/Spinner';
 import { ArrayItemProvider } from 'azure-devops-ui/Utilities/Provider';
+import {
+    ObservableValue,
+} from 'azure-devops-ui/Core/Observable';
 
 export interface IPivotContentState {
     projects?: ArrayItemProvider<TeamProjectReference>;
@@ -40,10 +43,10 @@ export interface IPivotContentState {
 export interface GitRepositoryExtended extends GitRepository {
     hasExistingRelease: boolean;
     existingReleaseName: string;
-    newReleaseBranchName: string;
     createRelease: boolean;
-    _this: any;
 }
+
+const newReleaseBranchNamesObservable: ObservableValue<string>[] = [];
 
 export class PivotContent extends React.Component<{}, IPivotContentState> {
     constructor(props: {}) {
@@ -181,8 +184,6 @@ export class PivotContent extends React.Component<{}, IPivotContentState> {
                         createRelease: createRelease,
                         hasExistingRelease: hasExistingRelease,
                         existingReleaseName: existingReleaseName,
-                        newReleaseBranchName: '',
-                        _this: this,
                     });
                 }
 
@@ -333,12 +334,7 @@ export class PivotContent extends React.Component<{}, IPivotContentState> {
         tableColumn: ITableColumn<GitRepositoryExtended>,
         tableItem: GitRepositoryExtended
     ): JSX.Element {
-        console.log(tableItem._this.state);
-        // TODO: Just use local storage as the persistent storage
-        tableItem._this.setState({
-            repositories: null,
-        });
-        let newReleaseBranchName = tableItem.newReleaseBranchName;
+        newReleaseBranchNamesObservable[rowIndex] = new ObservableValue<string>('');
         return (
             <SimpleTableCell
                 key={'col-' + columnIndex}
@@ -348,13 +344,11 @@ export class PivotContent extends React.Component<{}, IPivotContentState> {
                     <>
                         release /&nbsp;
                         <TextField
-                            value={newReleaseBranchName}
-                            onChange={(e) => {
-                                console.log('changing text');
-                                console.log(newReleaseBranchName);
-                                newReleaseBranchName = e.target.value;
-                            }}
-                            disabled={false}
+                            value={newReleaseBranchNamesObservable[rowIndex]}
+                            onChange={(e, newValue) =>
+                                (newReleaseBranchNamesObservable[rowIndex].value =
+                                    newValue)
+                            }
                         />
                         &nbsp;
                         <Button
@@ -362,7 +356,8 @@ export class PivotContent extends React.Component<{}, IPivotContentState> {
                             primary={true}
                             onClick={() => {
                                 console.log(
-                                    'release/' + newReleaseBranchName
+                                    'release/' +
+                                        newReleaseBranchNamesObservable[rowIndex].value
                                 );
                             }}
                         />
@@ -374,4 +369,3 @@ export class PivotContent extends React.Component<{}, IPivotContentState> {
 }
 
 showRootComponent(<PivotContent />);
-
