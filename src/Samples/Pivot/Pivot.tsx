@@ -7,6 +7,7 @@ import { showRootComponent } from "../../Common";
 
 import { getClient } from "azure-devops-extension-api";
 import { CoreRestClient, ProjectVisibility, TeamProjectReference } from "azure-devops-extension-api/Core";
+import { GitRestClient } from "azure-devops-extension-api/Git";
 
 import { Table, ITableColumn, renderSimpleCell, renderSimpleCellValue } from "azure-devops-ui/Table";
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
@@ -52,6 +53,13 @@ class PivotContent extends React.Component<{}, IPivotContentState> {
 
     private async initializeComponent() {
         const projects = await getClient(CoreRestClient).getProjects();
+        console.log('projects: ');
+        console.log(projects);
+        projects.forEach(async (project) => {
+            const repos = await getClient(GitRestClient).getRepositories(project.id);
+            console.log('repos: ');
+            console.log(repos);
+        });
         this.setState({
             projects: new ArrayItemProvider(projects)
         });
