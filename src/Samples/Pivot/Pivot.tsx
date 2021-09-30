@@ -7,7 +7,7 @@ import { showRootComponent } from "../../Common";
 
 import { getClient } from "azure-devops-extension-api";
 import { CoreRestClient, ProjectVisibility, TeamProjectReference } from "azure-devops-extension-api/Core";
-import { GitRestClient } from "azure-devops-extension-api/Git";
+import { GitRestClient, GitQueryCommitsCriteria, GitHistoryMode, GitBaseVersionDescriptor, GitTargetVersionDescriptor } from "azure-devops-extension-api/Git";
 
 import { Table, ITableColumn, renderSimpleCell, renderSimpleCellValue } from "azure-devops-ui/Table";
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
@@ -59,6 +59,61 @@ class PivotContent extends React.Component<{}, IPivotContentState> {
             const repos = await getClient(GitRestClient).getRepositories(project.id);
             console.log('repos: ');
             console.log(repos);
+            const criteria: GitQueryCommitsCriteria = {
+                $skip: 0,
+                $top: 1000,
+                author: "",
+                compareVersion: {
+                    version: "develop",
+                    versionOptions: 0,
+                    versionType: 0
+                },
+                excludeDeletes: false,
+                fromCommitId: "",
+                fromDate: "",
+                historyMode: GitHistoryMode.FullHistorySimplifyMerges,
+                ids: [],
+                includeLinks: true,
+                includePushData: false,
+                includeUserImageUrl: false,
+                includeWorkItems: false,
+                itemPath: "",
+                itemVersion: {
+                    version: "master",
+                    versionOptions: 0,
+                    versionType: 0
+                },
+                toCommitId: "",
+                toDate: "",
+                user: ""
+            }
+            repos.forEach(async (repo) => {
+                const commitsBatch = await getClient(GitRestClient).getCommitsBatch(criteria, repo.id, "", 0, 1000, true);
+                console.log("getCommitsBatch: ");
+                console.log(commitsBatch);
+
+                const baseVersion: GitBaseVersionDescriptor = {
+                    baseVersion: "master",
+                    baseVersionOptions: 0,
+                    baseVersionType: 0,
+                    version: "master",
+                    versionOptions: 0,
+                    versionType: 0
+                };
+                const targetVersion: GitTargetVersionDescriptor = {
+                    targetVersion: "develop",
+                    targetVersionOptions: 0,
+                    targetVersionType: 0,
+                    version: "develop",
+                    versionOptions: 0,
+                    versionType: 0
+                };
+
+                const commitsDiff = await getClient(GitRestClient).getCommitDiffs(repo.id, undefined, undefined, 1000, 0, baseVersion, targetVersion);
+                console.log("getCommitDiffs: ");
+                console.log(commitsDiff);
+            });
+
         });
         this.setState({
             projects: new ArrayItemProvider(projects)
