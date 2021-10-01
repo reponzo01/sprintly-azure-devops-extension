@@ -2,11 +2,11 @@
     "manifestVersion": 1,
     "id": "samples",
     "publisher": "EmanuelVargas",
-    "version": "1.0.47",
+    "version": "1.0.54",
     "name": "Extension Sample",
     "description": "Azure DevOps extension sample",
     "scopes": [
-        "vso.code"
+        "vso.code_write"
     ],
     "categories": [
         "Azure Pipelines"
