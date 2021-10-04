@@ -296,9 +296,10 @@ function renderName(
                     <Link
                         excludeTabStop
                         href={tableItem.webUrl + '/branches'}
+                        subtle={true}
                         target="_blank"
                     >
-                        {tableItem.name}
+                        <u>{tableItem.name}</u>
                     </Link>
                 </>
             }
@@ -313,19 +314,19 @@ function renderReleaseNeeded(
     tableItem: GitRepositoryExtended
 ): JSX.Element {
     const redColor: IColor = {
-        red: 151,
-        green: 30,
-        blue: 79,
+        red: 191,
+        green: 65,
+        blue: 65,
     };
     const greenColor: IColor = {
-        red: 0,
-        green: 255,
-        blue: 0,
+        red: 109,
+        green: 210,
+        blue: 109,
     };
     const orangeColor: IColor = {
-        red: 255,
-        green: 165,
-        blue: 0,
+        red: 225,
+        green: 172,
+        blue: 74,
     };
     let color: IColor = redColor;
     let text: string = 'No';
@@ -350,6 +351,8 @@ function renderReleaseNeeded(
                             color={color}
                             size={PillSize.large}
                             variant={PillVariant.colored}
+                            iconProps={{ iconName: "Warning" }}
+                            className="bolt-list-overlay"
                         >
                             {text}
                         </Pill>
@@ -380,6 +383,7 @@ function renderReleaseNeeded(
                         color={color}
                         size={PillSize.large}
                         variant={PillVariant.colored}
+                        className="bolt-list-overlay"
                     >
                         {text}
                     </Pill>
@@ -480,6 +484,7 @@ function renderTags(
                 <>
                     <Button
                         text="View Tags"
+                        subtle={true}
                         iconProps={{ iconName: 'Tag' }}
                         onClick={() => {
                             isTagsDialogOpen.value = true;

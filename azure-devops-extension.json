@@ -2,7 +2,7 @@
     "manifestVersion": 1,
     "id": "samples",
     "publisher": "EmanuelVargas",
-    "version": "1.0.63",
+    "version": "1.0.74",
     "name": "Extension Sample",
     "description": "Azure DevOps extension sample",
     "scopes": [
