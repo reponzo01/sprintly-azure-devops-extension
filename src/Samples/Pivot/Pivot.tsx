@@ -208,7 +208,16 @@ export class PivotContent extends React.Component<{}, IPivotContentState> {
                 }
 
                 _this.setState({
-                    repositories: new ArrayItemProvider(reposExtended),
+                    repositories: new ArrayItemProvider(
+                        reposExtended.sort(
+                            (
+                                a: GitRepositoryExtended,
+                                b: GitRepositoryExtended
+                            ) => {
+                                return a.name.localeCompare(b.name);
+                            }
+                        )
+                    ),
                 });
             });
         });
@@ -350,11 +359,7 @@ function renderReleaseNeeded(
                     <>
                         <Link
                             excludeTabStop
-                            href={
-                                tableItem.webUrl +
-                                '?version=GB' +
-                                releaseUrl
-                            }
+                            href={tableItem.webUrl + '?version=GB' + releaseUrl}
                             target="_blank"
                         >
                             {tableItem.existingReleaseName}
@@ -390,9 +395,7 @@ function renderCreateReleaseBranch(
     tableColumn: ITableColumn<GitRepositoryExtended>,
     tableItem: GitRepositoryExtended
 ): JSX.Element {
-    newReleaseBranchNamesObservable[rowIndex] = new ObservableValue<string>(
-        ''
-    );
+    newReleaseBranchNamesObservable[rowIndex] = new ObservableValue<string>('');
     return (
         <SimpleTableCell
             key={'col-' + columnIndex}
@@ -404,9 +407,8 @@ function renderCreateReleaseBranch(
                     <TextField
                         value={newReleaseBranchNamesObservable[rowIndex]}
                         onChange={(e, newValue) =>
-                            (newReleaseBranchNamesObservable[
-                                rowIndex
-                            ].value = newValue)
+                            (newReleaseBranchNamesObservable[rowIndex].value =
+                                newValue.trim())
                         }
                     />
                     &nbsp;
@@ -416,23 +418,20 @@ function renderCreateReleaseBranch(
                         onClick={async () => {
                             console.log(
                                 'release/' +
-                                    newReleaseBranchNamesObservable[
-                                        rowIndex
-                                    ].value
+                                    newReleaseBranchNamesObservable[rowIndex]
+                                        .value
                             );
                             const createRefOptions: GitRefUpdate[] = [];
                             const developBranch = await getClient(
                                 GitRestClient
                             ).getBranch(tableItem.id, 'develop');
-                            const newObjectId =
-                                developBranch.commit.commitId;
+                            const newObjectId = developBranch.commit.commitId;
                             createRefOptions.push({
                                 repositoryId: tableItem.id,
                                 name:
                                     'refs/heads/release/' +
-                                    newReleaseBranchNamesObservable[
-                                        rowIndex
-                                    ].value,
+                                    newReleaseBranchNamesObservable[rowIndex]
+                                        .value,
                                 isLocked: false,
                                 newObjectId: newObjectId,
                                 oldObjectId:
@@ -442,6 +441,8 @@ function renderCreateReleaseBranch(
                                 GitRestClient
                             ).updateRefs(createRefOptions, tableItem.id);
 
+                            newReleaseBranchNamesObservable[rowIndex].value =
+                                '';
                             createRef.forEach(async (ref) => {
                                 const globalMessagesSvc =
                                     await SDK.getService<IGlobalMessagesService>(
