@@ -354,7 +354,7 @@ function renderReleaseNeeded(
                             iconProps={{ iconName: "Warning" }}
                             className="bolt-list-overlay"
                         >
-                            {text}
+                            <b>{text}</b>
                         </Pill>
                     </>
                 }
@@ -385,7 +385,7 @@ function renderReleaseNeeded(
                         variant={PillVariant.colored}
                         className="bolt-list-overlay"
                     >
-                        {text}
+                        <b>{text}</b>
                     </Pill>
                 </>
             }
@@ -418,6 +418,7 @@ function renderCreateReleaseBranch(
                     &nbsp;
                     <Button
                         text="Create Branch"
+                        iconProps={{ iconName: "OpenSource" }}
                         primary={true}
                         onClick={async () => {
                             console.log(
