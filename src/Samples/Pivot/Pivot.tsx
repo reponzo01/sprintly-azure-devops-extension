@@ -45,7 +45,6 @@ import { SimpleList } from 'azure-devops-ui/List';
 export interface IPivotContentState {
     projects?: ArrayItemProvider<TeamProjectReference>;
     repositories?: ArrayItemProvider<GitRepositoryExtended>;
-    columns: ITableColumn<any>[];
 }
 
 export interface GitRepositoryExtended extends GitRepository {
@@ -59,39 +58,41 @@ const newReleaseBranchNamesObservable: ObservableValue<string>[] = [];
 const isTagsDialogOpen = new ObservableValue<boolean>(false);
 const tagsRepoName = new ObservableValue<string>('');
 const tags = new ObservableValue<string[]>([]);
+const columns = [
+    {
+        id: 'name',
+        name: 'Repository',
+        onSize: onSize,
+        renderCell: renderName,
+        width: new ObservableValue(-30),
+    },
+    {
+        id: 'releaseNeeded',
+        name: 'Release Needed?',
+        onSize: onSize,
+        renderCell: renderReleaseNeeded,
+        width: new ObservableValue(-30),
+    },
+    {
+        id: 'tags',
+        name: 'Tags',
+        onSize: onSize,
+        renderCell: renderTags,
+        width: new ObservableValue(-30),
+    },
+    {
+        id: 'createReleaseBranch',
+        name: 'Create Release Branch',
+        renderCell: renderCreateReleaseBranch,
+        width: new ObservableValue(-40),
+    },
+];
 
 export class PivotContent extends React.Component<{}, IPivotContentState> {
     constructor(props: {}) {
         super(props);
 
-        this.state = {
-            columns: [
-                {
-                    id: 'name',
-                    name: 'Repository',
-                    renderCell: this.renderName,
-                    width: 200,
-                },
-                {
-                    id: 'releaseNeeded',
-                    name: 'Release Needed?',
-                    renderCell: this.renderReleaseNeeded,
-                    width: 150,
-                },
-                {
-                    id: 'tags',
-                    name: 'Tags',
-                    renderCell: this.renderTags,
-                    width: 150,
-                },
-                {
-                    id: 'createReleaseBranch',
-                    name: 'Create Release Branch',
-                    renderCell: this.renderCreateReleaseBranch,
-                    width: 500,
-                },
-            ],
-        };
+        this.state = {};
     }
 
     public componentDidMount() {
@@ -229,7 +230,7 @@ export class PivotContent extends React.Component<{}, IPivotContentState> {
                 )}
                 {this.state.repositories && (
                     <Table
-                        columns={this.state.columns}
+                        columns={columns}
                         itemProvider={this.state.repositories}
                     />
                 )}
@@ -266,108 +267,75 @@ export class PivotContent extends React.Component<{}, IPivotContentState> {
             </div>
         );
     }
+}
 
-    private renderName(
-        rowIndex: number,
-        columnIndex: number,
-        tableColumn: ITableColumn<GitRepositoryExtended>,
-        tableItem: GitRepositoryExtended
-    ): JSX.Element {
-        return (
-            <SimpleTableCell
-                key={'col-' + columnIndex}
-                columnIndex={columnIndex}
-                tableColumn={tableColumn}
-                children={
-                    <>
-                        <Icon ariaLabel="Repository" iconName="Repo" />
-                        &nbsp;
-                        <Link
-                            excludeTabStop
-                            href={tableItem.webUrl + '/branches'}
-                            target="_blank"
-                        >
-                            {tableItem.name}
-                        </Link>
-                    </>
-                }
-            ></SimpleTableCell>
-        );
+function renderName(
+    rowIndex: number,
+    columnIndex: number,
+    tableColumn: ITableColumn<GitRepositoryExtended>,
+    tableItem: GitRepositoryExtended
+): JSX.Element {
+    return (
+        <SimpleTableCell
+            key={'col-' + columnIndex}
+            columnIndex={columnIndex}
+            tableColumn={tableColumn}
+            children={
+                <>
+                    <Icon ariaLabel="Repository" iconName="Repo" />
+                    &nbsp;
+                    <Link
+                        excludeTabStop
+                        href={tableItem.webUrl + '/branches'}
+                        target="_blank"
+                    >
+                        {tableItem.name}
+                    </Link>
+                </>
+            }
+        ></SimpleTableCell>
+    );
+}
+
+function renderReleaseNeeded(
+    rowIndex: number,
+    columnIndex: number,
+    tableColumn: ITableColumn<GitRepositoryExtended>,
+    tableItem: GitRepositoryExtended
+): JSX.Element {
+    const redColor: IColor = {
+        red: 151,
+        green: 30,
+        blue: 79,
+    };
+    const greenColor: IColor = {
+        red: 0,
+        green: 255,
+        blue: 0,
+    };
+    const orangeColor: IColor = {
+        red: 255,
+        green: 165,
+        blue: 0,
+    };
+    let color: IColor = redColor;
+    let text: string = 'No';
+    if (tableItem.createRelease === true) {
+        color = greenColor;
+        text = 'Yes';
     }
-
-    private renderReleaseNeeded(
-        rowIndex: number,
-        columnIndex: number,
-        tableColumn: ITableColumn<GitRepositoryExtended>,
-        tableItem: GitRepositoryExtended
-    ): JSX.Element {
-        const redColor: IColor = {
-            red: 151,
-            green: 30,
-            blue: 79,
-        };
-        const greenColor: IColor = {
-            red: 0,
-            green: 255,
-            blue: 0,
-        };
-        const orangeColor: IColor = {
-            red: 255,
-            green: 165,
-            blue: 0,
-        };
-        let color: IColor = redColor;
-        let text: string = 'No';
-        if (tableItem.createRelease === true) {
-            color = greenColor;
-            text = 'Yes';
-        }
-        if (tableItem.hasExistingRelease === true) {
-            color = orangeColor;
-            text = 'Release Exists';
-        }
-        if (tableItem.hasExistingRelease) {
-            const releaseUrl = encodeURI(tableItem.existingReleaseName);
-            return (
-                <TwoLineTableCell
-                    key={'col-' + columnIndex}
-                    columnIndex={columnIndex}
-                    tableColumn={tableColumn}
-                    line1={
-                        <>
-                            <Pill
-                                color={color}
-                                size={PillSize.large}
-                                variant={PillVariant.colored}
-                            >
-                                {text}
-                            </Pill>
-                        </>
-                    }
-                    line2={
-                        <>
-                            <Link
-                                excludeTabStop
-                                href={
-                                    tableItem.webUrl +
-                                    '?version=GB' +
-                                    releaseUrl
-                                }
-                                target="_blank"
-                            >
-                                {tableItem.existingReleaseName}
-                            </Link>
-                        </>
-                    }
-                ></TwoLineTableCell>
-            );
-        }
+    if (tableItem.hasExistingRelease === true) {
+        color = orangeColor;
+        text = 'Release Exists';
+    }
+    if (tableItem.hasExistingRelease) {
+        const releaseUrl = encodeURI(tableItem.existingReleaseName);
         return (
-            <SimpleTableCell
+            <TwoLineTableCell
                 key={'col-' + columnIndex}
                 columnIndex={columnIndex}
                 tableColumn={tableColumn}
-                children={
+                line1={
                     <>
                         <Pill
                             color={color}
@@ -378,122 +346,159 @@ export class PivotContent extends React.Component<{}, IPivotContentState> {
                         </Pill>
                     </>
                 }
-            ></SimpleTableCell>
-        );
-    }
-
-    private renderCreateReleaseBranch(
-        rowIndex: number,
-        columnIndex: number,
-        tableColumn: ITableColumn<GitRepositoryExtended>,
-        tableItem: GitRepositoryExtended
-    ): JSX.Element {
-        newReleaseBranchNamesObservable[rowIndex] = new ObservableValue<string>(
-            ''
-        );
-        return (
-            <SimpleTableCell
-                key={'col-' + columnIndex}
-                columnIndex={columnIndex}
-                tableColumn={tableColumn}
-                children={
+                line2={
                     <>
-                        release /&nbsp;
-                        <TextField
-                            value={newReleaseBranchNamesObservable[rowIndex]}
-                            onChange={(e, newValue) =>
-                                (newReleaseBranchNamesObservable[
-                                    rowIndex
-                                ].value = newValue)
+                        <Link
+                            excludeTabStop
+                            href={
+                                tableItem.webUrl +
+                                '?version=GB' +
+                                releaseUrl
                             }
-                        />
-                        &nbsp;
-                        <Button
-                            text="Create Branch"
-                            primary={true}
-                            onClick={async () => {
-                                console.log(
-                                    'release/' +
-                                        newReleaseBranchNamesObservable[
-                                            rowIndex
-                                        ].value
-                                );
-                                const createRefOptions: GitRefUpdate[] = [];
-                                const developBranch = await getClient(
-                                    GitRestClient
-                                ).getBranch(tableItem.id, 'develop');
-                                const newObjectId =
-                                    developBranch.commit.commitId;
-                                createRefOptions.push({
-                                    repositoryId: tableItem.id,
-                                    name:
-                                        'refs/heads/release/' +
-                                        newReleaseBranchNamesObservable[
-                                            rowIndex
-                                        ].value,
-                                    isLocked: false,
-                                    newObjectId: newObjectId,
-                                    oldObjectId:
-                                        '0000000000000000000000000000000000000000',
-                                });
-                                const createRef = await getClient(
-                                    GitRestClient
-                                ).updateRefs(createRefOptions, tableItem.id);
-
-                                createRef.forEach(async (ref) => {
-                                    const globalMessagesSvc =
-                                        await SDK.getService<IGlobalMessagesService>(
-                                            CommonServiceIds.GlobalMessagesService
-                                        );
-                                    globalMessagesSvc.addToast({
-                                        duration: 3000,
-                                        forceOverrideExisting: true,
-                                        message: ref.success
-                                            ? 'Branch Created!'
-                                            : 'Error Creating Branch: ' +
-                                              ref.customMessage,
-                                    });
-                                });
-                            }}
-                        />
+                            target="_blank"
+                        >
+                            {tableItem.existingReleaseName}
+                        </Link>
                     </>
                 }
-            ></SimpleTableCell>
+            ></TwoLineTableCell>
         );
     }
+    return (
+        <SimpleTableCell
+            key={'col-' + columnIndex}
+            columnIndex={columnIndex}
+            tableColumn={tableColumn}
+            children={
+                <>
+                    <Pill
+                        color={color}
+                        size={PillSize.large}
+                        variant={PillVariant.colored}
+                    >
+                        {text}
+                    </Pill>
+                </>
+            }
+        ></SimpleTableCell>
+    );
+}
 
-    private renderTags(
-        rowIndex: number,
-        columnIndex: number,
-        tableColumn: ITableColumn<GitRepositoryExtended>,
-        tableItem: GitRepositoryExtended
-    ): JSX.Element {
-        return (
-            <SimpleTableCell
-                key={'col-' + columnIndex}
-                columnIndex={columnIndex}
-                tableColumn={tableColumn}
-                children={
-                    <>
-                        <Button
-                            text="View Tags"
-                            iconProps={{ iconName: 'Tag' }}
-                            onClick={() => {
-                                isTagsDialogOpen.value = true;
-                                tagsRepoName.value = tableItem.name + ' Tags';
-                                tags.value = [];
-                                tableItem.refs.forEach((ref) => {
-                                    if (ref.name.includes('refs/tags')) {
-                                        tags.value.push(ref.name);
-                                    }
+function renderCreateReleaseBranch(
+    rowIndex: number,
+    columnIndex: number,
+    tableColumn: ITableColumn<GitRepositoryExtended>,
+    tableItem: GitRepositoryExtended
+): JSX.Element {
+    newReleaseBranchNamesObservable[rowIndex] = new ObservableValue<string>(
+        ''
+    );
+    return (
+        <SimpleTableCell
+            key={'col-' + columnIndex}
+            columnIndex={columnIndex}
+            tableColumn={tableColumn}
+            children={
+                <>
+                    release /&nbsp;
+                    <TextField
+                        value={newReleaseBranchNamesObservable[rowIndex]}
+                        onChange={(e, newValue) =>
+                            (newReleaseBranchNamesObservable[
+                                rowIndex
+                            ].value = newValue)
+                        }
+                    />
+                    &nbsp;
+                    <Button
+                        text="Create Branch"
+                        primary={true}
+                        onClick={async () => {
+                            console.log(
+                                'release/' +
+                                    newReleaseBranchNamesObservable[
+                                        rowIndex
+                                    ].value
+                            );
+                            const createRefOptions: GitRefUpdate[] = [];
+                            const developBranch = await getClient(
+                                GitRestClient
+                            ).getBranch(tableItem.id, 'develop');
+                            const newObjectId =
+                                developBranch.commit.commitId;
+                            createRefOptions.push({
+                                repositoryId: tableItem.id,
+                                name:
+                                    'refs/heads/release/' +
+                                    newReleaseBranchNamesObservable[
+                                        rowIndex
+                                    ].value,
+                                isLocked: false,
+                                newObjectId: newObjectId,
+                                oldObjectId:
+                                    '0000000000000000000000000000000000000000',
+                            });
+                            const createRef = await getClient(
+                                GitRestClient
+                            ).updateRefs(createRefOptions, tableItem.id);
+
+                            createRef.forEach(async (ref) => {
+                                const globalMessagesSvc =
+                                    await SDK.getService<IGlobalMessagesService>(
+                                        CommonServiceIds.GlobalMessagesService
+                                    );
+                                globalMessagesSvc.addToast({
+                                    duration: 3000,
+                                    forceOverrideExisting: true,
+                                    message: ref.success
+                                        ? 'Branch Created!'
+                                        : 'Error Creating Branch: ' +
+                                          ref.customMessage,
                                 });
-                            }}
-                        />
-                    </>
-                }
-            ></SimpleTableCell>
-        );
-    }
+                            });
+                        }}
+                    />
+                </>
+            }
+        ></SimpleTableCell>
+    );
+}
+
+function renderTags(
+    rowIndex: number,
+    columnIndex: number,
+    tableColumn: ITableColumn<GitRepositoryExtended>,
+    tableItem: GitRepositoryExtended
+): JSX.Element {
+    return (
+        <SimpleTableCell
+            key={'col-' + columnIndex}
+            columnIndex={columnIndex}
+            tableColumn={tableColumn}
+            children={
+                <>
+                    <Button
+                        text="View Tags"
+                        iconProps={{ iconName: 'Tag' }}
+                        onClick={() => {
+                            isTagsDialogOpen.value = true;
+                            tagsRepoName.value = tableItem.name + ' Tags';
+                            tags.value = [];
+                            tableItem.refs.forEach((ref) => {
+                                if (ref.name.includes('refs/tags')) {
+                                    tags.value.push(ref.name);
+                                }
+                            });
+                        }}
+                    />
+                </>
+            }
+        ></SimpleTableCell>
+    );
+}
+
+function onSize(event: MouseEvent, index: number, width: number) {
+    (columns[index].width as ObservableValue<number>).value = width;
 }
 
 showRootComponent(<PivotContent />);
