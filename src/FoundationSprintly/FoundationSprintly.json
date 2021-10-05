@@ -1,0 +1,25 @@
+{
+    "contributions": [
+        {
+            "id": "foundation-sprintly-hub",
+            "type": "ms.vss-web.hub-group",
+            "description": "A set of tools to aide in Sprint Releases",
+            "targets": ["ms.vss-web.project-hub-groups-collection"],
+            "properties": {
+                "name": "Foundation Sprintly",
+                "icon": {
+                    "dark": "asset://static/logo.png",
+                    "light": "asset://static/logo.png"
+                }
+            }
+        },
+        {
+            "id": "default-hub",
+            "type": "ms.vss-web.hub",
+            "targets": [".foundation-sprintly-hub"],
+            "properties": {
+                "uri": "dist/FoundationSprintly.html"
+            }
+        }
+    ]
+}

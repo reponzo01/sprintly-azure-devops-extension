@@ -1,8 +1,13 @@
-import { IdentityServiceIds } from "azure-devops-extension-api/Identities";
-import { IWorkItemChangedArgs, IWorkItemFieldChangedArgs, IWorkItemLoadedArgs, WorkItemTrackingServiceIds } from "azure-devops-extension-api/WorkItemTracking";
-import { IHostContext, IUserContext } from "azure-devops-extension-sdk";
+import { IdentityServiceIds } from 'azure-devops-extension-api/Identities';
+import {
+    IWorkItemChangedArgs,
+    IWorkItemFieldChangedArgs,
+    IWorkItemLoadedArgs,
+    WorkItemTrackingServiceIds,
+} from 'azure-devops-extension-api/WorkItemTracking';
+import { IHostContext, IUserContext } from 'azure-devops-extension-sdk';
 
-/** 
+/**
  * This is a minimal mock version to test WorkItemFormGroup
  * for additional mocks please look here:
  * https://github.com/h2floh/azure-dev-ops-react-ui-unit-testing/blob/main/src/__mocks__/azure-devops-extension-sdk.ts
@@ -11,15 +16,21 @@ import { IHostContext, IUserContext } from "azure-devops-extension-sdk";
 /**
  * Mocked Init Function to return resolve
  */
-export function init() : Promise<void> {
-    return new Promise((resolve, reject) => resolve());
+export function init(): Promise<void> {
+    return new Promise(
+        (
+            resolve: (value: void | PromiseLike<void>) => void,
+            reject: (reason?: any) => void
+        ) => resolve()
+    );
 }
 
 /**
  * Mocked getContributionId returns some Id
  */
-export function getContributionId() { return "someContributionId" }
-
+export function getContributionId(): string {
+    return 'someContributionId';
+}
 
 /**
  * Type and Accessor for WorkItem events
@@ -38,33 +49,36 @@ type workItemCallBackType = () => {
     onReset: (args: IWorkItemChangedArgs) => Promise<void>;
     // tslint:disable-next-line: completed-docs
     onRefreshed: (args: IWorkItemChangedArgs) => Promise<void>;
-    };
+};
 
 /** Spy eventHook to test WorkItemForm Events */
 export let spyWorkItemCallBackAccessor: workItemCallBackType;
 /**
  * Mocked register returns empty data structure
  */
-export function register (instanceId: string, instance: workItemCallBackType) {
+export function register(
+    instanceId: string,
+    instance: workItemCallBackType
+): void {
     spyWorkItemCallBackAccessor = instance;
 }
-
 
 /**
  * Accessors to Mocked getService methods
  */
-export const mockSetFieldValue = jest.fn();
+export const mockSetFieldValue: jest.Mock<any, any> = jest.fn();
 
 /**
  * Mocked getService returns mocked methods
  */
-export function getService(contributionId: string) {
-
-    switch(contributionId) {
+export function getService(
+    contributionId: string
+): { setFieldValue: jest.Mock<any, any> } | undefined {
+    switch (contributionId) {
         case WorkItemTrackingServiceIds.WorkItemFormService:
             return {
                 // WorkItemFormService
                 setFieldValue: mockSetFieldValue,
-            }
+            };
     }
 }
