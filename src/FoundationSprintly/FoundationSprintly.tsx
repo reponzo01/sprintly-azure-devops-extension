@@ -8,7 +8,6 @@ import {
     CommonServiceIds,
     getClient,
     IGlobalMessagesService,
-    IHostNavigationService,
 } from 'azure-devops-extension-api';
 import {
     CoreRestClient,
@@ -22,6 +21,7 @@ import {
     GitRefUpdate,
     GitRef,
     GitBranchStats,
+    GitCommitDiffs,
 } from 'azure-devops-extension-api/Git';
 
 import {
@@ -43,8 +43,7 @@ import { Observer } from 'azure-devops-ui/Observer';
 import { Dialog } from 'azure-devops-ui/Dialog';
 import { SimpleList } from 'azure-devops-ui/List';
 
-export interface IPivotContentState {
-    projects?: ArrayItemProvider<TeamProjectReference>;
+export interface IFoundationSprintlyContentState {
     repositories?: ArrayItemProvider<GitRepositoryExtended>;
 }
 
@@ -55,29 +54,31 @@ export interface GitRepositoryExtended extends GitRepository {
     refs: GitRef[];
 }
 
-const newReleaseBranchNamesObservable: ObservableValue<string>[] = [];
-const isTagsDialogOpen = new ObservableValue<boolean>(false);
-const tagsRepoName = new ObservableValue<string>('');
-const tags = new ObservableValue<string[]>([]);
-const columns = [
+const newReleaseBranchNamesObservable: Array<ObservableValue<string>> = [];
+const isTagsDialogOpen: ObservableValue<boolean> = new ObservableValue<boolean>(
+    false
+);
+const tagsRepoName: ObservableValue<string> = new ObservableValue<string>('');
+const tags: ObservableValue<string[]> = new ObservableValue<string[]>([]);
+const columns: any = [
     {
         id: 'name',
         name: 'Repository',
-        onSize: onSize,
+        onSize,
         renderCell: renderName,
         width: new ObservableValue(-30),
     },
     {
         id: 'releaseNeeded',
         name: 'Release Needed?',
-        onSize: onSize,
+        onSize,
         renderCell: renderReleaseNeeded,
         width: new ObservableValue(-30),
     },
     {
         id: 'tags',
         name: 'Tags',
-        onSize: onSize,
+        onSize,
         renderCell: renderTags,
         width: new ObservableValue(-30),
     },
@@ -90,41 +91,39 @@ const columns = [
 ];
 
 const useFilteredRepos: boolean = false;
-const reposToProcess = ['repository-1.git', 'repository-3.git'];
+const reposToProcess: string[] = ['repository-1.git', 'repository-3.git'];
 
-export class PivotContent extends React.Component<{}, IPivotContentState> {
+export class FoundationSprintlyContent extends React.Component<{}, IFoundationSprintlyContentState> {
     constructor(props: {}) {
         super(props);
 
         this.state = {};
     }
 
-    public componentDidMount() {
+    public componentDidMount(): void {
         SDK.init();
         this.initializeComponent();
     }
 
-    private async initializeComponent() {
+    private async initializeComponent(): Promise<void> {
         const _this: this = this;
-        const projects = await getClient(CoreRestClient).getProjects();
-        console.log('projects: ');
-        console.log(projects);
+        const projects: TeamProjectReference[] = await getClient(
+            CoreRestClient
+        ).getProjects();
         const reposExtended: GitRepositoryExtended[] = [];
-        projects.forEach(async (project) => {
-            const repos = await getClient(GitRestClient).getRepositories(
-                project.id
-            );
-            console.log('repos: ');
-            console.log(repos);
-            let filteredRepos = repos;
+        projects.forEach(async (project: TeamProjectReference) => {
+            const repos: GitRepository[] = await getClient(
+                GitRestClient
+            ).getRepositories(project.id);
+            let filteredRepos: GitRepository[] = repos;
             if (useFilteredRepos) {
-                filteredRepos = repos.filter((repo) =>
+                filteredRepos = repos.filter((repo: GitRepository) =>
                     reposToProcess.includes(repo.name)
                 );
             }
 
-            filteredRepos.forEach(async (repo) => {
-                const refs = await getClient(GitRestClient).getRefs(
+            filteredRepos.forEach(async (repo: GitRepository) => {
+                const refs: GitRef[] = await getClient(GitRestClient).getRefs(
                     repo.id,
                     undefined,
                     undefined,
@@ -135,13 +134,9 @@ export class PivotContent extends React.Component<{}, IPivotContentState> {
                     false,
                     undefined
                 );
-                console.log('refs: ');
-                console.log(refs);
-                const branches = await getClient(GitRestClient).getBranches(
-                    repo.id
-                );
-                console.log('branches: ');
-                console.log(branches);
+                const branches: GitBranchStats[] = await getClient(
+                    GitRestClient
+                ).getBranches(repo.id);
 
                 let hasDevelop: boolean = false;
                 let hasMaster: boolean = false;
@@ -159,7 +154,6 @@ export class PivotContent extends React.Component<{}, IPivotContentState> {
 
                 const processRepo: boolean =
                     hasDevelop && (hasMaster || hasMain);
-                console.log('process repo: ', processRepo);
                 if (processRepo === true) {
                     const baseVersion: GitBaseVersionDescriptor = {
                         baseVersion: hasMaster ? 'master' : 'main',
@@ -178,7 +172,7 @@ export class PivotContent extends React.Component<{}, IPivotContentState> {
                         versionType: 0,
                     };
 
-                    const commitsDiff = await getClient(
+                    const commitsDiff: GitCommitDiffs = await getClient(
                         GitRestClient
                     ).getCommitDiffs(
                         repo.id,
@@ -189,8 +183,6 @@ export class PivotContent extends React.Component<{}, IPivotContentState> {
                         baseVersion,
                         targetVersion
                     );
-                    console.log('getCommitDiffs: ');
-                    console.log(commitsDiff);
 
                     let createRelease: boolean = true;
                     if (
@@ -202,7 +194,7 @@ export class PivotContent extends React.Component<{}, IPivotContentState> {
 
                     let existingReleaseName: string = '';
                     let hasExistingRelease: boolean = false;
-                    branches.forEach((branch) => {
+                    branches.forEach((branch: GitBranchStats) => {
                         if (branch.name.includes('release')) {
                             hasExistingRelease = true;
                             existingReleaseName = branch.name;
@@ -223,10 +215,10 @@ export class PivotContent extends React.Component<{}, IPivotContentState> {
                         url: repo.url,
                         validRemoteUrls: repo.validRemoteUrls,
                         webUrl: repo.webUrl,
-                        createRelease: createRelease,
-                        hasExistingRelease: hasExistingRelease,
-                        existingReleaseName: existingReleaseName,
-                        refs: refs,
+                        createRelease,
+                        hasExistingRelease,
+                        existingReleaseName,
+                        refs,
                     });
                 }
 
@@ -244,17 +236,15 @@ export class PivotContent extends React.Component<{}, IPivotContentState> {
                 });
             });
         });
-        this.setState({
-            projects: new ArrayItemProvider(projects),
-        });
     }
 
     public render(): JSX.Element {
-        const onDismiss = () => {
+        const onDismiss: () => void = () => {
             isTagsDialogOpen.value = false;
         };
         return (
-            <div className="sample-pivot">
+            /* tslint:disable */
+            <div className="foundation-sprintly">
                 {!this.state.repositories && (
                     <div className="flex-row">
                         <Spinner label="loading" />
@@ -297,6 +287,7 @@ export class PivotContent extends React.Component<{}, IPivotContentState> {
                     }}
                 </Observer>
             </div>
+            /* tslint:disable */
         );
     }
 }
@@ -444,11 +435,6 @@ function renderCreateReleaseBranch(
                         iconProps={{ iconName: 'OpenSource' }}
                         primary={true}
                         onClick={async () => {
-                            console.log(
-                                'release/' +
-                                    newReleaseBranchNamesObservable[rowIndex]
-                                        .value
-                            );
                             const createRefOptions: GitRefUpdate[] = [];
                             const developBranch = await getClient(
                                 GitRestClient
@@ -531,4 +517,4 @@ function onSize(event: MouseEvent, index: number, width: number) {
     (columns[index].width as ObservableValue<number>).value = width;
 }
 
-showRootComponent(<PivotContent />);
+showRootComponent(<FoundationSprintlyContent />);
