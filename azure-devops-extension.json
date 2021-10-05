@@ -2,7 +2,7 @@
     "manifestVersion": 1,
     "id": "foundation-sprintly",
     "publisher": "EmanuelVargas",
-    "version": "0.0.4",
+    "version": "0.0.9",
     "name": "Foundation Sprintly",
     "description": "Azure Devops Extension to help facilitate releases at Foundation Software LLC.",
     "scopes": [
@@ -11,6 +11,14 @@
     "categories": [
         "Azure Repos"
     ],
+    "branding": {
+        "color": "rgb(34, 34, 34)",
+        "theme": "dark"
+    },
+    "repository": {
+        "type": "git",
+        "uri": "https://github.com/reponzo01/sprintly-azure-devops-extension.git"
+    },
     "targets": [
         {
             "id": "Microsoft.VisualStudio.Services"
@@ -21,7 +29,7 @@
     },
     "content": {
         "details": {
-            "path": "overview.md"
+            "path": "README.md"
         }
     },
     "files": [
