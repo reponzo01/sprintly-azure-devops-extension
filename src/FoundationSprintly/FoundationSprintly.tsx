@@ -168,20 +168,16 @@ export class FoundationSprintlyContent extends React.Component<
                     false,
                     undefined
                 );
-                const branches: GitBranchStats[] = await getClient(
-                    GitRestClient
-                ).getBranches(repo.id);
-
                 let hasDevelop: boolean = false;
                 let hasMaster: boolean = false;
                 let hasMain: boolean = false;
 
-                for (const branch of branches) {
-                    if (branch.name === 'develop') {
+                for (const ref of refs) {
+                    if (ref.name.includes('heads/develop')) {
                         hasDevelop = true;
-                    } else if (branch.name === 'master') {
+                    } else if (ref.name.includes('heads/master')) {
                         hasMaster = true;
-                    } else if (branch.name === 'main') {
+                    } else if (ref.name.includes('heads/main')) {
                         hasMain = true;
                     }
                 }
@@ -228,10 +224,12 @@ export class FoundationSprintlyContent extends React.Component<
 
                     let existingReleaseName: string = '';
                     let hasExistingRelease: boolean = false;
-                    branches.forEach((branch: GitBranchStats) => {
-                        if (branch.name.includes('release')) {
+                    refs.forEach((ref: GitRef) => {
+                        if (ref.name.includes('heads/release')) {
                             hasExistingRelease = true;
-                            existingReleaseName = branch.name;
+                            const refNameSplit: string[] =
+                                ref.name.split('heads/');
+                            existingReleaseName = refNameSplit[1];
                         }
                     });
 
