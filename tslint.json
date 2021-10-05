@@ -1,0 +1,44 @@
+{
+    "extends": "tslint:recommended",
+    "defaultSeverity": "warning",
+    "linterOptions": {
+        "exclude": [
+            "node_modules/**"
+        ]
+    },
+    "rules": {
+      "array-type": [ true, "array-simple" ],
+      "member-ordering": false,
+      "quotemark": [ true, "single" ],
+      "max-classes-per-file": [true, 2],
+      "max-line-length": [ true, 225 ],
+      "no-var-requires": false,
+      "new-parens": true,
+      "no-arg": true,
+      "no-bitwise": false,
+      "no-trailing-whitespace": false,
+      "no-conditional-assignment": true,
+      "no-consecutive-blank-lines": false,
+      "no-console": {
+        "severity": "warning",
+        "options": [
+          "info",
+          "log",
+          "time",
+          "timeEnd",
+          "trace"
+        ]
+      },
+      "no-empty-interface": false,
+      "no-string-literal": false,
+      "no-unused-expression": [ true, "allow-new" ],
+      "object-literal-sort-keys": false,
+      "ordered-imports": false,
+      "radix": false,
+      "typedef": [ true, "array-destructuring", "arrow-parameter", "call-signature", "member-variable-declaration", "object-destructuring", "parameter", "property-declaration", "variable-declaration" ],
+      "variable-name": [ true, "ban-keywords", "check-format", "allow-leading-underscore", "allow-pascal-case", "allow-snake-case" ]
+    },
+    "jsRules": {
+      "max-line-length": [ true, 225 ]
+    }
+  }

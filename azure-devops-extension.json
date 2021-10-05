@@ -1,15 +1,15 @@
 {
     "manifestVersion": 1,
-    "id": "samples",
+    "id": "foundation-sprintly",
     "publisher": "EmanuelVargas",
-    "version": "1.0.75",
-    "name": "Extension Sample",
-    "description": "Azure DevOps extension sample",
+    "version": "0.0.4",
+    "name": "Foundation Sprintly",
+    "description": "Azure Devops Extension to help facilitate releases at Foundation Software LLC.",
     "scopes": [
         "vso.code_write"
     ],
     "categories": [
-        "Azure Pipelines"
+        "Azure Repos"
     ],
     "targets": [
         {
