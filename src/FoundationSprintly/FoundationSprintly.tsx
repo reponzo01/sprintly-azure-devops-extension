@@ -90,10 +90,44 @@ const columns: any = [
     },
 ];
 
-const useFilteredRepos: boolean = false;
-const reposToProcess: string[] = ['repository-1.git', 'repository-3.git'];
+const useFilteredRepos: boolean = true;
+const reposToProcess: string[] = [
+    'repository-1.git',
+    'repository-2.git',
+    'repository-3.git',
+    'fsi.myprojecthq.jobcosting.api',
+    'fsi.myprojecthq.reports.api',
+    'fsi.myprojecthq.reports.database',
+    'fsi.myprojecthq.reports.web',
+    'fsi.myprojecthq.reportsint.api',
+    'fsi.myprojecthq.stimulsoftviewer.api',
+    'fsi.myprojecthq.web',
+    'fsi.pm.api',
+    'fsi.pm.database',
+    'fsi.pm.messageprocessor.functionapp',
+    'fsi.pm.webhookemail.functionapp',
+    'fsi.pmint.api',
+    'fsl.auth.b2c.apim',
+    'fsl.auth.b2c.appregistration',
+    'fsl.auth.b2c.functionapp',
+    'fsl.auth.b2c.userflows',
+    'fsl.auth.b2c.migration',
+    'fsl.authz.cosmosdb',
+    'fsl.myprojecthq.apim',
+    'fsl.myprojecthq.dailylogs.api',
+    'fsl.myprojecthq.purchaseorders.api',
+    'fsl.myprojecthq.reportdataint.api',
+    'fsl.myprojecthq.reports.stimulsoftviewer.api',
+    'fsl.myprojecthq.weatherautomation.functionapp',
+    'fsl.systemnotifications.api',
+    'fsl.systemnotifications.apim',
+    'fsl.systemnotifications.database',
+];
 
-export class FoundationSprintlyContent extends React.Component<{}, IFoundationSprintlyContentState> {
+export class FoundationSprintlyContent extends React.Component<
+    {},
+    IFoundationSprintlyContentState
+> {
     constructor(props: {}) {
         super(props);
 
@@ -118,7 +152,7 @@ export class FoundationSprintlyContent extends React.Component<{}, IFoundationSp
             let filteredRepos: GitRepository[] = repos;
             if (useFilteredRepos) {
                 filteredRepos = repos.filter((repo: GitRepository) =>
-                    reposToProcess.includes(repo.name)
+                    reposToProcess.includes(repo.name.toLowerCase())
                 );
             }
 
