@@ -1,9 +1,9 @@
 {
     "manifestVersion": 1,
-    "id": "foundation-sprintly",
+    "id": "foundation-sprintly-test",
     "publisher": "EmanuelVargas",
-    "version": "1.0.0",
-    "name": "Foundation Sprintly",
+    "version": "0.0.7",
+    "name": "Foundation Sprintly Test",
     "description": "Azure Devops Extension to help facilitate releases at Foundation Software LLC.",
     "scopes": [
         "vso.code_write"
