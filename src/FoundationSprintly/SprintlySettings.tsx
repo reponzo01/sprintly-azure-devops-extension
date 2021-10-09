@@ -70,15 +70,19 @@ export default class SprintlySettings extends React.Component<
 
         this.setState({ ready: true });
 
-        /*this._dataManager.getValue<string[]>('allowed-user-groups').then(
+        this._dataManager.getValue<string[]>('allowed-user-groups').then(
             (data) => {
+                console.log('data is this ', data);
                 this.userGroupsSelection.clear();
-                for (const selectedUserGroup in data) {
-                    this.userGroupsSelection.select(
-                        this.userGroups.findIndex(
-                            (item) => item === selectedUserGroup
-                        )
+                for (const selectedUserGroup of data) {
+                    console.log('searching the user gruops for ', selectedUserGroup);
+                    const idx = this.userGroups.findIndex(
+                        (item) => item === selectedUserGroup
                     );
+                    if (idx >= 0) {
+                        this.userGroupsSelection.select(idx);
+                    }
+                    console.log('would have selected gruop ', idx);
                 }
                 this.setState({
                     dataAllowedUserGroups: data,
@@ -97,10 +101,14 @@ export default class SprintlySettings extends React.Component<
         this._dataManager.getValue<string[]>('allowed-users').then(
             (data) => {
                 this.usersSelection.clear();
-                for (const selectedUser in data) {
-                    this.usersSelection.select(
-                        this.users.findIndex((item) => item === selectedUser)
+                for (const selectedUser of data) {
+                    const idx = this.users.findIndex(
+                        (item) => item === selectedUser
                     );
+                    if (idx >= 0) {
+                        this.usersSelection.select(idx);
+                    }
+                    console.log('would have selected user ', idx);
                 }
                 this.setState({
                     dataAllowedUsers: data,
@@ -114,7 +122,7 @@ export default class SprintlySettings extends React.Component<
                     ready: true,
                 });
             }
-        );*/
+        );
     }
 
     private async getGraphResource(
@@ -279,7 +287,7 @@ export default class SprintlySettings extends React.Component<
             this.userGroups
         );
         const usersSelectedArray: string[] = this.setSelectionRange(
-            this.userGroupsSelection.value,
+            this.usersSelection.value,
             this.users
         );
 
