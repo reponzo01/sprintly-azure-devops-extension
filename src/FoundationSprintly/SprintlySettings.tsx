@@ -31,7 +31,7 @@ export interface AllowedEntity {
     descriptor: string;
 }
 
-export interface IExtensionDataState {
+export interface ISprintlySettingsState {
     dataAllowedUserGroups?: AllowedEntity[];
     dataAllowedUsers?: AllowedEntity[];
     persistedAllowedUserGroups?: AllowedEntity[];
@@ -41,7 +41,7 @@ export interface IExtensionDataState {
 
 export default class SprintlySettings extends React.Component<
     { sampleProp: string },
-    IExtensionDataState
+    ISprintlySettingsState
 > {
     private userGroupsSelection = new DropdownMultiSelection();
     private usersSelection = new DropdownMultiSelection();

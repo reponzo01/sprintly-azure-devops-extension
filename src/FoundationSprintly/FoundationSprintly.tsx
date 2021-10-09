@@ -9,6 +9,7 @@ import { Page } from 'azure-devops-ui/Page';
 import { Header, TitleSize } from 'azure-devops-ui/Header';
 
 import { SprintlyPage } from './SprintlyPage';
+import SprintlyPostRelease from './SprintlyPostRelease';
 import SprintlySettings from './SprintlySettings';
 import { showRootComponent } from '../Common';
 import {
@@ -167,6 +168,10 @@ export default class FoundationSprintly extends React.Component<
                                 >
                                     <Tab name="Sprintly" id="sprintly-page" />
                                     <Tab
+                                        name="Post Release"
+                                        id="sprintly-post-release"
+                                    />
+                                    <Tab
                                         name="Settings"
                                         id="sprintly-settings"
                                     />
@@ -189,6 +194,10 @@ export default class FoundationSprintly extends React.Component<
                                     sampleProp={selectedTabId.value}
                                 />
                             );
+                        } else if (
+                            selectedTabId.value === 'sprintly-post-release'
+                        ) {
+                            return <SprintlyPostRelease />;
                         }
                         return <div>No access</div>;
                     }}
