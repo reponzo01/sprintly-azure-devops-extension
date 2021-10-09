@@ -24,11 +24,18 @@ import { ISelectionRange } from 'azure-devops-ui/Utilities/Selection';
 import { CoreRestClient } from 'azure-devops-extension-api/Core';
 import { resolveTypeReferenceDirective } from 'typescript';
 
+// TODO: Remove all this extension data from here and pass in as prop from Parent page
+export interface AllowedEntity {
+    displayName: string;
+    originId: string;
+    descriptor: string;
+}
+
 export interface IExtensionDataState {
-    dataAllowedUserGroups?: string[];
-    dataAllowedUsers?: string[];
-    persistedAllowedUserGroups?: string[];
-    persistedAllowedUsers?: string[];
+    dataAllowedUserGroups?: AllowedEntity[];
+    dataAllowedUsers?: AllowedEntity[];
+    persistedAllowedUserGroups?: AllowedEntity[];
+    persistedAllowedUsers?: AllowedEntity[];
     ready?: boolean;
 }
 
@@ -38,8 +45,8 @@ export default class SprintlySettings extends React.Component<
 > {
     private userGroupsSelection = new DropdownMultiSelection();
     private usersSelection = new DropdownMultiSelection();
-    private userGroups: string[] = [];
-    private users: string[] = [];
+    private userGroups: AllowedEntity[] = [];
+    private users: AllowedEntity[] = [];
     private _dataManager?: IExtensionDataManager;
     private sampleProp: string;
 
@@ -70,14 +77,17 @@ export default class SprintlySettings extends React.Component<
 
         this.setState({ ready: true });
 
-        this._dataManager.getValue<string[]>('allowed-user-groups').then(
+        this._dataManager.getValue<AllowedEntity[]>('allowed-user-groups').then(
             (data) => {
                 console.log('data is this ', data);
                 this.userGroupsSelection.clear();
                 for (const selectedUserGroup of data) {
-                    console.log('searching the user gruops for ', selectedUserGroup);
+                    console.log(
+                        'searching the user gruops for ',
+                        selectedUserGroup
+                    );
                     const idx = this.userGroups.findIndex(
-                        (item) => item === selectedUserGroup
+                        (item) => item.originId === selectedUserGroup.originId
                     );
                     if (idx >= 0) {
                         this.userGroupsSelection.select(idx);
@@ -98,12 +108,12 @@ export default class SprintlySettings extends React.Component<
             }
         );
 
-        this._dataManager.getValue<string[]>('allowed-users').then(
+        this._dataManager.getValue<AllowedEntity[]>('allowed-users').then(
             (data) => {
                 this.usersSelection.clear();
                 for (const selectedUser of data) {
                     const idx = this.users.findIndex(
-                        (item) => item === selectedUser
+                        (item) => item.originId === selectedUser.originId
                     );
                     if (idx >= 0) {
                         this.usersSelection.select(idx);
@@ -130,6 +140,7 @@ export default class SprintlySettings extends React.Component<
         accessToken: string,
         callback: (data: any) => void
     ): Promise<void> {
+        // TODO: extract the organization name globally
         axios
             .get(
                 `https://vssps.dev.azure.com/reponzo01/_apis/graph/${resouce}`,
@@ -154,7 +165,11 @@ export default class SprintlySettings extends React.Component<
             this.getGraphResource('groups', accessToken, (data: any) => {
                 this.userGroups = [];
                 for (const group in data.value) {
-                    this.userGroups.push(data.value[group].displayName);
+                    this.userGroups.push({
+                        displayName: data.value[group].displayName,
+                        originId: data.value[group].originId,
+                        descriptor: data.value[group].descriptor,
+                    });
                 }
                 console.log('resolving getGroups with ', this.userGroups);
                 resolve();
@@ -167,7 +182,11 @@ export default class SprintlySettings extends React.Component<
             this.getGraphResource('users', accessToken, (data: any) => {
                 this.users = [];
                 for (const user in data.value) {
-                    this.users.push(data.value[user].displayName);
+                    this.users.push({
+                        displayName: data.value[user].displayName,
+                        originId: data.value[user].originId,
+                        descriptor: data.value[user].descriptor,
+                    });
                 }
                 console.log('resolving getUsers with ', this.users);
                 resolve();
@@ -220,7 +239,7 @@ export default class SprintlySettings extends React.Component<
                                         },
                                     ]}
                                     className="example-dropdown flex-column"
-                                    items={this.userGroups}
+                                    items={this.userGroups.map((item) => item.displayName)}
                                     selection={this.userGroupsSelection}
                                     placeholder="Select User Groups"
                                     showFilterBox={true}
@@ -250,7 +269,7 @@ export default class SprintlySettings extends React.Component<
                                         },
                                     ]}
                                     className="example-dropdown flex-column"
-                                    items={this.users}
+                                    items={this.users.map((item) => item.displayName)}
                                     selection={this.usersSelection}
                                     placeholder="Select Individual Users"
                                     showFilterBox={true}
@@ -282,16 +301,16 @@ export default class SprintlySettings extends React.Component<
 
         this.setState({ ready: false });
 
-        const userGroupsSelectedArray: string[] = this.setSelectionRange(
+        const userGroupsSelectedArray: AllowedEntity[] = this.setSelectionRange(
             this.userGroupsSelection.value,
             this.userGroups
         );
-        const usersSelectedArray: string[] = this.setSelectionRange(
+        const usersSelectedArray: AllowedEntity[] = this.setSelectionRange(
             this.usersSelection.value,
             this.users
         );
 
-        this._dataManager!.setValue<string[]>(
+        this._dataManager!.setValue<AllowedEntity[]>(
             'allowed-user-groups',
             userGroupsSelectedArray || []
         ).then(() => {
@@ -301,7 +320,7 @@ export default class SprintlySettings extends React.Component<
             });
         });
 
-        this._dataManager!.setValue<string[]>(
+        this._dataManager!.setValue<AllowedEntity[]>(
             'allowed-users',
             usersSelectedArray || []
         ).then(() => {
@@ -314,9 +333,9 @@ export default class SprintlySettings extends React.Component<
 
     private setSelectionRange(
         selectionRange: ISelectionRange[],
-        dataArray: string[]
-    ): string[] {
-        const selectedArray: string[] = [];
+        dataArray: AllowedEntity[]
+    ): AllowedEntity[] {
+        const selectedArray: AllowedEntity[] = [];
         for (const rng of selectionRange) {
             var sliced = dataArray.slice(rng.beginIndex, rng.endIndex + 1);
             for (const slic of sliced) {
