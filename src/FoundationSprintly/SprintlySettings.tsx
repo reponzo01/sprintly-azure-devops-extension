@@ -57,6 +57,7 @@ export default class SprintlySettings extends React.Component<
     }
 
     public async componentDidMount() {
+        await SDK.init();
         this.initializeState();
         console.log(SDK.getUser());
     }

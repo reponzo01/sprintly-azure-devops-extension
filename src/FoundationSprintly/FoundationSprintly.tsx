@@ -18,8 +18,9 @@ import {
 } from 'azure-devops-extension-api';
 import axios from 'axios';
 
-const selectedTabId: ObservableValue<string> = new ObservableValue<string>(
-    'sprintly-page'
+const selectedTabId: ObservableValue<string> = new ObservableValue<string>('');
+const userIsAllowed: ObservableValue<boolean> = new ObservableValue<boolean>(
+    false
 );
 
 export interface AllowedEntity {
@@ -51,6 +52,7 @@ export default class FoundationSprintly extends React.Component<
     }
 
     public async componentDidMount() {
+        await SDK.init();
         this.initializeState();
     }
 
@@ -91,7 +93,14 @@ export default class FoundationSprintly extends React.Component<
                                         this.state.allAllowedUsersDescriptors
                                     ),
                             });
-                            console.log(this.state.allAllowedUsersDescriptors);
+                            userIsAllowed.value =
+                                this.state.allAllowedUsersDescriptors.includes(
+                                    this.state.loggedInUserDescriptor
+                                );
+                            console.log(
+                                this.state.allAllowedUsersDescriptors,
+                                userIsAllowed.value
+                            );
                         })
                         .catch((error) => {
                             console.error(error);
@@ -120,7 +129,14 @@ export default class FoundationSprintly extends React.Component<
                             this.state.allAllowedUsersDescriptors
                         ),
                 });
-                console.log(this.state.allAllowedUsersDescriptors);
+                userIsAllowed.value =
+                    this.state.allAllowedUsersDescriptors.includes(
+                        this.state.loggedInUserDescriptor
+                    );
+                console.log(
+                    this.state.allAllowedUsersDescriptors,
+                    userIsAllowed.value
+                );
             },
             () => {
                 this.setState({
@@ -139,24 +155,42 @@ export default class FoundationSprintly extends React.Component<
                     titleSize={TitleSize.Large}
                 />
 
-                <TabBar
-                    onSelectedTabChanged={onSelectedTabChanged}
-                    selectedTabId={selectedTabId}
-                    tabSize={TabSize.Tall}
-                >
-                    <Tab name="Sprintly" id="sprintly-page" />
-                    <Tab name="Settings" id="sprintly-settings" />
-                </TabBar>
+                <Observer userIsAllowed={userIsAllowed}>
+                    {(props: { userIsAllowed: boolean }) => {
+                        if (userIsAllowed.value) {
+                            selectedTabId.value = 'sprintly-page';
+                            return (
+                                <TabBar
+                                    onSelectedTabChanged={onSelectedTabChanged}
+                                    selectedTabId={selectedTabId}
+                                    tabSize={TabSize.Tall}
+                                >
+                                    <Tab name="Sprintly" id="sprintly-page" />
+                                    <Tab
+                                        name="Settings"
+                                        id="sprintly-settings"
+                                    />
+                                </TabBar>
+                            );
+                        }
+                        return <div>No access</div>;
+                    }}
+                </Observer>
+
                 <Observer selectedTabId={selectedTabId}>
                     {(props: { selectedTabId: string }) => {
                         if (selectedTabId.value === 'sprintly-page') {
                             return <SprintlyPage />;
+                        } else if (
+                            selectedTabId.value === 'sprintly-settings'
+                        ) {
+                            return (
+                                <SprintlySettings
+                                    sampleProp={selectedTabId.value}
+                                />
+                            );
                         }
-                        return (
-                            <SprintlySettings
-                                sampleProp={selectedTabId.value}
-                            />
-                        );
+                        return <div>No access</div>;
                     }}
                 </Observer>
             </Page>
