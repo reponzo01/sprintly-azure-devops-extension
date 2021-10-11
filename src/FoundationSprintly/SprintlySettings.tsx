@@ -21,39 +21,55 @@ import { Dropdown } from 'azure-devops-ui/Dropdown';
 import { Observer } from 'azure-devops-ui/Observer';
 import { DropdownMultiSelection } from 'azure-devops-ui/Utilities/DropdownSelection';
 import { ISelectionRange } from 'azure-devops-ui/Utilities/Selection';
-import { CoreRestClient } from 'azure-devops-extension-api/Core';
+import {
+    CoreRestClient,
+    TeamProjectReference,
+} from 'azure-devops-extension-api/Core';
 import { resolveTypeReferenceDirective } from 'typescript';
+
+import { GitRepository, GitRestClient } from 'azure-devops-extension-api/Git';
 
 // TODO: Remove all this extension data from here and pass in as prop from Parent page
 export interface AllowedEntity {
     displayName: string;
     originId: string;
-    descriptor: string;
+    descriptor?: string;
 }
 
 export interface ISprintlySettingsState {
     dataAllowedUserGroups?: AllowedEntity[];
     dataAllowedUsers?: AllowedEntity[];
+    dataRepositoriesToProcess?: AllowedEntity[];
+
     persistedAllowedUserGroups?: AllowedEntity[];
     persistedAllowedUsers?: AllowedEntity[];
+    persistedRepositoriesToProcess?: AllowedEntity[];
+
     ready?: boolean;
 }
 
 export default class SprintlySettings extends React.Component<
-    { sampleProp: string },
+    { sampleProp: string; loggedInUserDescriptor: string },
     ISprintlySettingsState
 > {
     private userGroupsSelection = new DropdownMultiSelection();
     private usersSelection = new DropdownMultiSelection();
-    private userGroups: AllowedEntity[] = [];
-    private users: AllowedEntity[] = [];
+    private repositoriesToProcessSelection = new DropdownMultiSelection();
+
+    private allUserGroups: AllowedEntity[] = [];
+    private allUsers: AllowedEntity[] = [];
+    private allRepositories: AllowedEntity[] = [];
+
     private _dataManager?: IExtensionDataManager;
     private sampleProp: string;
+    private loggedInUserDescriptor: string;
 
-    constructor(props: { sampleProp: string }) {
+    constructor(props: { sampleProp: string; loggedInUserDescriptor: string }) {
         super(props);
+
         this.state = {};
         this.sampleProp = props.sampleProp;
+        this.loggedInUserDescriptor = props.loggedInUserDescriptor;
     }
 
     public async componentDidMount() {
@@ -64,6 +80,7 @@ export default class SprintlySettings extends React.Component<
 
     private async initializeState(): Promise<void> {
         await SDK.ready();
+        // TODO: Get this access token at the parent page and pass in as prop
         const accessToken = await SDK.getAccessToken();
         const extDataService = await SDK.getService<IExtensionDataService>(
             CommonServiceIds.ExtensionDataService
@@ -75,19 +92,21 @@ export default class SprintlySettings extends React.Component<
 
         await this.getGroups(accessToken);
         await this.getUsers(accessToken);
+        await this.getRepositories(accessToken);
 
         this.setState({ ready: true });
 
+        // TODO: Extract these into their own methods
         this._dataManager.getValue<AllowedEntity[]>('allowed-user-groups').then(
-            (data) => {
-                console.log('data is this ', data);
+            (userGroups) => {
+                console.log('data is this ', userGroups);
                 this.userGroupsSelection.clear();
-                for (const selectedUserGroup of data) {
+                for (const selectedUserGroup of userGroups) {
                     console.log(
                         'searching the user gruops for ',
                         selectedUserGroup
                     );
-                    const idx = this.userGroups.findIndex(
+                    const idx = this.allUserGroups.findIndex(
                         (item) => item.originId === selectedUserGroup.originId
                     );
                     if (idx >= 0) {
@@ -96,8 +115,8 @@ export default class SprintlySettings extends React.Component<
                     console.log('would have selected gruop ', idx);
                 }
                 this.setState({
-                    dataAllowedUserGroups: data,
-                    persistedAllowedUserGroups: data,
+                    dataAllowedUserGroups: userGroups,
+                    persistedAllowedUserGroups: userGroups,
                     ready: true,
                 });
             },
@@ -110,11 +129,11 @@ export default class SprintlySettings extends React.Component<
         );
 
         this._dataManager.getValue<AllowedEntity[]>('allowed-users').then(
-            (data) => {
+            (users) => {
                 this.usersSelection.clear();
-                for (const selectedUser of data) {
-                    const idx = this.users.findIndex(
-                        (item) => item.originId === selectedUser.originId
+                for (const selectedUser of users) {
+                    const idx = this.allUsers.findIndex(
+                        (user) => user.originId === selectedUser.originId
                     );
                     if (idx >= 0) {
                         this.usersSelection.select(idx);
@@ -122,8 +141,8 @@ export default class SprintlySettings extends React.Component<
                     console.log('would have selected user ', idx);
                 }
                 this.setState({
-                    dataAllowedUsers: data,
-                    persistedAllowedUsers: data,
+                    dataAllowedUsers: users,
+                    persistedAllowedUsers: users,
                     ready: true,
                 });
             },
@@ -134,6 +153,39 @@ export default class SprintlySettings extends React.Component<
                 });
             }
         );
+
+        // TODO: Extract magic strings
+        this._dataManager
+            .getValue<AllowedEntity[]>(
+                this.loggedInUserDescriptor.replace('.', '-') +
+                    '-repositories-to-process'
+            )
+            .then(
+                (repositories) => {
+                    this.repositoriesToProcessSelection.clear();
+                    for (const selectedRepository of repositories) {
+                        const idx = this.allRepositories.findIndex(
+                            (repository) =>
+                                repository.originId ===
+                                selectedRepository.originId
+                        );
+                        if (idx >= 0) {
+                            this.repositoriesToProcessSelection.select(idx);
+                        }
+                    }
+                    this.setState({
+                        dataRepositoriesToProcess: repositories,
+                        persistedRepositoriesToProcess: repositories,
+                        ready: true,
+                    });
+                },
+                () => {
+                    this.setState({
+                        dataRepositoriesToProcess: [],
+                        ready: true,
+                    });
+                }
+            );
     }
 
     private async getGraphResource(
@@ -164,15 +216,15 @@ export default class SprintlySettings extends React.Component<
     private async getGroups(accessToken: string): Promise<void> {
         return new Promise((resolve) => {
             this.getGraphResource('groups', accessToken, (data: any) => {
-                this.userGroups = [];
+                this.allUserGroups = [];
                 for (const group in data.value) {
-                    this.userGroups.push({
+                    this.allUserGroups.push({
                         displayName: data.value[group].displayName,
                         originId: data.value[group].originId,
                         descriptor: data.value[group].descriptor,
                     });
                 }
-                console.log('resolving getGroups with ', this.userGroups);
+                console.log('resolving getGroups with ', this.allUserGroups);
                 resolve();
             });
         });
@@ -181,16 +233,37 @@ export default class SprintlySettings extends React.Component<
     private async getUsers(accessToken: string): Promise<void> {
         return new Promise((resolve) => {
             this.getGraphResource('users', accessToken, (data: any) => {
-                this.users = [];
+                this.allUsers = [];
                 for (const user in data.value) {
-                    this.users.push({
+                    this.allUsers.push({
                         displayName: data.value[user].displayName,
                         originId: data.value[user].originId,
                         descriptor: data.value[user].descriptor,
                     });
                 }
-                console.log('resolving getUsers with ', this.users);
+                console.log('resolving getUsers with ', this.allUsers);
                 resolve();
+            });
+        });
+    }
+
+    private async getRepositories(accessToken: string): Promise<void> {
+        return new Promise(async (resolve) => {
+            this.allRepositories = [];
+            const projects: TeamProjectReference[] = await getClient(
+                CoreRestClient
+            ).getProjects();
+            // TODO: Limit project to 'Portfolio' or 'Sample Project'
+            projects.forEach(async (project: TeamProjectReference) => {
+                const repos: GitRepository[] = await getClient(
+                    GitRestClient
+                ).getRepositories(project.id);
+                repos.forEach((repo: GitRepository) => {
+                    this.allRepositories.push({
+                        originId: repo.id,
+                        displayName: repo.name,
+                    });
+                });
             });
         });
     }
@@ -217,7 +290,8 @@ export default class SprintlySettings extends React.Component<
                         <code>DevOps</code>
                     </u>{' '}
                     have access to this extension. Use the dropdowns to add more{' '}
-                    groups or individual users.
+                    groups or individual users. These two settings are global{' '}
+                    settings.
                 </div>
                 <div className="flex-column">
                     <Observer selection={this.userGroupsSelection}>
@@ -240,7 +314,9 @@ export default class SprintlySettings extends React.Component<
                                         },
                                     ]}
                                     className="example-dropdown flex-column"
-                                    items={this.userGroups.map((item) => item.displayName)}
+                                    items={this.allUserGroups.map(
+                                        (item) => item.displayName
+                                    )}
                                     selection={this.userGroupsSelection}
                                     placeholder="Select User Groups"
                                     showFilterBox={true}
@@ -270,9 +346,51 @@ export default class SprintlySettings extends React.Component<
                                         },
                                     ]}
                                     className="example-dropdown flex-column"
-                                    items={this.users.map((item) => item.displayName)}
+                                    items={this.allUsers.map(
+                                        (item) => item.displayName
+                                    )}
                                     selection={this.usersSelection}
                                     placeholder="Select Individual Users"
+                                    showFilterBox={true}
+                                />
+                            );
+                        }}
+                    </Observer>
+                </div>
+                <div>
+                    Select the repositories you want to process. This is a{' '}
+                    user-based setting. Everyone with access to this extension{' '}
+                    can select a different list.
+                </div>
+                <div className="flex-column">
+                    <Observer selection={this.repositoriesToProcessSelection}>
+                        {() => {
+                            return (
+                                <Dropdown
+                                    ariaLabel="Multiselect"
+                                    actions={[
+                                        {
+                                            className:
+                                                'bolt-dropdown-action-right-button',
+                                            disabled:
+                                                this
+                                                    .repositoriesToProcessSelection
+                                                    .selectedCount === 0,
+                                            iconProps: { iconName: 'Clear' },
+                                            text: 'Clear',
+                                            onClick: () => {
+                                                this.repositoriesToProcessSelection.clear();
+                                            },
+                                        },
+                                    ]}
+                                    className="example-dropdown flex-column"
+                                    items={this.allRepositories.map(
+                                        (item) => item.displayName
+                                    )}
+                                    selection={
+                                        this.repositoriesToProcessSelection
+                                    }
+                                    placeholder="Select Individual Repositories"
                                     showFilterBox={true}
                                 />
                             );
@@ -292,25 +410,31 @@ export default class SprintlySettings extends React.Component<
     }
 
     private onSaveData = (): void => {
-        const {
+        /*const {
             dataAllowedUserGroups,
             dataAllowedUsers,
             ready,
             persistedAllowedUserGroups,
             persistedAllowedUsers,
-        } = this.state;
+        } = this.state;*/
 
         this.setState({ ready: false });
 
         const userGroupsSelectedArray: AllowedEntity[] = this.setSelectionRange(
             this.userGroupsSelection.value,
-            this.userGroups
+            this.allUserGroups
         );
         const usersSelectedArray: AllowedEntity[] = this.setSelectionRange(
             this.usersSelection.value,
-            this.users
+            this.allUsers
         );
+        const repositoriesSelectedArray: AllowedEntity[] =
+            this.setSelectionRange(
+                this.repositoriesToProcessSelection.value,
+                this.allRepositories
+            );
 
+        // TODO: Extract magic strings
         this._dataManager!.setValue<AllowedEntity[]>(
             'allowed-user-groups',
             userGroupsSelectedArray || []
@@ -328,6 +452,17 @@ export default class SprintlySettings extends React.Component<
             this.setState({
                 ready: true,
                 persistedAllowedUsers: usersSelectedArray,
+            });
+        });
+
+        this._dataManager!.setValue<AllowedEntity[]>(
+            this.loggedInUserDescriptor.replace('.', '-') +
+                '-repositories-to-process',
+            repositoriesSelectedArray || []
+        ).then(() => {
+            this.setState({
+                ready: true,
+                persistedRepositoriesToProcess: repositoriesSelectedArray,
             });
         });
     };

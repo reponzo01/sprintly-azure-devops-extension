@@ -6,6 +6,8 @@ import * as SDK from 'azure-devops-extension-sdk';
 import {
     CommonServiceIds,
     getClient,
+    IExtensionDataManager,
+    IExtensionDataService,
     IGlobalMessagesService,
 } from 'azure-devops-extension-api';
 import {
@@ -21,6 +23,7 @@ import {
     GitRef,
     GitBranchStats,
     GitCommitDiffs,
+    GitMergeParameters,
 } from 'azure-devops-extension-api/Git';
 
 import {
@@ -41,6 +44,8 @@ import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
 import { Dialog } from 'azure-devops-ui/Dialog';
 import { SimpleList } from 'azure-devops-ui/List';
+import { AllowedEntity } from './SprintlySettings';
+import { ZeroData } from 'azure-devops-ui/ZeroData';
 
 export interface ISprintlyPageState {
     repositories?: ArrayItemProvider<GitRepositoryExtended>;
@@ -57,9 +62,14 @@ const newReleaseBranchNamesObservable: Array<ObservableValue<string>> = [];
 const isTagsDialogOpen: ObservableValue<boolean> = new ObservableValue<boolean>(
     false
 );
-const selectedTabId: ObservableValue<string> = new ObservableValue<string>('sprintly-page');
+// TODO: Extract this magic string
+const selectedTabId: ObservableValue<string> = new ObservableValue<string>(
+    'sprintly-page'
+);
 const tagsRepoName: ObservableValue<string> = new ObservableValue<string>('');
 const tags: ObservableValue<string[]> = new ObservableValue<string[]>([]);
+const totalRepositoriesToProcess: ObservableValue<number> =
+    new ObservableValue<number>(0);
 const columns: any = [
     {
         id: 'name',
@@ -91,8 +101,8 @@ const columns: any = [
 ];
 
 const useFilteredRepos: boolean = true;
-const reposToProcess: string[] = [
-    'repository-1.git',
+let repositoriesToProcess: string[] = [
+    /*'repository-1.git',
     'repository-2.git',
     'repository-3.git',
     'fsi.myprojecthq.jobcosting.api',
@@ -121,153 +131,230 @@ const reposToProcess: string[] = [
     'fsl.myprojecthq.weatherautomation.functionapp',
     'fsl.systemnotifications.api',
     'fsl.systemnotifications.apim',
-    'fsl.systemnotifications.database',
+    'fsl.systemnotifications.database',*/
 ];
 
 export class SprintlyPage extends React.Component<
-    {},
+    { loggedInUserDescriptor: string },
     ISprintlyPageState
 > {
-    constructor(props: {}) {
+    private _dataManager?: IExtensionDataManager;
+    private loggedInUserDescriptor: string;
+
+    constructor(props: { loggedInUserDescriptor: string }) {
         super(props);
 
         this.state = {};
+        this.loggedInUserDescriptor = props.loggedInUserDescriptor;
     }
 
-    public componentDidMount(): void {
-        SDK.init();
+    public async componentDidMount(): Promise<void> {
+        await SDK.init();
         this.initializeComponent();
     }
 
     private async initializeComponent(): Promise<void> {
-        const _this: this = this;
-        const projects: TeamProjectReference[] = await getClient(
-            CoreRestClient
-        ).getProjects();
-        const reposExtended: GitRepositoryExtended[] = [];
-        projects.forEach(async (project: TeamProjectReference) => {
-            const repos: GitRepository[] = await getClient(
-                GitRestClient
-            ).getRepositories(project.id);
-            let filteredRepos: GitRepository[] = repos;
-            if (useFilteredRepos) {
-                filteredRepos = repos.filter((repo: GitRepository) =>
-                    reposToProcess.includes(repo.name.toLowerCase())
-                );
-            }
+        // TODO: Extract this into methods to make more readable
+        await SDK.ready();
+        // TODO: Get this access token at the parent page and pass in as prop
+        const accessToken = await SDK.getAccessToken();
+        const extDataService = await SDK.getService<IExtensionDataService>(
+            CommonServiceIds.ExtensionDataService
+        );
+        this._dataManager = await extDataService.getExtensionDataManager(
+            SDK.getExtensionContext().id,
+            accessToken
+        );
 
-            filteredRepos.forEach(async (repo: GitRepository) => {
-                const refs: GitRef[] = await getClient(GitRestClient).getRefs(
-                    repo.id,
-                    undefined,
-                    undefined,
-                    true,
-                    true,
-                    undefined,
-                    undefined,
-                    false,
-                    undefined
-                );
-                let hasDevelop: boolean = false;
-                let hasMaster: boolean = false;
-                let hasMain: boolean = false;
-
-                for (const ref of refs) {
-                    if (ref.name.includes('heads/develop')) {
-                        hasDevelop = true;
-                    } else if (ref.name.includes('heads/master')) {
-                        hasMaster = true;
-                    } else if (ref.name.includes('heads/main')) {
-                        hasMain = true;
-                    }
-                }
-
-                const processRepo: boolean =
-                    hasDevelop && (hasMaster || hasMain);
-                if (processRepo === true) {
-                    const baseVersion: GitBaseVersionDescriptor = {
-                        baseVersion: hasMaster ? 'master' : 'main',
-                        baseVersionOptions: 0,
-                        baseVersionType: 0,
-                        version: hasMaster ? 'master' : 'main',
-                        versionOptions: 0,
-                        versionType: 0,
-                    };
-                    const targetVersion: GitTargetVersionDescriptor = {
-                        targetVersion: 'develop',
-                        targetVersionOptions: 0,
-                        targetVersionType: 0,
-                        version: 'develop',
-                        versionOptions: 0,
-                        versionType: 0,
-                    };
-
-                    const commitsDiff: GitCommitDiffs = await getClient(
-                        GitRestClient
-                    ).getCommitDiffs(
-                        repo.id,
-                        undefined,
-                        undefined,
-                        1000,
-                        0,
-                        baseVersion,
-                        targetVersion
-                    );
-
-                    let createRelease: boolean = true;
-                    if (
-                        Object.keys(commitsDiff.changeCounts).length === 0 &&
-                        commitsDiff.changes.length === 0
-                    ) {
-                        createRelease = false;
+        this._dataManager
+            .getValue<AllowedEntity[]>(
+                this.loggedInUserDescriptor.replace('.', '-') +
+                    '-repositories-to-process'
+            )
+            .then(async (repositories) => {
+                repositoriesToProcess = [];
+                if (repositories) {
+                    for (const repository of repositories) {
+                        repositoriesToProcess.push(repository.originId);
                     }
 
-                    let existingReleaseName: string = '';
-                    let hasExistingRelease: boolean = false;
-                    refs.forEach((ref: GitRef) => {
-                        if (ref.name.includes('heads/release')) {
-                            hasExistingRelease = true;
-                            const refNameSplit: string[] =
-                                ref.name.split('heads/');
-                            existingReleaseName = refNameSplit[1];
-                        }
-                    });
+                    if (repositoriesToProcess.length > 0) {
+                        const projects: TeamProjectReference[] =
+                            await getClient(CoreRestClient).getProjects();
+                        // TODO: Limit projects to 'Portfolio' or 'Sample Project'
+                        const reposExtended: GitRepositoryExtended[] = [];
+                        projects.forEach(
+                            async (project: TeamProjectReference) => {
+                                const repos: GitRepository[] = await getClient(
+                                    GitRestClient
+                                ).getRepositories(project.id);
+                                let filteredRepos: GitRepository[] = repos;
+                                if (useFilteredRepos) {
+                                    filteredRepos = repos.filter(
+                                        (repo: GitRepository) =>
+                                            repositoriesToProcess.includes(
+                                                repo.id
+                                            )
+                                    );
+                                }
 
-                    reposExtended.push({
-                        _links: repo._links,
-                        defaultBranch: repo.defaultBranch,
-                        id: repo.id,
-                        isFork: repo.isFork,
-                        name: repo.name,
-                        parentRepository: repo.parentRepository,
-                        project: repo.project,
-                        remoteUrl: repo.remoteUrl,
-                        size: repo.size,
-                        sshUrl: repo.sshUrl,
-                        url: repo.url,
-                        validRemoteUrls: repo.validRemoteUrls,
-                        webUrl: repo.webUrl,
-                        createRelease,
-                        hasExistingRelease,
-                        existingReleaseName,
-                        refs,
-                    });
-                }
+                                totalRepositoriesToProcess.value =
+                                    filteredRepos.length;
 
-                _this.setState({
-                    repositories: new ArrayItemProvider(
-                        reposExtended.sort(
-                            (
-                                a: GitRepositoryExtended,
-                                b: GitRepositoryExtended
-                            ) => {
-                                return a.name.localeCompare(b.name);
+                                filteredRepos.forEach(
+                                    async (repo: GitRepository) => {
+                                        const refs: GitRef[] = await getClient(
+                                            GitRestClient
+                                        ).getRefs(
+                                            repo.id,
+                                            undefined,
+                                            undefined,
+                                            true,
+                                            true,
+                                            undefined,
+                                            undefined,
+                                            false,
+                                            undefined
+                                        );
+                                        let hasDevelop: boolean = false;
+                                        let hasMaster: boolean = false;
+                                        let hasMain: boolean = false;
+
+                                        for (const ref of refs) {
+                                            if (
+                                                ref.name.includes(
+                                                    'heads/develop'
+                                                )
+                                            ) {
+                                                hasDevelop = true;
+                                            } else if (
+                                                ref.name.includes(
+                                                    'heads/master'
+                                                )
+                                            ) {
+                                                hasMaster = true;
+                                            } else if (
+                                                ref.name.includes('heads/main')
+                                            ) {
+                                                hasMain = true;
+                                            }
+                                        }
+
+                                        const processRepo: boolean =
+                                            hasDevelop &&
+                                            (hasMaster || hasMain);
+                                        if (processRepo === true) {
+                                            const baseVersion: GitBaseVersionDescriptor =
+                                                {
+                                                    baseVersion: hasMaster
+                                                        ? 'master'
+                                                        : 'main',
+                                                    baseVersionOptions: 0,
+                                                    baseVersionType: 0,
+                                                    version: hasMaster
+                                                        ? 'master'
+                                                        : 'main',
+                                                    versionOptions: 0,
+                                                    versionType: 0,
+                                                };
+                                            const targetVersion: GitTargetVersionDescriptor =
+                                                {
+                                                    targetVersion: 'develop',
+                                                    targetVersionOptions: 0,
+                                                    targetVersionType: 0,
+                                                    version: 'develop',
+                                                    versionOptions: 0,
+                                                    versionType: 0,
+                                                };
+
+                                            const commitsDiff: GitCommitDiffs =
+                                                await getClient(
+                                                    GitRestClient
+                                                ).getCommitDiffs(
+                                                    repo.id,
+                                                    undefined,
+                                                    undefined,
+                                                    1000,
+                                                    0,
+                                                    baseVersion,
+                                                    targetVersion
+                                                );
+
+                                            let createRelease: boolean = true;
+                                            if (
+                                                Object.keys(
+                                                    commitsDiff.changeCounts
+                                                ).length === 0 &&
+                                                commitsDiff.changes.length === 0
+                                            ) {
+                                                createRelease = false;
+                                            }
+
+                                            let existingReleaseName: string =
+                                                '';
+                                            let hasExistingRelease: boolean =
+                                                false;
+                                            refs.forEach((ref: GitRef) => {
+                                                if (
+                                                    ref.name.includes(
+                                                        'heads/release'
+                                                    )
+                                                ) {
+                                                    hasExistingRelease = true;
+                                                    const refNameSplit: string[] =
+                                                        ref.name.split(
+                                                            'heads/'
+                                                        );
+                                                    existingReleaseName =
+                                                        refNameSplit[1];
+                                                }
+                                            });
+
+                                            reposExtended.push({
+                                                _links: repo._links,
+                                                defaultBranch:
+                                                    repo.defaultBranch,
+                                                id: repo.id,
+                                                isFork: repo.isFork,
+                                                name: repo.name,
+                                                parentRepository:
+                                                    repo.parentRepository,
+                                                project: repo.project,
+                                                remoteUrl: repo.remoteUrl,
+                                                size: repo.size,
+                                                sshUrl: repo.sshUrl,
+                                                url: repo.url,
+                                                validRemoteUrls:
+                                                    repo.validRemoteUrls,
+                                                webUrl: repo.webUrl,
+                                                createRelease,
+                                                hasExistingRelease,
+                                                existingReleaseName,
+                                                refs,
+                                            });
+                                        }
+
+                                        this.setState({
+                                            repositories: new ArrayItemProvider(
+                                                reposExtended.sort(
+                                                    (
+                                                        a: GitRepositoryExtended,
+                                                        b: GitRepositoryExtended
+                                                    ) => {
+                                                        return a.name.localeCompare(
+                                                            b.name
+                                                        );
+                                                    }
+                                                )
+                                            ),
+                                        });
+                                    }
+                                );
                             }
-                        )
-                    ),
-                });
+                        );
+                    }
+                }
             });
-        });
     }
 
     public render(): JSX.Element {
@@ -275,50 +362,75 @@ export class SprintlyPage extends React.Component<
             isTagsDialogOpen.value = false;
         };
         return (
+            // TODO: If repos to process = 0, add ZeroData page.
             /* tslint:disable */
-            <div className="page-content page-content-top flex-column rhythm-vertical-16">
-                {!this.state.repositories && (
-                    <div className="flex-row">
-                        <Spinner label="loading" />
-                    </div>
-                )}
-                {this.state.repositories && (
-                    <Table
-                        columns={columns}
-                        itemProvider={this.state.repositories}
-                    />
-                )}
-                <Observer
-                    isTagsDialogOpen={isTagsDialogOpen}
-                    tagsRepoName={tagsRepoName}
-                >
-                    {(props: {
-                        isTagsDialogOpen: boolean;
-                        tagsRepoName: string;
-                    }) => {
-                        return props.isTagsDialogOpen ? (
-                            <Dialog
-                                titleProps={{ text: props.tagsRepoName }}
-                                footerButtonProps={[
-                                    {
-                                        text: 'Close',
-                                        onClick: onDismiss,
-                                    },
-                                ]}
-                                onDismiss={onDismiss}
-                            >
-                                <SimpleList
-                                    itemProvider={
-                                        new ArrayItemProvider<string>(
-                                            tags.value
-                                        )
-                                    }
-                                />
-                            </Dialog>
-                        ) : null;
-                    }}
-                </Observer>
-            </div>
+            <Observer totalRepositoriesToProcess={totalRepositoriesToProcess}>
+                {(props: { totalRepositoriesToProcess: number }) => {
+                    if (totalRepositoriesToProcess.value > 0) {
+                        return (
+                            <div className="page-content page-content-top flex-column rhythm-vertical-16">
+                                {!this.state.repositories && (
+                                    <div className="flex-row">
+                                        <Spinner label="loading" />
+                                    </div>
+                                )}
+                                {this.state.repositories && (
+                                    <Table
+                                        columns={columns}
+                                        itemProvider={this.state.repositories}
+                                    />
+                                )}
+                                <Observer
+                                    isTagsDialogOpen={isTagsDialogOpen}
+                                    tagsRepoName={tagsRepoName}
+                                >
+                                    {(props: {
+                                        isTagsDialogOpen: boolean;
+                                        tagsRepoName: string;
+                                    }) => {
+                                        return props.isTagsDialogOpen ? (
+                                            <Dialog
+                                                titleProps={{
+                                                    text: props.tagsRepoName,
+                                                }}
+                                                footerButtonProps={[
+                                                    {
+                                                        text: 'Close',
+                                                        onClick: onDismiss,
+                                                    },
+                                                ]}
+                                                onDismiss={onDismiss}
+                                            >
+                                                <SimpleList
+                                                    itemProvider={
+                                                        new ArrayItemProvider<string>(
+                                                            tags.value
+                                                        )
+                                                    }
+                                                />
+                                            </Dialog>
+                                        ) : null;
+                                    }}
+                                </Observer>
+                            </div>
+                        );
+                    }
+                    return (
+                        <ZeroData
+                            primaryText="No repositories."
+                            secondaryText={
+                                <span>
+                                    Please select valid repositories from the{' '}
+                                    Settings page.
+                                </span>
+                            }
+                            imageAltText="No repositories"
+                            imagePath={'../static/notfound.png'}
+                        />
+                    );
+                }}
+            </Observer>
+
             /* tslint:disable */
         );
     }
@@ -471,8 +583,27 @@ function renderCreateReleaseBranch(
                             const developBranch = await getClient(
                                 GitRestClient
                             ).getBranch(tableItem.id, 'develop');
+
+                            const mainBranch = await getClient(
+                                GitRestClient
+                            ).getBranch(tableItem.id, 'main');
+
+                            //TODO: Try this page: https://docs.microsoft.com/en-us/rest/api/azure/devops/git/merges/create?view=azure-devops-rest-6.0 And try using regular axios instead of the api.
                             const newObjectId = developBranch.commit.commitId;
-                            createRefOptions.push({
+                            const newMainObjectId = mainBranch.commit.commitId;
+                            const gitMergeParams: GitMergeParameters = {
+                                comment: 'Merging dev to main hopefully',
+                                parents: [newObjectId, newMainObjectId],
+                            };
+                            const mergeRequest = await getClient(
+                                GitRestClient
+                            ).createMergeRequest(
+                                gitMergeParams,
+                                tableItem.project.id,
+                                tableItem.id
+                            );
+                            console.log(mergeRequest);
+                            /*createRefOptions.push({
                                 repositoryId: tableItem.id,
                                 name:
                                     'refs/heads/release/' +
@@ -502,7 +633,7 @@ function renderCreateReleaseBranch(
                                         : 'Error Creating Branch: ' +
                                           ref.customMessage,
                                 });
-                            });
+                            });*/
                         }}
                     />
                 </>
@@ -552,4 +683,3 @@ function onSize(event: MouseEvent, index: number, width: number) {
 function onSelectedTabChanged(newTabId: string) {
     selectedTabId.value = newTabId;
 }
-

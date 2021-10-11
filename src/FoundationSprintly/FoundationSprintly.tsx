@@ -7,6 +7,7 @@ import { Observer } from 'azure-devops-ui/Observer';
 import { Tab, TabBar, TabSize } from 'azure-devops-ui/Tabs';
 import { Page } from 'azure-devops-ui/Page';
 import { Header, TitleSize } from 'azure-devops-ui/Header';
+import { ZeroData } from 'azure-devops-ui/ZeroData';
 
 import { SprintlyPage } from './SprintlyPage';
 import SprintlyPostRelease from './SprintlyPostRelease';
@@ -23,6 +24,8 @@ const selectedTabId: ObservableValue<string> = new ObservableValue<string>('');
 const userIsAllowed: ObservableValue<boolean> = new ObservableValue<boolean>(
     false
 );
+const loggedInUserDescriptorObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
 
 export interface AllowedEntity {
     displayName: string;
@@ -30,16 +33,18 @@ export interface AllowedEntity {
     descriptor: string;
 }
 
-export interface IExtensionDataState {
+export interface IFoundationSprintlyState {
+    // TODO: These "persisted" properties may not be needed
     persistedAllowedUserGroups?: AllowedEntity[];
     persistedAllowedUsers?: AllowedEntity[];
+    // TODO: Passed logged in user as a prop to sprintly settings
     loggedInUserDescriptor: string;
     allAllowedUsersDescriptors: string[];
 }
 
 export default class FoundationSprintly extends React.Component<
     {},
-    IExtensionDataState
+    IFoundationSprintlyState
 > {
     private _dataManager?: IExtensionDataManager;
     private accessToken: string = '';
@@ -59,7 +64,9 @@ export default class FoundationSprintly extends React.Component<
 
     private async initializeState(): Promise<void> {
         await SDK.ready();
-        this.setState({ loggedInUserDescriptor: SDK.getUser().descriptor });
+        const loggedInUserDescriptor: string = SDK.getUser().descriptor;
+        loggedInUserDescriptorObservable.value = loggedInUserDescriptor;
+        this.setState({ loggedInUserDescriptor: loggedInUserDescriptor });
 
         this.accessToken = await SDK.getAccessToken();
         const extDataService = await SDK.getService<IExtensionDataService>(
@@ -71,9 +78,9 @@ export default class FoundationSprintly extends React.Component<
         );
 
         this._dataManager.getValue<AllowedEntity[]>('allowed-user-groups').then(
-            (data) => {
-                console.log('data is this ', data);
-                for (const group of data) {
+            (userGroups) => {
+                console.log('data is this ', userGroups);
+                for (const group of userGroups) {
                     axios
                         .get(
                             `https://vsaex.dev.azure.com/reponzo01/_apis/GroupEntitlements/${group.originId}/members`,
@@ -108,7 +115,7 @@ export default class FoundationSprintly extends React.Component<
                         });
                 }
                 this.setState({
-                    persistedAllowedUserGroups: data,
+                    persistedAllowedUserGroups: userGroups,
                 });
             },
             () => {
@@ -119,12 +126,12 @@ export default class FoundationSprintly extends React.Component<
         );
 
         this._dataManager.getValue<AllowedEntity[]>('allowed-users').then(
-            (data) => {
-                const allAllowedUsersDescriptors = data.map(
-                    (item) => item.descriptor
+            (users) => {
+                const allAllowedUsersDescriptors = users.map(
+                    (user) => user.descriptor
                 );
                 this.setState({
-                    persistedAllowedUsers: data,
+                    persistedAllowedUsers: users,
                     allAllowedUsersDescriptors:
                         allAllowedUsersDescriptors.concat(
                             this.state.allAllowedUsersDescriptors
@@ -178,20 +185,29 @@ export default class FoundationSprintly extends React.Component<
                                 </TabBar>
                             );
                         }
-                        return <div>No access</div>;
+                        return <div></div>;
                     }}
                 </Observer>
 
                 <Observer selectedTabId={selectedTabId}>
                     {(props: { selectedTabId: string }) => {
                         if (selectedTabId.value === 'sprintly-page') {
-                            return <SprintlyPage />;
+                            return (
+                                <SprintlyPage
+                                    loggedInUserDescriptor={
+                                        loggedInUserDescriptorObservable.value
+                                    }
+                                />
+                            );
                         } else if (
                             selectedTabId.value === 'sprintly-settings'
                         ) {
                             return (
                                 <SprintlySettings
                                     sampleProp={selectedTabId.value}
+                                    loggedInUserDescriptor={
+                                        loggedInUserDescriptorObservable.value
+                                    }
                                 />
                             );
                         } else if (
@@ -199,7 +215,22 @@ export default class FoundationSprintly extends React.Component<
                         ) {
                             return <SprintlyPostRelease />;
                         }
-                        return <div>No access</div>;
+                        return (
+                            <div>
+                                <ZeroData
+                                    primaryText="Sorry, you don't have access yet."
+                                    secondaryText={
+                                        <span>
+                                            Please contact the DevOps team or{' '}
+                                            your team lead for access to this{' '}
+                                            extension.
+                                        </span>
+                                    }
+                                    imageAltText="No Access"
+                                    imagePath={'../static/notfound.png'}
+                                />
+                            </div>
+                        );
                     }}
                 </Observer>
             </Page>
