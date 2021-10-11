@@ -10,9 +10,15 @@ const extensionName = 'FoundationSprintly';
 entries[extensionName] = "./" + path.relative(process.cwd(), path.join(srcDir, extensionName, extensionName));
 
 module.exports = {
+    devtool: "inline-source-map",
+    devServer: {
+        https: true,
+        port: 3000
+    },
     entry: entries,
     output: {
         filename: '[name].js',
+        publicPath: "/dist/"
     },
     resolve: {
         extensions: ['.ts', '.tsx', '.js'],

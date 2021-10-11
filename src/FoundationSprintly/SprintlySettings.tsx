@@ -254,7 +254,7 @@ export default class SprintlySettings extends React.Component<
                 CoreRestClient
             ).getProjects();
             // TODO: Limit project to 'Portfolio' or 'Sample Project'
-            projects.forEach(async (project: TeamProjectReference) => {
+            for (const project of projects) {
                 const repos: GitRepository[] = await getClient(
                     GitRestClient
                 ).getRepositories(project.id);
@@ -264,7 +264,8 @@ export default class SprintlySettings extends React.Component<
                         displayName: repo.name,
                     });
                 });
-            });
+            }
+            resolve();
         });
     }
 
