@@ -24,6 +24,8 @@ import {
     GitBranchStats,
     GitCommitDiffs,
     GitMergeParameters,
+    GitMerge,
+    GitAsyncOperationStatus,
 } from 'azure-devops-extension-api/Git';
 
 import {
@@ -46,6 +48,7 @@ import { Dialog } from 'azure-devops-ui/Dialog';
 import { SimpleList } from 'azure-devops-ui/List';
 import { AllowedEntity } from './SprintlySettings';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
+import axios from 'axios';
 
 export interface ISprintlyPageState {
     repositories?: ArrayItemProvider<GitRepositoryExtended>;
@@ -133,6 +136,7 @@ let repositoriesToProcess: string[] = [
     'fsl.systemnotifications.apim',
     'fsl.systemnotifications.database',*/
 ];
+let accessToken: string = '';
 
 export class SprintlyPage extends React.Component<
     { loggedInUserDescriptor: string },
@@ -157,7 +161,7 @@ export class SprintlyPage extends React.Component<
         // TODO: Extract this into methods to make more readable
         await SDK.ready();
         // TODO: Get this access token at the parent page and pass in as prop
-        const accessToken = await SDK.getAccessToken();
+        accessToken = await SDK.getAccessToken();
         const extDataService = await SDK.getService<IExtensionDataService>(
             CommonServiceIds.ExtensionDataService
         );
@@ -584,18 +588,63 @@ function renderCreateReleaseBranch(
                                 GitRestClient
                             ).getBranch(tableItem.id, 'develop');
 
+                            // new test code
                             const mainBranch = await getClient(
                                 GitRestClient
                             ).getBranch(tableItem.id, 'main');
 
+                            console.log;
+
                             //TODO: Try this page: https://docs.microsoft.com/en-us/rest/api/azure/devops/git/merges/create?view=azure-devops-rest-6.0 And try using regular axios instead of the api.
-                            const newObjectId = developBranch.commit.commitId;
+
                             const newMainObjectId = mainBranch.commit.commitId;
+                            const newDevObjectId =
+                                developBranch.commit.commitId;
+                            console.log(mainBranch);
                             const gitMergeParams: GitMergeParameters = {
                                 comment: 'Merging dev to main hopefully',
-                                parents: [newObjectId, newMainObjectId],
+                                parents: [newMainObjectId, newDevObjectId],
                             };
-                            const mergeRequest = await getClient(
+                            //POST https://dev.azure.com/{organization}/{project}/_apis/git/repositories/{repositoryNameOrId}/merges?api-version=6.0-preview.1
+
+                            // axios
+                            //     .post(
+                            //         `https://dev.azure.com/reponzo01/${tableItem.project.id}/_apis/git/repositories/${tableItem.id}/merges?api-version=6.0-preview.1`,
+                            //         {
+                            //             comment:
+                            //                 'Merging dev(p2) to main(p1) hopefully',
+                            //             parents: [
+                            //                 newMainObjectId,
+                            //                 newDevObjectId,
+                            //             ],
+                            //         },
+                            //         {
+                            //             headers: {
+                            //                 Authorization: `Bearer ${accessToken}`,
+                            //             },
+                            //         }
+                            //     )
+                            //     .then((res: any) => {
+                            //         console.log(res);
+                            //     })
+                            //     .catch((error) => {
+                            //         console.error(error);
+                            //     });
+
+                            // createRefOptions.push({
+                            //     repositoryId: tableItem.id,
+                            //     name:
+                            //         'refs/heads/main/',
+                            //     isLocked: false,
+                            //     newObjectId: "this will have to be the result of true async call above",
+                            //     oldObjectId:
+                            //     newMainObjectId,
+                            // });
+                            // const createRef = await getClient(
+                            //     GitRestClient
+                            // ).updateRefs(createRefOptions, tableItem.id);
+
+                            const mergeRequest: GitMerge = await getClient(
                                 GitRestClient
                             ).createMergeRequest(
                                 gitMergeParams,
@@ -603,6 +652,50 @@ function renderCreateReleaseBranch(
                                 tableItem.id
                             );
                             console.log(mergeRequest);
+
+                            let mergeCommitId = '';
+                            const mergeCheckInterval = setInterval(async () => {
+                                const mergeRequestStatus: GitMerge =
+                                    await getClient(
+                                        GitRestClient
+                                    ).getMergeRequest(
+                                        tableItem.project.id,
+                                        tableItem.id,
+                                        mergeRequest.mergeOperationId
+                                    );
+                                console.log(mergeRequestStatus);
+                                // TODO: check for other errors (detailedStatus has failure message)
+                                if (
+                                    mergeRequestStatus.status ===
+                                    GitAsyncOperationStatus.Completed
+                                ) {
+                                    clearInterval(mergeCheckInterval);
+                                    mergeCommitId =
+                                        mergeRequestStatus.detailedStatus
+                                            .mergeCommitId;
+
+                                    // TODO: This is ugly. this is inside a set interval
+                                    createRefOptions.push({
+                                        repositoryId: tableItem.id,
+                                        name: 'refs/heads/main',
+                                        isLocked: false,
+                                        newObjectId: mergeCommitId,
+                                        oldObjectId: newMainObjectId,
+                                    });
+                                    const createRef = await getClient(
+                                        GitRestClient
+                                    ).updateRefs(
+                                        createRefOptions,
+                                        tableItem.id
+                                    );
+                                }
+                            }, 500);
+                            // This is async. Need a callback above.
+                            console.log(
+                                'outside the interval, merge commit id: ',
+                                mergeCommitId
+                            );
+                            // regular code
                             /*createRefOptions.push({
                                 repositoryId: tableItem.id,
                                 name:

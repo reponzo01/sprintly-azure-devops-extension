@@ -8,6 +8,7 @@ import {
     getClient,
     IExtensionDataManager,
     IExtensionDataService,
+    IGlobalMessagesService,
 } from 'azure-devops-extension-api';
 import {
     GraphRestClient,
@@ -440,30 +441,32 @@ export default class SprintlySettings extends React.Component<
             'allowed-user-groups',
             userGroupsSelectedArray || []
         ).then(() => {
-            this.setState({
-                ready: true,
-                persistedAllowedUserGroups: userGroupsSelectedArray,
-            });
-        });
-
-        this._dataManager!.setValue<AllowedEntity[]>(
-            'allowed-users',
-            usersSelectedArray || []
-        ).then(() => {
-            this.setState({
-                ready: true,
-                persistedAllowedUsers: usersSelectedArray,
-            });
-        });
-
-        this._dataManager!.setValue<AllowedEntity[]>(
-            this.loggedInUserDescriptor.replace('.', '-') +
-                '-repositories-to-process',
-            repositoriesSelectedArray || []
-        ).then(() => {
-            this.setState({
-                ready: true,
-                persistedRepositoriesToProcess: repositoriesSelectedArray,
+            this._dataManager!.setValue<AllowedEntity[]>(
+                'allowed-users',
+                usersSelectedArray || []
+            ).then(() => {
+                this._dataManager!.setValue<AllowedEntity[]>(
+                    this.loggedInUserDescriptor.replace('.', '-') +
+                        '-repositories-to-process',
+                    repositoriesSelectedArray || []
+                ).then(async () => {
+                    this.setState({
+                        ready: true,
+                        persistedRepositoriesToProcess:
+                            repositoriesSelectedArray,
+                        persistedAllowedUsers: usersSelectedArray,
+                        persistedAllowedUserGroups: userGroupsSelectedArray,
+                    });
+                    const globalMessagesSvc =
+                        await SDK.getService<IGlobalMessagesService>(
+                            CommonServiceIds.GlobalMessagesService
+                        );
+                    globalMessagesSvc.addToast({
+                        duration: 3000,
+                        forceOverrideExisting: true,
+                        message: 'Settings saved successfully!',
+                    });
+                });
             });
         });
     };
