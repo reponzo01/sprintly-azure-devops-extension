@@ -56,7 +56,7 @@ export interface ISprintlyPageState {
 
 export interface GitRepositoryExtended extends GitRepository {
     hasExistingRelease: boolean;
-    existingReleaseName: string;
+    existingReleaseNames: string[];
     createRelease: boolean;
     refs: GitRef[];
 }
@@ -104,38 +104,7 @@ const columns: any = [
 ];
 
 const useFilteredRepos: boolean = true;
-let repositoriesToProcess: string[] = [
-    /*'repository-1.git',
-    'repository-2.git',
-    'repository-3.git',
-    'fsi.myprojecthq.jobcosting.api',
-    'fsi.myprojecthq.reports.api',
-    'fsi.myprojecthq.reports.database',
-    'fsi.myprojecthq.reports.web',
-    'fsi.myprojecthq.reportsint.api',
-    'fsi.myprojecthq.stimulsoftviewer.api',
-    'fsi.myprojecthq.web',
-    'fsi.pm.api',
-    'fsi.pm.database',
-    'fsi.pm.messageprocessor.functionapp',
-    'fsi.pm.webhookemail.functionapp',
-    'fsi.pmint.api',
-    'fsl.auth.b2c.apim',
-    'fsl.auth.b2c.appregistration',
-    'fsl.auth.b2c.functionapp',
-    'fsl.auth.b2c.userflows',
-    'fsl.auth.b2c.migration',
-    'fsl.authz.cosmosdb',
-    'fsl.myprojecthq.apim',
-    'fsl.myprojecthq.dailylogs.api',
-    'fsl.myprojecthq.purchaseorders.api',
-    'fsl.myprojecthq.reportdataint.api',
-    'fsl.myprojecthq.reports.stimulsoftviewer.api',
-    'fsl.myprojecthq.weatherautomation.functionapp',
-    'fsl.systemnotifications.api',
-    'fsl.systemnotifications.apim',
-    'fsl.systemnotifications.database',*/
-];
+let repositoriesToProcess: string[] = [];
 let accessToken: string = '';
 
 export class SprintlyPage extends React.Component<
@@ -294,8 +263,8 @@ export class SprintlyPage extends React.Component<
                                                 createRelease = false;
                                             }
 
-                                            let existingReleaseName: string =
-                                                '';
+                                            const existingReleaseNames: string[] =
+                                                [];
                                             let hasExistingRelease: boolean =
                                                 false;
                                             refs.forEach((ref: GitRef) => {
@@ -309,8 +278,9 @@ export class SprintlyPage extends React.Component<
                                                         ref.name.split(
                                                             'heads/'
                                                         );
-                                                    existingReleaseName =
-                                                        refNameSplit[1];
+                                                    existingReleaseNames.push(
+                                                        refNameSplit[1]
+                                                    );
                                                 }
                                             });
 
@@ -333,7 +303,7 @@ export class SprintlyPage extends React.Component<
                                                 webUrl: repo.webUrl,
                                                 createRelease,
                                                 hasExistingRelease,
-                                                existingReleaseName,
+                                                existingReleaseNames,
                                                 refs,
                                             });
                                         }
@@ -424,7 +394,7 @@ export class SprintlyPage extends React.Component<
                             primaryText="No repositories."
                             secondaryText={
                                 <span>
-                                    Please select valid repositories from the{' '}
+                                    Please select valid repositories from the
                                     Settings page.
                                 </span>
                             }
@@ -501,9 +471,25 @@ function renderReleaseNeeded(
         text = 'Release Exists';
     }
     if (tableItem.hasExistingRelease) {
-        const releaseUrl = encodeURI(tableItem.existingReleaseName);
+        const releaseLinks: JSX.Element[] = [];
+        let counter: number = 0;
+        for (const release of tableItem.existingReleaseNames) {
+            releaseLinks.push(
+                <Link
+                    key={counter}
+                    excludeTabStop
+                    href={tableItem.webUrl + '?version=GB' + encodeURI(release)}
+                    target="_blank"
+                >
+                    {release}
+                </Link>
+            );
+            counter++;
+        }
+
         return (
             <TwoLineTableCell
+                className={'flex-direction-col'}
                 key={'col-' + columnIndex}
                 columnIndex={columnIndex}
                 tableColumn={tableColumn}
@@ -520,17 +506,7 @@ function renderReleaseNeeded(
                         </Pill>
                     </>
                 }
-                line2={
-                    <>
-                        <Link
-                            excludeTabStop
-                            href={tableItem.webUrl + '?version=GB' + releaseUrl}
-                            target="_blank"
-                        >
-                            {tableItem.existingReleaseName}
-                        </Link>
-                    </>
-                }
+                line2={<>{releaseLinks}</>}
             ></TwoLineTableCell>
         );
     }
@@ -588,122 +564,18 @@ function renderCreateReleaseBranch(
                                 GitRestClient
                             ).getBranch(tableItem.id, 'develop');
 
-                            // new test code
-                            const mainBranch = await getClient(
-                                GitRestClient
-                            ).getBranch(tableItem.id, 'main');
-
-                            console.log;
-
-                            //TODO: Try this page: https://docs.microsoft.com/en-us/rest/api/azure/devops/git/merges/create?view=azure-devops-rest-6.0 And try using regular axios instead of the api.
-
-                            const newMainObjectId = mainBranch.commit.commitId;
                             const newDevObjectId =
                                 developBranch.commit.commitId;
-                            console.log(mainBranch);
-                            const gitMergeParams: GitMergeParameters = {
-                                comment: 'Merging dev to main hopefully',
-                                parents: [newMainObjectId, newDevObjectId],
-                            };
-                            //POST https://dev.azure.com/{organization}/{project}/_apis/git/repositories/{repositoryNameOrId}/merges?api-version=6.0-preview.1
 
-                            // axios
-                            //     .post(
-                            //         `https://dev.azure.com/reponzo01/${tableItem.project.id}/_apis/git/repositories/${tableItem.id}/merges?api-version=6.0-preview.1`,
-                            //         {
-                            //             comment:
-                            //                 'Merging dev(p2) to main(p1) hopefully',
-                            //             parents: [
-                            //                 newMainObjectId,
-                            //                 newDevObjectId,
-                            //             ],
-                            //         },
-                            //         {
-                            //             headers: {
-                            //                 Authorization: `Bearer ${accessToken}`,
-                            //             },
-                            //         }
-                            //     )
-                            //     .then((res: any) => {
-                            //         console.log(res);
-                            //     })
-                            //     .catch((error) => {
-                            //         console.error(error);
-                            //     });
-
-                            // createRefOptions.push({
-                            //     repositoryId: tableItem.id,
-                            //     name:
-                            //         'refs/heads/main/',
-                            //     isLocked: false,
-                            //     newObjectId: "this will have to be the result of true async call above",
-                            //     oldObjectId:
-                            //     newMainObjectId,
-                            // });
-                            // const createRef = await getClient(
-                            //     GitRestClient
-                            // ).updateRefs(createRefOptions, tableItem.id);
-
-                            const mergeRequest: GitMerge = await getClient(
-                                GitRestClient
-                            ).createMergeRequest(
-                                gitMergeParams,
-                                tableItem.project.id,
-                                tableItem.id
-                            );
-                            console.log(mergeRequest);
-
-                            let mergeCommitId = '';
-                            const mergeCheckInterval = setInterval(async () => {
-                                const mergeRequestStatus: GitMerge =
-                                    await getClient(
-                                        GitRestClient
-                                    ).getMergeRequest(
-                                        tableItem.project.id,
-                                        tableItem.id,
-                                        mergeRequest.mergeOperationId
-                                    );
-                                console.log(mergeRequestStatus);
-                                // TODO: check for other errors (detailedStatus has failure message)
-                                if (
-                                    mergeRequestStatus.status ===
-                                    GitAsyncOperationStatus.Completed
-                                ) {
-                                    clearInterval(mergeCheckInterval);
-                                    mergeCommitId =
-                                        mergeRequestStatus.detailedStatus
-                                            .mergeCommitId;
-
-                                    // TODO: This is ugly. this is inside a set interval
-                                    createRefOptions.push({
-                                        repositoryId: tableItem.id,
-                                        name: 'refs/heads/main',
-                                        isLocked: false,
-                                        newObjectId: mergeCommitId,
-                                        oldObjectId: newMainObjectId,
-                                    });
-                                    const createRef = await getClient(
-                                        GitRestClient
-                                    ).updateRefs(
-                                        createRefOptions,
-                                        tableItem.id
-                                    );
-                                }
-                            }, 500);
-                            // This is async. Need a callback above.
-                            console.log(
-                                'outside the interval, merge commit id: ',
-                                mergeCommitId
-                            );
                             // regular code
-                            /*createRefOptions.push({
+                            createRefOptions.push({
                                 repositoryId: tableItem.id,
                                 name:
                                     'refs/heads/release/' +
                                     newReleaseBranchNamesObservable[rowIndex]
                                         .value,
                                 isLocked: false,
-                                newObjectId: newObjectId,
+                                newObjectId: newDevObjectId,
                                 oldObjectId:
                                     '0000000000000000000000000000000000000000',
                             });
@@ -726,7 +598,7 @@ function renderCreateReleaseBranch(
                                         : 'Error Creating Branch: ' +
                                           ref.customMessage,
                                 });
-                            });*/
+                            });
                         }}
                     />
                 </>
@@ -771,8 +643,4 @@ function renderTags(
 
 function onSize(event: MouseEvent, index: number, width: number) {
     (columns[index].width as ObservableValue<number>).value = width;
-}
-
-function onSelectedTabChanged(newTabId: string) {
-    selectedTabId.value = newTabId;
 }

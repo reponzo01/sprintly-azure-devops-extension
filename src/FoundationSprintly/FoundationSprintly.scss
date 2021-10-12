@@ -2,5 +2,7 @@
 
 .foundation-sprintly {
     font-size: $fontSizeM;
-    margin: 0 25px;
+}
+.flex-direction-col > div {
+    flex-direction: column;
 }
