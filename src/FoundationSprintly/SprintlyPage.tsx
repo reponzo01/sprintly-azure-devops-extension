@@ -123,7 +123,7 @@ export class SprintlyPage extends React.Component<
 
     public async componentDidMount(): Promise<void> {
         await SDK.init();
-        this.initializeComponent();
+        await this.initializeComponent();
     }
 
     private async initializeComponent(): Promise<void> {

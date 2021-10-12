@@ -27,6 +27,8 @@ const userIsAllowed: ObservableValue<boolean> = new ObservableValue<boolean>(
 );
 const loggedInUserDescriptorObservable: ObservableValue<string> =
     new ObservableValue<string>('');
+const organizationNameObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
 
 export interface AllowedEntity {
     displayName: string;
@@ -57,13 +59,13 @@ export default class FoundationSprintly extends React.Component<
 
     public async componentDidMount() {
         await SDK.init();
-        this.initializeState();
+        await this.initializeComponent();
     }
 
-    private async initializeState(): Promise<void> {
+    private async initializeComponent(): Promise<void> {
         await SDK.ready();
-        const loggedInUserDescriptor: string = SDK.getUser().descriptor;
-        loggedInUserDescriptorObservable.value = loggedInUserDescriptor;
+        loggedInUserDescriptorObservable.value = SDK.getUser().descriptor;
+        organizationNameObservable.value = SDK.getHost().name;
 
         this.accessToken = await SDK.getAccessToken();
         const extDataService = await SDK.getService<IExtensionDataService>(
@@ -74,10 +76,11 @@ export default class FoundationSprintly extends React.Component<
             this.accessToken
         );
 
-        selectedTabId.value = localStorage.getItem(
-            loggedInUserDescriptorObservable.value.replace('.', '-') +
-                '-selected-tab'
-        ) ?? 'sprintly-page';
+        selectedTabId.value =
+            localStorage.getItem(
+                loggedInUserDescriptorObservable.value.replace('.', '-') +
+                    '-selected-tab'
+            ) ?? 'sprintly-page';
         console.log('saved tab ', selectedTabId.value);
 
         this._dataManager.getValue<AllowedEntity[]>('allowed-user-groups').then(
@@ -86,7 +89,7 @@ export default class FoundationSprintly extends React.Component<
                 for (const group of userGroups) {
                     axios
                         .get(
-                            `https://vsaex.dev.azure.com/reponzo01/_apis/GroupEntitlements/${group.originId}/members`,
+                            `https://vsaex.dev.azure.com/${organizationNameObservable.value}/_apis/GroupEntitlements/${group.originId}/members`,
                             {
                                 headers: {
                                     Authorization: `Bearer ${this.accessToken}`,
@@ -177,9 +180,7 @@ export default class FoundationSprintly extends React.Component<
                         if (userIsAllowed.value) {
                             return (
                                 <TabBar
-                                    onSelectedTabChanged={
-                                        onSelectedTabChanged
-                                    }
+                                    onSelectedTabChanged={onSelectedTabChanged}
                                     selectedTabId={selectedTabId}
                                     tabSize={TabSize.Tall}
                                 >
@@ -199,32 +200,46 @@ export default class FoundationSprintly extends React.Component<
                     }}
                 </Observer>
 
-                <Observer selectedTabId={selectedTabId}>
-                    {(props: { selectedTabId: string }) => {
-                        if (selectedTabId.value === 'sprintly-page') {
-                            return (
-                                <SprintlyPage
-                                    loggedInUserDescriptor={
-                                        loggedInUserDescriptorObservable.value
-                                    }
-                                />
-                            );
-                        } else if (
-                            selectedTabId.value === 'sprintly-settings'
-                        ) {
-                            return (
-                                <SprintlySettings
-                                    sampleProp={selectedTabId.value}
-                                    loggedInUserDescriptor={
-                                        loggedInUserDescriptorObservable.value
-                                    }
-                                />
-                            );
-                        } else if (
-                            selectedTabId.value === 'sprintly-post-release'
-                        ) {
-                            return <SprintlyPostRelease />;
+                <Observer
+                    selectedTabId={selectedTabId}
+                    userIsAllowed={userIsAllowed}
+                >
+                    {(props: {
+                        selectedTabId: string;
+                        userIsAllowed: boolean;
+                    }) => {
+                        if (userIsAllowed.value) {
+                            console.log('user is allowed', selectedTabId.value);
+
+                            switch (selectedTabId.value) {
+                                case 'sprintly-page':
+                                case '':
+                                    return (
+                                        <SprintlyPage
+                                            loggedInUserDescriptor={
+                                                loggedInUserDescriptorObservable.value
+                                            }
+                                        />
+                                    );
+                                case 'sprintly-settings':
+                                    return (
+                                        <SprintlySettings
+                                            sampleProp={selectedTabId.value}
+                                            loggedInUserDescriptor={
+                                                loggedInUserDescriptorObservable.value
+                                            }
+                                            organizationName={
+                                                organizationNameObservable.value
+                                            }
+                                        />
+                                    );
+                                case 'sprintly-post-release':
+                                    return <SprintlyPostRelease />;
+                                default:
+                                    return <div></div>;
+                            }
                         }
+
                         return (
                             <div>
                                 <ZeroData

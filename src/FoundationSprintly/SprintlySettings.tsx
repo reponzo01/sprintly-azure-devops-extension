@@ -50,7 +50,7 @@ export interface ISprintlySettingsState {
 }
 
 export default class SprintlySettings extends React.Component<
-    { sampleProp: string; loggedInUserDescriptor: string },
+    { sampleProp: string; loggedInUserDescriptor: string; organizationName: string },
     ISprintlySettingsState
 > {
     private userGroupsSelection = new DropdownMultiSelection();
@@ -64,22 +64,23 @@ export default class SprintlySettings extends React.Component<
     private _dataManager?: IExtensionDataManager;
     private sampleProp: string;
     private loggedInUserDescriptor: string;
+    private organizationName: string;
 
-    constructor(props: { sampleProp: string; loggedInUserDescriptor: string }) {
+    constructor(props: { sampleProp: string; loggedInUserDescriptor: string; organizationName: string }) {
         super(props);
 
         this.state = {};
         this.sampleProp = props.sampleProp;
         this.loggedInUserDescriptor = props.loggedInUserDescriptor;
+        this.organizationName = props.organizationName;
     }
 
     public async componentDidMount() {
         await SDK.init();
-        this.initializeState();
-        console.log(SDK.getUser());
+        await this.initializeComponent();
     }
 
-    private async initializeState(): Promise<void> {
+    private async initializeComponent(): Promise<void> {
         await SDK.ready();
         // TODO: Get this access token at the parent page and pass in as prop
         const accessToken = await SDK.getAccessToken();
@@ -197,7 +198,7 @@ export default class SprintlySettings extends React.Component<
         // TODO: extract the organization name globally
         axios
             .get(
-                `https://vssps.dev.azure.com/reponzo01/_apis/graph/${resouce}`,
+                `https://vssps.dev.azure.com/${this.organizationName}/_apis/graph/${resouce}`,
                 {
                     headers: {
                         Authorization: `Bearer ${accessToken}`,
