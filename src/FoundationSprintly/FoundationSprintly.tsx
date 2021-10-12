@@ -8,6 +8,7 @@ import { Tab, TabBar, TabSize } from 'azure-devops-ui/Tabs';
 import { Page } from 'azure-devops-ui/Page';
 import { Header, TitleSize } from 'azure-devops-ui/Header';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
+import { Button } from 'azure-devops-ui/Button';
 
 import { SprintlyPage } from './SprintlyPage';
 import SprintlyPostRelease from './SprintlyPostRelease';
@@ -37,8 +38,6 @@ export interface IFoundationSprintlyState {
     // TODO: These "persisted" properties may not be needed
     persistedAllowedUserGroups?: AllowedEntity[];
     persistedAllowedUsers?: AllowedEntity[];
-    // TODO: Passed logged in user as a prop to sprintly settings
-    loggedInUserDescriptor: string;
     allAllowedUsersDescriptors: string[];
 }
 
@@ -52,7 +51,6 @@ export default class FoundationSprintly extends React.Component<
     constructor(props: {}) {
         super(props);
         this.state = {
-            loggedInUserDescriptor: '',
             allAllowedUsersDescriptors: [],
         };
     }
@@ -66,7 +64,6 @@ export default class FoundationSprintly extends React.Component<
         await SDK.ready();
         const loggedInUserDescriptor: string = SDK.getUser().descriptor;
         loggedInUserDescriptorObservable.value = loggedInUserDescriptor;
-        this.setState({ loggedInUserDescriptor: loggedInUserDescriptor });
 
         this.accessToken = await SDK.getAccessToken();
         const extDataService = await SDK.getService<IExtensionDataService>(
@@ -76,6 +73,12 @@ export default class FoundationSprintly extends React.Component<
             SDK.getExtensionContext().id,
             this.accessToken
         );
+
+        selectedTabId.value = localStorage.getItem(
+            loggedInUserDescriptorObservable.value.replace('.', '-') +
+                '-selected-tab'
+        ) ?? 'sprintly-page';
+        console.log('saved tab ', selectedTabId.value);
 
         this._dataManager.getValue<AllowedEntity[]>('allowed-user-groups').then(
             (userGroups) => {
@@ -103,7 +106,7 @@ export default class FoundationSprintly extends React.Component<
                             });
                             userIsAllowed.value =
                                 this.state.allAllowedUsersDescriptors.includes(
-                                    this.state.loggedInUserDescriptor
+                                    loggedInUserDescriptorObservable.value
                                 );
                             console.log(
                                 this.state.allAllowedUsersDescriptors,
@@ -139,7 +142,7 @@ export default class FoundationSprintly extends React.Component<
                 });
                 userIsAllowed.value =
                     this.state.allAllowedUsersDescriptors.includes(
-                        this.state.loggedInUserDescriptor
+                        loggedInUserDescriptorObservable.value
                     );
                 console.log(
                     this.state.allAllowedUsersDescriptors,
@@ -162,14 +165,21 @@ export default class FoundationSprintly extends React.Component<
                     title="Foundation Sprintly"
                     titleSize={TitleSize.Large}
                 />
-
+                <div className="page-content page-content-top flex-column rhythm-vertical-16">
+                    <Button
+                        text="Refresh Data"
+                        iconProps={{ iconName: 'Refresh' }}
+                        onClick={() => window.location.reload()}
+                    />
+                </div>
                 <Observer userIsAllowed={userIsAllowed}>
                     {(props: { userIsAllowed: boolean }) => {
                         if (userIsAllowed.value) {
-                            selectedTabId.value = 'sprintly-page';
                             return (
                                 <TabBar
-                                    onSelectedTabChanged={onSelectedTabChanged}
+                                    onSelectedTabChanged={
+                                        onSelectedTabChanged
+                                    }
                                     selectedTabId={selectedTabId}
                                     tabSize={TabSize.Tall}
                                 >
@@ -240,7 +250,13 @@ export default class FoundationSprintly extends React.Component<
 }
 
 function onSelectedTabChanged(newTabId: string) {
+    console.log('setting tab to ', loggedInUserDescriptorObservable.value);
     selectedTabId.value = newTabId;
+    localStorage.setItem(
+        loggedInUserDescriptorObservable.value.replace('.', '-') +
+            '-selected-tab',
+        newTabId
+    );
 }
 
 showRootComponent(<FoundationSprintly />);
