@@ -1,5 +1,5 @@
 import * as React from 'react';
-import axios from 'axios';
+import axios, { AxiosResponse } from 'axios';
 
 import * as SDK from 'azure-devops-extension-sdk';
 import {
@@ -46,9 +46,12 @@ export default class SprintlySettings extends React.Component<
     },
     ISprintlySettingsState
 > {
-    private userGroupsSelection = new DropdownMultiSelection();
-    private usersSelection = new DropdownMultiSelection();
-    private repositoriesToProcessSelection = new DropdownMultiSelection();
+    private userGroupsSelection: DropdownMultiSelection =
+        new DropdownMultiSelection();
+    private usersSelection: DropdownMultiSelection =
+        new DropdownMultiSelection();
+    private repositoriesToProcessSelection: DropdownMultiSelection =
+        new DropdownMultiSelection();
 
     private allUserGroups: AllowedEntity[] = [];
     private allUsers: AllowedEntity[] = [];
@@ -65,7 +68,7 @@ export default class SprintlySettings extends React.Component<
         this.organizationName = props.organizationName;
     }
 
-    public async componentDidMount() {
+    public async componentDidMount(): Promise<void> {
         await this.initializeSdk();
         await this.initializeComponent();
     }
@@ -86,16 +89,16 @@ export default class SprintlySettings extends React.Component<
 
         this.setState({ ready: true });
 
-        // TODO: Extract these into their own methods
         this.loadAllowedUserGroupsUsers();
         this.loadAllowedUsers();
         this.loadRepositoriesToProcess();
     }
 
     private async initializeDataManager(): Promise<IExtensionDataManager> {
-        const extDataService = await SDK.getService<IExtensionDataService>(
-            CommonServiceIds.ExtensionDataService
-        );
+        const extDataService: IExtensionDataService =
+            await SDK.getService<IExtensionDataService>(
+                CommonServiceIds.ExtensionDataService
+            );
         return await extDataService.getExtensionDataManager(
             SDK.getExtensionContext().id,
             this.accessToken
@@ -106,7 +109,6 @@ export default class SprintlySettings extends React.Component<
         resouce: string,
         callback: (data: any) => void
     ): Promise<void> {
-        // TODO: extract the organization name globally
         axios
             .get(
                 `https://vssps.dev.azure.com/${this.organizationName}/_apis/graph/${resouce}`,
@@ -116,96 +118,93 @@ export default class SprintlySettings extends React.Component<
                     },
                 }
             )
-            .then((res) => {
-                console.log(res.data);
+            .then((res: AxiosResponse<never>) => {
                 callback(res.data);
             })
-            .catch((error) => {
+            .catch((error: any) => {
                 console.error(error);
                 throw error;
             });
     }
 
     private async getGroups(): Promise<void> {
-        return new Promise((resolve) => {
-            this.getGraphResource('groups', (data: any) => {
-                this.allUserGroups = [];
-                for (const group in data.value) {
-                    this.allUserGroups.push({
-                        displayName: data.value[group].displayName,
-                        originId: data.value[group].originId,
-                        descriptor: data.value[group].descriptor,
-                    });
-                }
-                console.log('resolving getGroups with ', this.allUserGroups);
-                resolve();
-            });
-        });
+        return new Promise(
+            (resolve: (value: void | PromiseLike<void>) => void) => {
+                this.getGraphResource('groups', (data: any) => {
+                    this.allUserGroups = [];
+                    for (const group of data.value) {
+                        this.allUserGroups.push({
+                            displayName: group.displayName,
+                            originId: group.originId,
+                            descriptor: group.descriptor,
+                        });
+                    }
+                    resolve();
+                });
+            }
+        );
     }
 
     private async getUsers(): Promise<void> {
-        return new Promise((resolve) => {
-            this.getGraphResource('users', (data: any) => {
-                this.allUsers = [];
-                for (const user in data.value) {
-                    this.allUsers.push({
-                        displayName: data.value[user].displayName,
-                        originId: data.value[user].originId,
-                        descriptor: data.value[user].descriptor,
-                    });
-                }
-                console.log('resolving getUsers with ', this.allUsers);
-                resolve();
-            });
-        });
+        return new Promise(
+            (resolve: (value: void | PromiseLike<void>) => void) => {
+                this.getGraphResource('users', (data: any) => {
+                    this.allUsers = [];
+                    for (const user of data.value) {
+                        this.allUsers.push({
+                            displayName: user.displayName,
+                            originId: user.originId,
+                            descriptor: user.descriptor,
+                        });
+                    }
+                    resolve();
+                });
+            }
+        );
     }
 
     private async getRepositories(): Promise<void> {
-        return new Promise(async (resolve) => {
-            this.allRepositories = [];
-            const projects: TeamProjectReference[] = await getClient(
-                CoreRestClient
-            ).getProjects();
-            const filteredProjects = projects.filter(
-                (project: TeamProjectReference) => {
-                    return (
-                        project.name === 'Portfolio' ||
-                        project.name === 'Sample Project'
-                    );
-                }
-            );
-            for (const project of filteredProjects) {
-                const repos: GitRepository[] = await getClient(
-                    GitRestClient
-                ).getRepositories(project.id);
-                repos.forEach((repo: GitRepository) => {
-                    this.allRepositories.push({
-                        originId: repo.id,
-                        displayName: repo.name,
+        return new Promise(
+            async (resolve: (value: void | PromiseLike<void>) => void) => {
+                this.allRepositories = [];
+                const projects: TeamProjectReference[] = await getClient(
+                    CoreRestClient
+                ).getProjects();
+                const filteredProjects: TeamProjectReference[] =
+                    projects.filter((project: TeamProjectReference) => {
+                        return (
+                            project.name === 'Portfolio' ||
+                            project.name === 'Sample Project'
+                        );
                     });
-                });
+                for (const project of filteredProjects) {
+                    const repos: GitRepository[] = await getClient(
+                        GitRestClient
+                    ).getRepositories(project.id);
+                    repos.forEach((repo: GitRepository) => {
+                        this.allRepositories.push({
+                            originId: repo.id,
+                            displayName: repo.name,
+                        });
+                    });
+                }
+                resolve();
             }
-            resolve();
-        });
+        );
     }
 
     private loadAllowedUserGroupsUsers(): void {
         this._dataManager!.getValue<AllowedEntity[]>(allowedUserGroupsKey).then(
-            (userGroups) => {
-                console.log('data is this ', userGroups);
+            (userGroups: AllowedEntity[]) => {
                 this.userGroupsSelection.clear();
                 for (const selectedUserGroup of userGroups) {
-                    console.log(
-                        'searching the user gruops for ',
-                        selectedUserGroup
-                    );
-                    const idx = this.allUserGroups.findIndex(
-                        (item) => item.originId === selectedUserGroup.originId
+                    const idx: number = this.allUserGroups.findIndex(
+                        (item: AllowedEntity) =>
+                            item.originId === selectedUserGroup.originId
                     );
                     if (idx >= 0) {
                         this.userGroupsSelection.select(idx);
                     }
-                    console.log('would have selected gruop ', idx);
                 }
                 this.setState({
                     dataAllowedUserGroups: userGroups,
@@ -224,16 +223,16 @@ export default class SprintlySettings extends React.Component<
 
     private loadAllowedUsers(): void {
         this._dataManager!.getValue<AllowedEntity[]>(allowedUsersKey).then(
-            (users) => {
+            (users: AllowedEntity[]) => {
                 this.usersSelection.clear();
                 for (const selectedUser of users) {
-                    const idx = this.allUsers.findIndex(
-                        (user) => user.originId === selectedUser.originId
+                    const idx: number = this.allUsers.findIndex(
+                        (user: AllowedEntity) =>
+                            user.originId === selectedUser.originId
                     );
                     if (idx >= 0) {
                         this.usersSelection.select(idx);
                     }
-                    console.log('would have selected user ', idx);
                 }
                 this.setState({
                     dataAllowedUsers: users,
@@ -254,11 +253,11 @@ export default class SprintlySettings extends React.Component<
         this._dataManager!.getValue<AllowedEntity[]>(repositoriesToProcessKey, {
             scopeType: 'User',
         }).then(
-            (repositories) => {
+            (repositories: AllowedEntity[]) => {
                 this.repositoriesToProcessSelection.clear();
                 for (const selectedRepository of repositories) {
-                    const idx = this.allRepositories.findIndex(
-                        (repository) =>
+                    const idx: number = this.allRepositories.findIndex(
+                        (repository: AllowedEntity) =>
                             repository.originId === selectedRepository.originId
                     );
                     if (idx >= 0) {
@@ -317,7 +316,7 @@ export default class SprintlySettings extends React.Component<
                         persistedAllowedUsers: usersSelectedArray,
                         persistedAllowedUserGroups: userGroupsSelectedArray,
                     });
-                    const globalMessagesSvc =
+                    const globalMessagesSvc: IGlobalMessagesService =
                         await SDK.getService<IGlobalMessagesService>(
                             CommonServiceIds.GlobalMessagesService
                         );
@@ -337,7 +336,10 @@ export default class SprintlySettings extends React.Component<
     ): AllowedEntity[] {
         const selectedArray: AllowedEntity[] = [];
         for (const rng of selectionRange) {
-            var sliced = dataArray.slice(rng.beginIndex, rng.endIndex + 1);
+            const sliced: AllowedEntity[] = dataArray.slice(
+                rng.beginIndex,
+                rng.endIndex + 1
+            );
             for (const slic of sliced) {
                 selectedArray.push(slic);
             }
@@ -347,6 +349,7 @@ export default class SprintlySettings extends React.Component<
 
     private renderUserGroupsDropdown(): JSX.Element {
         return (
+            /* tslint:disable */
             <div className="flex-column">
                 <Observer selection={this.userGroupsSelection}>
                     {() => {
@@ -379,11 +382,13 @@ export default class SprintlySettings extends React.Component<
                     }}
                 </Observer>
             </div>
+            /* tslint:disable */
         );
     }
 
     private renderUsersDropdown(): JSX.Element {
         return (
+            /* tslint:disable */
             <div className="flex-column">
                 <Observer selection={this.usersSelection}>
                     {() => {
@@ -416,11 +421,13 @@ export default class SprintlySettings extends React.Component<
                     }}
                 </Observer>
             </div>
+            /* tslint:disable */
         );
     }
 
     private renderRepositoriesDropdown(): JSX.Element {
         return (
+            /* tslint:disable */
             <div className="flex-column">
                 <Observer selection={this.repositoriesToProcessSelection}>
                     {() => {
@@ -453,14 +460,15 @@ export default class SprintlySettings extends React.Component<
                     }}
                 </Observer>
             </div>
+            /* tslint:disable */
         );
     }
 
     public render() {
         const { ready } = this.state;
 
-        console.log('returning a render');
         return (
+            /* tslint:disable */
             <div className="page-content page-content-top flex-column rhythm-vertical-16">
                 <div>
                     By default the Azure groups{' '}
@@ -493,6 +501,7 @@ export default class SprintlySettings extends React.Component<
                     />
                 </div>
             </div>
+            /* tslint:disable */
         );
     }
 }

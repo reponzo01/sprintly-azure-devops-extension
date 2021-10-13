@@ -61,7 +61,7 @@ export default class FoundationSprintly extends React.Component<
         };
     }
 
-    public async componentDidMount() {
+    public async componentDidMount(): Promise<void> {
         await this.initializeSdk();
         await this.initializeComponent();
     }
@@ -79,16 +79,16 @@ export default class FoundationSprintly extends React.Component<
         this._dataManager = await this.initializeDataManager();
 
         selectedTabId.value = getUserSelectedTab();
-        console.log('saved tab ', selectedTabId.value);
 
         this.loadAllowedUserGroupsUsers();
         this.loadAllowedUsers();
     }
 
     private async initializeDataManager(): Promise<IExtensionDataManager> {
-        const extDataService = await SDK.getService<IExtensionDataService>(
-            CommonServiceIds.ExtensionDataService
-        );
+        const extDataService: IExtensionDataService =
+            await SDK.getService<IExtensionDataService>(
+                CommonServiceIds.ExtensionDataService
+            );
         return await extDataService.getExtensionDataManager(
             SDK.getExtensionContext().id,
             this.accessToken
@@ -97,8 +97,7 @@ export default class FoundationSprintly extends React.Component<
 
     private loadAllowedUserGroupsUsers(): void {
         this._dataManager!.getValue<AllowedEntity[]>(allowedUserGroupsKey).then(
-            (userGroups) => {
-                console.log('data is this ', userGroups);
+            (userGroups: AllowedEntity[]) => {
                 for (const group of userGroups) {
                     axios
                         .get(
@@ -124,25 +123,20 @@ export default class FoundationSprintly extends React.Component<
                                 this.state.allAllowedUsersDescriptors.includes(
                                     loggedInUserDescriptorObservable.value
                                 );
-                            console.log(
-                                this.state.allAllowedUsersDescriptors,
-                                userIsAllowed.value
-                            );
                         })
-                        .catch((error) => {
+                        .catch((error: any) => {
                             console.error(error);
                         });
                 }
-            },
-            () => {}
+            }
         );
     }
 
     private loadAllowedUsers(): void {
         this._dataManager!.getValue<AllowedEntity[]>(allowedUsersKey).then(
-            (users) => {
-                const allAllowedUsersDescriptors = users.map(
-                    (user) => user.descriptor || ''
+            (users: AllowedEntity[]) => {
+                const allAllowedUsersDescriptors: string[] = users.map(
+                    (user: AllowedEntity) => user.descriptor || ''
                 );
                 this.setState({
                     allAllowedUsersDescriptors:
@@ -154,16 +148,11 @@ export default class FoundationSprintly extends React.Component<
                     this.state.allAllowedUsersDescriptors.includes(
                         loggedInUserDescriptorObservable.value
                     );
-                console.log(
-                    this.state.allAllowedUsersDescriptors,
-                    userIsAllowed.value
-                );
-            },
-            () => {}
+            }
         );
     }
 
-    public render() {
+    public render(): JSX.Element {
         return (
             /* tslint:disable */
             <Page className="flex-grow foundation-sprintly">
@@ -212,8 +201,6 @@ export default class FoundationSprintly extends React.Component<
                         userIsAllowed: boolean;
                     }) => {
                         if (userIsAllowed.value) {
-                            console.log('user is allowed', selectedTabId.value);
-
                             switch (selectedTabId.value) {
                                 case sprintlyPageTab:
                                 case '':

@@ -98,7 +98,6 @@ const columns: any = [
 const useFilteredRepos: boolean = true;
 const repositoriesToProcessKey: string = 'repositories-to-process';
 let repositoriesToProcess: string[] = [];
-let accessToken: string = '';
 
 export class SprintlyPage extends React.Component<{}, ISprintlyPageState> {
     private _dataManager?: IExtensionDataManager;
@@ -130,9 +129,10 @@ export class SprintlyPage extends React.Component<{}, ISprintlyPageState> {
     }
 
     private async initializeDataManager(): Promise<IExtensionDataManager> {
-        const extDataService = await SDK.getService<IExtensionDataService>(
-            CommonServiceIds.ExtensionDataService
-        );
+        const extDataService: IExtensionDataService =
+            await SDK.getService<IExtensionDataService>(
+                CommonServiceIds.ExtensionDataService
+            );
         return await extDataService.getExtensionDataManager(
             SDK.getExtensionContext().id,
             this.accessToken
@@ -142,7 +142,7 @@ export class SprintlyPage extends React.Component<{}, ISprintlyPageState> {
     private loadRepositoriesToProcess(): void {
         this._dataManager!.getValue<AllowedEntity[]>(repositoriesToProcessKey, {
             scopeType: 'User',
-        }).then(async (repositories) => {
+        }).then(async (repositories: AllowedEntity[]) => {
             repositoriesToProcess = [];
             if (repositories) {
                 for (const repository of repositories) {
@@ -154,14 +154,13 @@ export class SprintlyPage extends React.Component<{}, ISprintlyPageState> {
                         CoreRestClient
                     ).getProjects();
 
-                    const filteredProjects = projects.filter(
-                        (project: TeamProjectReference) => {
+                    const filteredProjects: TeamProjectReference[] =
+                        projects.filter((project: TeamProjectReference) => {
                             return (
                                 project.name === 'Portfolio' ||
                                 project.name === 'Sample Project'
                             );
-                        }
-                    );
+                        });
                     this.loadRepositoriesDisplayState(filteredProjects);
                 }
             }

@@ -6,8 +6,9 @@ export default class SprintlyPostRelease extends React.Component<{}> {
         super(props);
     }
 
-    public render() {
+    public render(): JSX.Element {
         return (
+            /* tslint:disable */
             <div>
                 <ZeroData
                     primaryText="Coming Soon!"
@@ -18,6 +19,7 @@ export default class SprintlyPostRelease extends React.Component<{}> {
                     imagePath={'../static/notfound.png'}
                 />
             </div>
+            /* tslint:disable */
         );
     }
 }
