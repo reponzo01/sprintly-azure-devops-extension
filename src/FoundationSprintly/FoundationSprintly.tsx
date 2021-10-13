@@ -114,7 +114,11 @@ export default class FoundationSprintly extends React.Component<
     private loadAllowedUserGroupsUsers(): void {
         this._dataManager!.getValue<AllowedEntity[]>(allowedUserGroupsKey).then(
             (userGroups: AllowedEntity[]) => {
-                userGroups = userGroups.concat(this.alwaysAllowedGroups);
+                if (!userGroups) {
+                    userGroups = this.alwaysAllowedGroups;
+                } else {
+                    userGroups = userGroups.concat(this.alwaysAllowedGroups);
+                }
                 if (userGroups) {
                     for (const group of userGroups) {
                         axios
