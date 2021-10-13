@@ -99,36 +99,45 @@ export default class FoundationSprintly extends React.Component<
     private loadAllowedUserGroupsUsers(): void {
         this._dataManager!.getValue<AllowedEntity[]>(allowedUserGroupsKey).then(
             (userGroups: AllowedEntity[]) => {
-                for (const group of userGroups) {
-                    axios
-                        .get(
-                            `https://vsaex.dev.azure.com/${organizationNameObservable.value}/_apis/GroupEntitlements/${group.originId}/members`,
-                            {
-                                headers: {
-                                    Authorization: `Bearer ${this.accessToken}`,
-                                },
-                            }
-                        )
-                        .then((res: any) => {
-                            const allAllowedUsersDescriptors: string[] =
-                                res.data['members'].map(
-                                    (item: any) => item['user']['descriptor']
-                                );
-                            this.setState({
-                                allAllowedUsersDescriptors:
-                                    allAllowedUsersDescriptors.concat(
-                                        this.state.allAllowedUsersDescriptors
-                                    ),
+                if (userGroups) {
+                    for (const group of userGroups) {
+                        axios
+                            .get(
+                                `https://vsaex.dev.azure.com/${organizationNameObservable.value}/_apis/GroupEntitlements/${group.originId}/members`,
+                                {
+                                    headers: {
+                                        Authorization: `Bearer ${this.accessToken}`,
+                                    },
+                                }
+                            )
+                            .then((res: any) => {
+                                const allAllowedUsersDescriptors: string[] =
+                                    res.data['members'].map(
+                                        (item: any) =>
+                                            item['user']['descriptor']
+                                    );
+                                this.setState({
+                                    allAllowedUsersDescriptors:
+                                        allAllowedUsersDescriptors.concat(
+                                            this.state
+                                                .allAllowedUsersDescriptors
+                                        ),
+                                });
+                                userIsAllowed.value =
+                                    this.state.allAllowedUsersDescriptors.includes(
+                                        loggedInUserDescriptorObservable.value
+                                    );
+                            })
+                            .catch((error: any) => {
+                                console.error(error);
                             });
-                            userIsAllowed.value =
-                                this.state.allAllowedUsersDescriptors.includes(
-                                    loggedInUserDescriptorObservable.value
-                                );
-                        })
-                        .catch((error: any) => {
-                            console.error(error);
-                        });
+                    }
                 }
+            },
+            () => {
+                this.setState({
+                    allAllowedUsersDescriptors: [],
+                });
             }
         );
     }
@@ -136,19 +145,26 @@ export default class FoundationSprintly extends React.Component<
     private loadAllowedUsers(): void {
         this._dataManager!.getValue<AllowedEntity[]>(allowedUsersKey).then(
             (users: AllowedEntity[]) => {
-                const allAllowedUsersDescriptors: string[] = users.map(
-                    (user: AllowedEntity) => user.descriptor || ''
-                );
-                this.setState({
-                    allAllowedUsersDescriptors:
-                        allAllowedUsersDescriptors.concat(
-                            this.state.allAllowedUsersDescriptors
-                        ),
-                });
-                userIsAllowed.value =
-                    this.state.allAllowedUsersDescriptors.includes(
-                        loggedInUserDescriptorObservable.value
+                if (users) {
+                    const allAllowedUsersDescriptors: string[] = users.map(
+                        (user: AllowedEntity) => user.descriptor || ''
                     );
+                    this.setState({
+                        allAllowedUsersDescriptors:
+                            allAllowedUsersDescriptors.concat(
+                                this.state.allAllowedUsersDescriptors
+                            ),
+                    });
+                    userIsAllowed.value =
+                        this.state.allAllowedUsersDescriptors.includes(
+                            loggedInUserDescriptorObservable.value
+                        );
+                }
+            },
+            () => {
+                this.setState({
+                    allAllowedUsersDescriptors: [],
+                });
             }
         );
     }
@@ -258,7 +274,6 @@ export default class FoundationSprintly extends React.Component<
 }
 
 function onSelectedTabChanged(newTabId: string) {
-    console.log('setting tab to ', loggedInUserDescriptorObservable.value);
     selectedTabId.value = newTabId;
     localStorage.setItem(
         loggedInUserDescriptorObservable.value + '-' + selectedTabKey,

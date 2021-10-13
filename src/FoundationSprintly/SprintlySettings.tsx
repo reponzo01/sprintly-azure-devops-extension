@@ -197,20 +197,22 @@ export default class SprintlySettings extends React.Component<
         this._dataManager!.getValue<AllowedEntity[]>(allowedUserGroupsKey).then(
             (userGroups: AllowedEntity[]) => {
                 this.userGroupsSelection.clear();
-                for (const selectedUserGroup of userGroups) {
-                    const idx: number = this.allUserGroups.findIndex(
-                        (item: AllowedEntity) =>
-                            item.originId === selectedUserGroup.originId
-                    );
-                    if (idx >= 0) {
-                        this.userGroupsSelection.select(idx);
+                if (userGroups) {
+                    for (const selectedUserGroup of userGroups) {
+                        const idx: number = this.allUserGroups.findIndex(
+                            (item: AllowedEntity) =>
+                                item.originId === selectedUserGroup.originId
+                        );
+                        if (idx >= 0) {
+                            this.userGroupsSelection.select(idx);
+                        }
                     }
+                    this.setState({
+                        dataAllowedUserGroups: userGroups,
+                        persistedAllowedUserGroups: userGroups,
+                        ready: true,
+                    });
                 }
-                this.setState({
-                    dataAllowedUserGroups: userGroups,
-                    persistedAllowedUserGroups: userGroups,
-                    ready: true,
-                });
             },
             () => {
                 this.setState({
@@ -225,20 +227,22 @@ export default class SprintlySettings extends React.Component<
         this._dataManager!.getValue<AllowedEntity[]>(allowedUsersKey).then(
             (users: AllowedEntity[]) => {
                 this.usersSelection.clear();
-                for (const selectedUser of users) {
-                    const idx: number = this.allUsers.findIndex(
-                        (user: AllowedEntity) =>
-                            user.originId === selectedUser.originId
-                    );
-                    if (idx >= 0) {
-                        this.usersSelection.select(idx);
+                if (users) {
+                    for (const selectedUser of users) {
+                        const idx: number = this.allUsers.findIndex(
+                            (user: AllowedEntity) =>
+                                user.originId === selectedUser.originId
+                        );
+                        if (idx >= 0) {
+                            this.usersSelection.select(idx);
+                        }
                     }
+                    this.setState({
+                        dataAllowedUsers: users,
+                        persistedAllowedUsers: users,
+                        ready: true,
+                    });
                 }
-                this.setState({
-                    dataAllowedUsers: users,
-                    persistedAllowedUsers: users,
-                    ready: true,
-                });
             },
             () => {
                 this.setState({
@@ -255,20 +259,23 @@ export default class SprintlySettings extends React.Component<
         }).then(
             (repositories: AllowedEntity[]) => {
                 this.repositoriesToProcessSelection.clear();
-                for (const selectedRepository of repositories) {
-                    const idx: number = this.allRepositories.findIndex(
-                        (repository: AllowedEntity) =>
-                            repository.originId === selectedRepository.originId
-                    );
-                    if (idx >= 0) {
-                        this.repositoriesToProcessSelection.select(idx);
+                if (repositories) {
+                    for (const selectedRepository of repositories) {
+                        const idx: number = this.allRepositories.findIndex(
+                            (repository: AllowedEntity) =>
+                                repository.originId ===
+                                selectedRepository.originId
+                        );
+                        if (idx >= 0) {
+                            this.repositoriesToProcessSelection.select(idx);
+                        }
                     }
+                    this.setState({
+                        dataRepositoriesToProcess: repositories,
+                        persistedRepositoriesToProcess: repositories,
+                        ready: true,
+                    });
                 }
-                this.setState({
-                    dataRepositoriesToProcess: repositories,
-                    persistedRepositoriesToProcess: repositories,
-                    ready: true,
-                });
             },
             () => {
                 this.setState({
