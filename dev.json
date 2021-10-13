@@ -1,0 +1,7 @@
+{
+    "id": "foundation-sprintly-dev",
+    "public": false,
+    "baseUri": "https://localhost:3000",
+    "version": "0.0.81",
+    "name": "Foundation Sprintly Test"
+  }

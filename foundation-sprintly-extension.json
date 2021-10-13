@@ -1,11 +1,6 @@
 {
     "manifestVersion": 1,
-    "id": "foundation-sprintly-test",
-    "public": false,
-    "baseUri": "https://localhost:3000",
     "publisher": "EmanuelVargas",
-    "version": "0.0.81",
-    "name": "Foundation Sprintly Test",
     "description": "Azure Devops Extension to help facilitate releases at Foundation Software LLC.",
     "scopes": [
         "vso.code_manage",
