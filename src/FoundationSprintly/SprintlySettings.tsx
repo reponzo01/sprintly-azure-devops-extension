@@ -1,5 +1,4 @@
 import * as React from 'react';
-
 import axios from 'axios';
 
 import * as SDK from 'azure-devops-extension-sdk';
@@ -10,14 +9,8 @@ import {
     IExtensionDataService,
     IGlobalMessagesService,
 } from 'azure-devops-extension-api';
-import {
-    GraphRestClient,
-    GraphSubject,
-    GraphSubjectQuery,
-} from 'azure-devops-extension-api/Graph';
 
 import { Button } from 'azure-devops-ui/Button';
-import { TextField } from 'azure-devops-ui/TextField';
 import { Dropdown } from 'azure-devops-ui/Dropdown';
 import { Observer } from 'azure-devops-ui/Observer';
 import { DropdownMultiSelection } from 'azure-devops-ui/Utilities/DropdownSelection';
@@ -26,16 +19,14 @@ import {
     CoreRestClient,
     TeamProjectReference,
 } from 'azure-devops-extension-api/Core';
-import { resolveTypeReferenceDirective } from 'typescript';
 
 import { GitRepository, GitRestClient } from 'azure-devops-extension-api/Git';
 
-// TODO: Remove all this extension data from here and pass in as prop from Parent page
-export interface AllowedEntity {
-    displayName: string;
-    originId: string;
-    descriptor?: string;
-}
+import { AllowedEntity } from './FoundationSprintly';
+
+const allowedUserGroupsKey: string = 'allowed-user-groups';
+const allowedUsersKey: string = 'allowed-users';
+const repositoriesToProcessKey: string = 'repositories-to-process';
 
 export interface ISprintlySettingsState {
     dataAllowedUserGroups?: AllowedEntity[];
@@ -50,7 +41,9 @@ export interface ISprintlySettingsState {
 }
 
 export default class SprintlySettings extends React.Component<
-    { sampleProp: string; loggedInUserDescriptor: string; organizationName: string },
+    {
+        organizationName: string;
+    },
     ISprintlySettingsState
 > {
     private userGroupsSelection = new DropdownMultiSelection();
@@ -62,44 +55,142 @@ export default class SprintlySettings extends React.Component<
     private allRepositories: AllowedEntity[] = [];
 
     private _dataManager?: IExtensionDataManager;
-    private sampleProp: string;
-    private loggedInUserDescriptor: string;
+    private accessToken: string = '';
     private organizationName: string;
 
-    constructor(props: { sampleProp: string; loggedInUserDescriptor: string; organizationName: string }) {
+    constructor(props: { organizationName: string }) {
         super(props);
 
         this.state = {};
-        this.sampleProp = props.sampleProp;
-        this.loggedInUserDescriptor = props.loggedInUserDescriptor;
         this.organizationName = props.organizationName;
     }
 
     public async componentDidMount() {
-        await SDK.init();
+        await this.initializeSdk();
         await this.initializeComponent();
     }
 
-    private async initializeComponent(): Promise<void> {
+    private async initializeSdk(): Promise<void> {
+        await SDK.init();
         await SDK.ready();
-        // TODO: Get this access token at the parent page and pass in as prop
-        const accessToken = await SDK.getAccessToken();
-        const extDataService = await SDK.getService<IExtensionDataService>(
-            CommonServiceIds.ExtensionDataService
-        );
-        this._dataManager = await extDataService.getExtensionDataManager(
-            SDK.getExtensionContext().id,
-            accessToken
-        );
+    }
 
-        await this.getGroups(accessToken);
-        await this.getUsers(accessToken);
-        await this.getRepositories(accessToken);
+    private async initializeComponent(): Promise<void> {
+        this.accessToken = await SDK.getAccessToken();
+
+        this._dataManager = await this.initializeDataManager();
+
+        await this.getGroups();
+        await this.getUsers();
+        await this.getRepositories();
 
         this.setState({ ready: true });
 
         // TODO: Extract these into their own methods
-        this._dataManager.getValue<AllowedEntity[]>('allowed-user-groups').then(
+        this.loadAllowedUserGroupsUsers();
+        this.loadAllowedUsers();
+        this.loadRepositoriesToProcess();
+    }
+
+    private async initializeDataManager(): Promise<IExtensionDataManager> {
+        const extDataService = await SDK.getService<IExtensionDataService>(
+            CommonServiceIds.ExtensionDataService
+        );
+        return await extDataService.getExtensionDataManager(
+            SDK.getExtensionContext().id,
+            this.accessToken
+        );
+    }
+
+    private async getGraphResource(
+        resouce: string,
+        callback: (data: any) => void
+    ): Promise<void> {
+        // TODO: extract the organization name globally
+        axios
+            .get(
+                `https://vssps.dev.azure.com/${this.organizationName}/_apis/graph/${resouce}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${this.accessToken}`,
+                    },
+                }
+            )
+            .then((res) => {
+                console.log(res.data);
+                callback(res.data);
+            })
+            .catch((error) => {
+                console.error(error);
+                throw error;
+            });
+    }
+
+    private async getGroups(): Promise<void> {
+        return new Promise((resolve) => {
+            this.getGraphResource('groups', (data: any) => {
+                this.allUserGroups = [];
+                for (const group in data.value) {
+                    this.allUserGroups.push({
+                        displayName: data.value[group].displayName,
+                        originId: data.value[group].originId,
+                        descriptor: data.value[group].descriptor,
+                    });
+                }
+                console.log('resolving getGroups with ', this.allUserGroups);
+                resolve();
+            });
+        });
+    }
+
+    private async getUsers(): Promise<void> {
+        return new Promise((resolve) => {
+            this.getGraphResource('users', (data: any) => {
+                this.allUsers = [];
+                for (const user in data.value) {
+                    this.allUsers.push({
+                        displayName: data.value[user].displayName,
+                        originId: data.value[user].originId,
+                        descriptor: data.value[user].descriptor,
+                    });
+                }
+                console.log('resolving getUsers with ', this.allUsers);
+                resolve();
+            });
+        });
+    }
+
+    private async getRepositories(): Promise<void> {
+        return new Promise(async (resolve) => {
+            this.allRepositories = [];
+            const projects: TeamProjectReference[] = await getClient(
+                CoreRestClient
+            ).getProjects();
+            const filteredProjects = projects.filter(
+                (project: TeamProjectReference) => {
+                    return (
+                        project.name === 'Portfolio' ||
+                        project.name === 'Sample Project'
+                    );
+                }
+            );
+            for (const project of filteredProjects) {
+                const repos: GitRepository[] = await getClient(
+                    GitRestClient
+                ).getRepositories(project.id);
+                repos.forEach((repo: GitRepository) => {
+                    this.allRepositories.push({
+                        originId: repo.id,
+                        displayName: repo.name,
+                    });
+                });
+            }
+            resolve();
+        });
+    }
+
+    private loadAllowedUserGroupsUsers(): void {
+        this._dataManager!.getValue<AllowedEntity[]>(allowedUserGroupsKey).then(
             (userGroups) => {
                 console.log('data is this ', userGroups);
                 this.userGroupsSelection.clear();
@@ -129,8 +220,10 @@ export default class SprintlySettings extends React.Component<
                 });
             }
         );
+    }
 
-        this._dataManager.getValue<AllowedEntity[]>('allowed-users').then(
+    private loadAllowedUsers(): void {
+        this._dataManager!.getValue<AllowedEntity[]>(allowedUsersKey).then(
             (users) => {
                 this.usersSelection.clear();
                 for (const selectedUser of users) {
@@ -155,272 +248,39 @@ export default class SprintlySettings extends React.Component<
                 });
             }
         );
+    }
 
-        // TODO: Extract magic strings
-        this._dataManager
-            .getValue<AllowedEntity[]>(
-                this.loggedInUserDescriptor.replace('.', '-') +
-                    '-repositories-to-process'
-            )
-            .then(
-                (repositories) => {
-                    this.repositoriesToProcessSelection.clear();
-                    for (const selectedRepository of repositories) {
-                        const idx = this.allRepositories.findIndex(
-                            (repository) =>
-                                repository.originId ===
-                                selectedRepository.originId
-                        );
-                        if (idx >= 0) {
-                            this.repositoriesToProcessSelection.select(idx);
-                        }
+    private loadRepositoriesToProcess(): void {
+        this._dataManager!.getValue<AllowedEntity[]>(repositoriesToProcessKey, {
+            scopeType: 'User',
+        }).then(
+            (repositories) => {
+                this.repositoriesToProcessSelection.clear();
+                for (const selectedRepository of repositories) {
+                    const idx = this.allRepositories.findIndex(
+                        (repository) =>
+                            repository.originId === selectedRepository.originId
+                    );
+                    if (idx >= 0) {
+                        this.repositoriesToProcessSelection.select(idx);
                     }
-                    this.setState({
-                        dataRepositoriesToProcess: repositories,
-                        persistedRepositoriesToProcess: repositories,
-                        ready: true,
-                    });
-                },
-                () => {
-                    this.setState({
-                        dataRepositoriesToProcess: [],
-                        ready: true,
-                    });
                 }
-            );
-    }
-
-    private async getGraphResource(
-        resouce: string,
-        accessToken: string,
-        callback: (data: any) => void
-    ): Promise<void> {
-        // TODO: extract the organization name globally
-        axios
-            .get(
-                `https://vssps.dev.azure.com/${this.organizationName}/_apis/graph/${resouce}`,
-                {
-                    headers: {
-                        Authorization: `Bearer ${accessToken}`,
-                    },
-                }
-            )
-            .then((res) => {
-                console.log(res.data);
-                callback(res.data);
-            })
-            .catch((error) => {
-                console.error(error);
-                throw error;
-            });
-    }
-
-    private async getGroups(accessToken: string): Promise<void> {
-        return new Promise((resolve) => {
-            this.getGraphResource('groups', accessToken, (data: any) => {
-                this.allUserGroups = [];
-                for (const group in data.value) {
-                    this.allUserGroups.push({
-                        displayName: data.value[group].displayName,
-                        originId: data.value[group].originId,
-                        descriptor: data.value[group].descriptor,
-                    });
-                }
-                console.log('resolving getGroups with ', this.allUserGroups);
-                resolve();
-            });
-        });
-    }
-
-    private async getUsers(accessToken: string): Promise<void> {
-        return new Promise((resolve) => {
-            this.getGraphResource('users', accessToken, (data: any) => {
-                this.allUsers = [];
-                for (const user in data.value) {
-                    this.allUsers.push({
-                        displayName: data.value[user].displayName,
-                        originId: data.value[user].originId,
-                        descriptor: data.value[user].descriptor,
-                    });
-                }
-                console.log('resolving getUsers with ', this.allUsers);
-                resolve();
-            });
-        });
-    }
-
-    private async getRepositories(accessToken: string): Promise<void> {
-        return new Promise(async (resolve) => {
-            this.allRepositories = [];
-            const projects: TeamProjectReference[] = await getClient(
-                CoreRestClient
-            ).getProjects();
-            // TODO: Limit project to 'Portfolio' or 'Sample Project'
-            for (const project of projects) {
-                const repos: GitRepository[] = await getClient(
-                    GitRestClient
-                ).getRepositories(project.id);
-                repos.forEach((repo: GitRepository) => {
-                    this.allRepositories.push({
-                        originId: repo.id,
-                        displayName: repo.name,
-                    });
+                this.setState({
+                    dataRepositoriesToProcess: repositories,
+                    persistedRepositoriesToProcess: repositories,
+                    ready: true,
+                });
+            },
+            () => {
+                this.setState({
+                    dataRepositoriesToProcess: [],
+                    ready: true,
                 });
             }
-            resolve();
-        });
-    }
-
-    public render() {
-        const {
-            dataAllowedUserGroups,
-            dataAllowedUsers,
-            ready,
-            persistedAllowedUserGroups,
-            persistedAllowedUsers,
-        } = this.state;
-
-        console.log('returning a render');
-        return (
-            <div className="page-content page-content-top flex-column rhythm-vertical-16">
-                <div>
-                    By default the Azure groups{' '}
-                    <u>
-                        <code>Dev Team Leads</code>
-                    </u>{' '}
-                    and{' '}
-                    <u>
-                        <code>DevOps</code>
-                    </u>{' '}
-                    have access to this extension. Use the dropdowns to add more{' '}
-                    groups or individual users. These two settings are global{' '}
-                    settings.
-                </div>
-                <div className="flex-column">
-                    <Observer selection={this.userGroupsSelection}>
-                        {() => {
-                            return (
-                                <Dropdown
-                                    ariaLabel="Multiselect"
-                                    actions={[
-                                        {
-                                            className:
-                                                'bolt-dropdown-action-right-button',
-                                            disabled:
-                                                this.userGroupsSelection
-                                                    .selectedCount === 0,
-                                            iconProps: { iconName: 'Clear' },
-                                            text: 'Clear',
-                                            onClick: () => {
-                                                this.userGroupsSelection.clear();
-                                            },
-                                        },
-                                    ]}
-                                    className="example-dropdown flex-column"
-                                    items={this.allUserGroups.map(
-                                        (item) => item.displayName
-                                    )}
-                                    selection={this.userGroupsSelection}
-                                    placeholder="Select User Groups"
-                                    showFilterBox={true}
-                                />
-                            );
-                        }}
-                    </Observer>
-                </div>
-                <div className="flex-column">
-                    <Observer selection={this.usersSelection}>
-                        {() => {
-                            return (
-                                <Dropdown
-                                    ariaLabel="Multiselect"
-                                    actions={[
-                                        {
-                                            className:
-                                                'bolt-dropdown-action-right-button',
-                                            disabled:
-                                                this.usersSelection
-                                                    .selectedCount === 0,
-                                            iconProps: { iconName: 'Clear' },
-                                            text: 'Clear',
-                                            onClick: () => {
-                                                this.usersSelection.clear();
-                                            },
-                                        },
-                                    ]}
-                                    className="example-dropdown flex-column"
-                                    items={this.allUsers.map(
-                                        (item) => item.displayName
-                                    )}
-                                    selection={this.usersSelection}
-                                    placeholder="Select Individual Users"
-                                    showFilterBox={true}
-                                />
-                            );
-                        }}
-                    </Observer>
-                </div>
-                <div>
-                    Select the repositories you want to process. This is a{' '}
-                    user-based setting. Everyone with access to this extension{' '}
-                    can select a different list.
-                </div>
-                <div className="flex-column">
-                    <Observer selection={this.repositoriesToProcessSelection}>
-                        {() => {
-                            return (
-                                <Dropdown
-                                    ariaLabel="Multiselect"
-                                    actions={[
-                                        {
-                                            className:
-                                                'bolt-dropdown-action-right-button',
-                                            disabled:
-                                                this
-                                                    .repositoriesToProcessSelection
-                                                    .selectedCount === 0,
-                                            iconProps: { iconName: 'Clear' },
-                                            text: 'Clear',
-                                            onClick: () => {
-                                                this.repositoriesToProcessSelection.clear();
-                                            },
-                                        },
-                                    ]}
-                                    className="example-dropdown flex-column"
-                                    items={this.allRepositories.map(
-                                        (item) => item.displayName
-                                    )}
-                                    selection={
-                                        this.repositoriesToProcessSelection
-                                    }
-                                    placeholder="Select Individual Repositories"
-                                    showFilterBox={true}
-                                />
-                            );
-                        }}
-                    </Observer>
-                </div>
-                <div className="bolt-button-group flex-row rhythm-horizontal-8">
-                    <Button
-                        text="Save"
-                        primary={true}
-                        onClick={this.onSaveData}
-                        disabled={!ready}
-                    />
-                </div>
-            </div>
         );
     }
 
     private onSaveData = (): void => {
-        /*const {
-            dataAllowedUserGroups,
-            dataAllowedUsers,
-            ready,
-            persistedAllowedUserGroups,
-            persistedAllowedUsers,
-        } = this.state;*/
-
         this.setState({ ready: false });
 
         const userGroupsSelectedArray: AllowedEntity[] = this.setSelectionRange(
@@ -437,19 +297,18 @@ export default class SprintlySettings extends React.Component<
                 this.allRepositories
             );
 
-        // TODO: Extract magic strings
         this._dataManager!.setValue<AllowedEntity[]>(
-            'allowed-user-groups',
+            allowedUserGroupsKey,
             userGroupsSelectedArray || []
         ).then(() => {
             this._dataManager!.setValue<AllowedEntity[]>(
-                'allowed-users',
+                allowedUsersKey,
                 usersSelectedArray || []
             ).then(() => {
                 this._dataManager!.setValue<AllowedEntity[]>(
-                    this.loggedInUserDescriptor.replace('.', '-') +
-                        '-repositories-to-process',
-                    repositoriesSelectedArray || []
+                    repositoriesToProcessKey,
+                    repositoriesSelectedArray || [],
+                    { scopeType: 'User' }
                 ).then(async () => {
                     this.setState({
                         ready: true,
@@ -484,5 +343,156 @@ export default class SprintlySettings extends React.Component<
             }
         }
         return selectedArray;
+    }
+
+    private renderUserGroupsDropdown(): JSX.Element {
+        return (
+            <div className="flex-column">
+                <Observer selection={this.userGroupsSelection}>
+                    {() => {
+                        return (
+                            <Dropdown
+                                ariaLabel="Multiselect"
+                                actions={[
+                                    {
+                                        className:
+                                            'bolt-dropdown-action-right-button',
+                                        disabled:
+                                            this.userGroupsSelection
+                                                .selectedCount === 0,
+                                        iconProps: { iconName: 'Clear' },
+                                        text: 'Clear',
+                                        onClick: () => {
+                                            this.userGroupsSelection.clear();
+                                        },
+                                    },
+                                ]}
+                                className="example-dropdown flex-column"
+                                items={this.allUserGroups.map(
+                                    (item) => item.displayName
+                                )}
+                                selection={this.userGroupsSelection}
+                                placeholder="Select User Groups"
+                                showFilterBox={true}
+                            />
+                        );
+                    }}
+                </Observer>
+            </div>
+        );
+    }
+
+    private renderUsersDropdown(): JSX.Element {
+        return (
+            <div className="flex-column">
+                <Observer selection={this.usersSelection}>
+                    {() => {
+                        return (
+                            <Dropdown
+                                ariaLabel="Multiselect"
+                                actions={[
+                                    {
+                                        className:
+                                            'bolt-dropdown-action-right-button',
+                                        disabled:
+                                            this.usersSelection
+                                                .selectedCount === 0,
+                                        iconProps: { iconName: 'Clear' },
+                                        text: 'Clear',
+                                        onClick: () => {
+                                            this.usersSelection.clear();
+                                        },
+                                    },
+                                ]}
+                                className="example-dropdown flex-column"
+                                items={this.allUsers.map(
+                                    (item) => item.displayName
+                                )}
+                                selection={this.usersSelection}
+                                placeholder="Select Individual Users"
+                                showFilterBox={true}
+                            />
+                        );
+                    }}
+                </Observer>
+            </div>
+        );
+    }
+
+    private renderRepositoriesDropdown(): JSX.Element {
+        return (
+            <div className="flex-column">
+                <Observer selection={this.repositoriesToProcessSelection}>
+                    {() => {
+                        return (
+                            <Dropdown
+                                ariaLabel="Multiselect"
+                                actions={[
+                                    {
+                                        className:
+                                            'bolt-dropdown-action-right-button',
+                                        disabled:
+                                            this.repositoriesToProcessSelection
+                                                .selectedCount === 0,
+                                        iconProps: { iconName: 'Clear' },
+                                        text: 'Clear',
+                                        onClick: () => {
+                                            this.repositoriesToProcessSelection.clear();
+                                        },
+                                    },
+                                ]}
+                                className="example-dropdown flex-column"
+                                items={this.allRepositories.map(
+                                    (item) => item.displayName
+                                )}
+                                selection={this.repositoriesToProcessSelection}
+                                placeholder="Select Individual Repositories"
+                                showFilterBox={true}
+                            />
+                        );
+                    }}
+                </Observer>
+            </div>
+        );
+    }
+
+    public render() {
+        const { ready } = this.state;
+
+        console.log('returning a render');
+        return (
+            <div className="page-content page-content-top flex-column rhythm-vertical-16">
+                <div>
+                    By default the Azure groups{' '}
+                    <u>
+                        <code>Dev Team Leads</code>
+                    </u>{' '}
+                    and{' '}
+                    <u>
+                        <code>DevOps</code>
+                    </u>{' '}
+                    have access to this extension. Use the dropdowns to add more{' '}
+                    groups or individual users. These two settings are global{' '}
+                    settings.
+                </div>
+                {this.renderUserGroupsDropdown()}
+                {this.renderUsersDropdown()}
+                <div>
+                    Select the repositories you want to process. This is a{' '}
+                    user-based setting. Everyone with access to this extension{' '}
+                    can select a different list.
+                </div>
+                {this.renderRepositoriesDropdown()}
+
+                <div className="bolt-button-group flex-row rhythm-horizontal-8">
+                    <Button
+                        text="Save"
+                        primary={true}
+                        onClick={this.onSaveData}
+                        disabled={!ready}
+                    />
+                </div>
+            </div>
+        );
     }
 }

@@ -1,8 +1,8 @@
 import './FoundationSprintly.scss';
 
 import * as React from 'react';
-import * as SDK from 'azure-devops-extension-sdk';
 
+import * as SDK from 'azure-devops-extension-sdk';
 import {
     CommonServiceIds,
     getClient,
@@ -10,6 +10,7 @@ import {
     IExtensionDataService,
     IGlobalMessagesService,
 } from 'azure-devops-extension-api';
+
 import {
     CoreRestClient,
     TeamProjectReference,
@@ -21,13 +22,8 @@ import {
     GitRepository,
     GitRefUpdate,
     GitRef,
-    GitBranchStats,
     GitCommitDiffs,
-    GitMergeParameters,
-    GitMerge,
-    GitAsyncOperationStatus,
 } from 'azure-devops-extension-api/Git';
-
 import {
     Table,
     ITableColumn,
@@ -46,9 +42,8 @@ import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
 import { Dialog } from 'azure-devops-ui/Dialog';
 import { SimpleList } from 'azure-devops-ui/List';
-import { AllowedEntity } from './SprintlySettings';
+import { AllowedEntity } from './FoundationSprintly';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
-import axios from 'axios';
 
 export interface ISprintlyPageState {
     repositories?: ArrayItemProvider<GitRepositoryExtended>;
@@ -65,14 +60,11 @@ const newReleaseBranchNamesObservable: Array<ObservableValue<string>> = [];
 const isTagsDialogOpen: ObservableValue<boolean> = new ObservableValue<boolean>(
     false
 );
-// TODO: Extract this magic string
-const selectedTabId: ObservableValue<string> = new ObservableValue<string>(
-    'sprintly-page'
-);
 const tagsRepoName: ObservableValue<string> = new ObservableValue<string>('');
 const tags: ObservableValue<string[]> = new ObservableValue<string[]>([]);
 const totalRepositoriesToProcess: ObservableValue<number> =
     new ObservableValue<number>(0);
+
 const columns: any = [
     {
         id: 'name',
@@ -104,231 +96,210 @@ const columns: any = [
 ];
 
 const useFilteredRepos: boolean = true;
+const repositoriesToProcessKey: string = 'repositories-to-process';
 let repositoriesToProcess: string[] = [];
 let accessToken: string = '';
 
-export class SprintlyPage extends React.Component<
-    { loggedInUserDescriptor: string },
-    ISprintlyPageState
-> {
+export class SprintlyPage extends React.Component<{}, ISprintlyPageState> {
     private _dataManager?: IExtensionDataManager;
-    private loggedInUserDescriptor: string;
+    private accessToken: string = '';
 
-    constructor(props: { loggedInUserDescriptor: string }) {
+    constructor(props: {}) {
         super(props);
 
         this.state = {};
-        this.loggedInUserDescriptor = props.loggedInUserDescriptor;
     }
 
     public async componentDidMount(): Promise<void> {
-        await SDK.init();
+        await this.initializeSdk();
         await this.initializeComponent();
+    }
+
+    private async initializeSdk(): Promise<void> {
+        await SDK.init();
+        await SDK.ready();
     }
 
     private async initializeComponent(): Promise<void> {
         // TODO: Extract this into methods to make more readable
-        await SDK.ready();
-        // TODO: Get this access token at the parent page and pass in as prop
-        accessToken = await SDK.getAccessToken();
+        this.accessToken = await SDK.getAccessToken();
+
+        this._dataManager = await this.initializeDataManager();
+
+        this.loadRepositoriesToProcess();
+    }
+
+    private async initializeDataManager(): Promise<IExtensionDataManager> {
         const extDataService = await SDK.getService<IExtensionDataService>(
             CommonServiceIds.ExtensionDataService
         );
-        this._dataManager = await extDataService.getExtensionDataManager(
+        return await extDataService.getExtensionDataManager(
             SDK.getExtensionContext().id,
-            accessToken
+            this.accessToken
         );
+    }
 
-        this._dataManager
-            .getValue<AllowedEntity[]>(
-                this.loggedInUserDescriptor.replace('.', '-') +
-                    '-repositories-to-process'
-            )
-            .then(async (repositories) => {
-                repositoriesToProcess = [];
-                if (repositories) {
-                    for (const repository of repositories) {
-                        repositoriesToProcess.push(repository.originId);
-                    }
+    private loadRepositoriesToProcess(): void {
+        this._dataManager!.getValue<AllowedEntity[]>(repositoriesToProcessKey, {
+            scopeType: 'User',
+        }).then(async (repositories) => {
+            repositoriesToProcess = [];
+            if (repositories) {
+                for (const repository of repositories) {
+                    repositoriesToProcess.push(repository.originId);
+                }
 
-                    if (repositoriesToProcess.length > 0) {
-                        const projects: TeamProjectReference[] =
-                            await getClient(CoreRestClient).getProjects();
-                        // TODO: Limit projects to 'Portfolio' or 'Sample Project'
-                        const reposExtended: GitRepositoryExtended[] = [];
-                        projects.forEach(
-                            async (project: TeamProjectReference) => {
-                                const repos: GitRepository[] = await getClient(
-                                    GitRestClient
-                                ).getRepositories(project.id);
-                                let filteredRepos: GitRepository[] = repos;
-                                if (useFilteredRepos) {
-                                    filteredRepos = repos.filter(
-                                        (repo: GitRepository) =>
-                                            repositoriesToProcess.includes(
-                                                repo.id
-                                            )
-                                    );
-                                }
+                if (repositoriesToProcess.length > 0) {
+                    const projects: TeamProjectReference[] = await getClient(
+                        CoreRestClient
+                    ).getProjects();
 
-                                totalRepositoriesToProcess.value =
-                                    filteredRepos.length;
+                    const filteredProjects = projects.filter(
+                        (project: TeamProjectReference) => {
+                            return (
+                                project.name === 'Portfolio' ||
+                                project.name === 'Sample Project'
+                            );
+                        }
+                    );
+                    this.loadRepositoriesDisplayState(filteredProjects);
+                }
+            }
+        });
+    }
 
-                                filteredRepos.forEach(
-                                    async (repo: GitRepository) => {
-                                        const refs: GitRef[] = await getClient(
-                                            GitRestClient
-                                        ).getRefs(
-                                            repo.id,
-                                            undefined,
-                                            undefined,
-                                            true,
-                                            true,
-                                            undefined,
-                                            undefined,
-                                            false,
-                                            undefined
-                                        );
-                                        let hasDevelop: boolean = false;
-                                        let hasMaster: boolean = false;
-                                        let hasMain: boolean = false;
+    private loadRepositoriesDisplayState(
+        projects: TeamProjectReference[]
+    ): void {
+        const reposExtended: GitRepositoryExtended[] = [];
+        projects.forEach(async (project: TeamProjectReference) => {
+            const repos: GitRepository[] = await getClient(
+                GitRestClient
+            ).getRepositories(project.id);
+            let filteredRepos: GitRepository[] = repos;
+            if (useFilteredRepos) {
+                filteredRepos = repos.filter((repo: GitRepository) =>
+                    repositoriesToProcess.includes(repo.id)
+                );
+            }
 
-                                        for (const ref of refs) {
-                                            if (
-                                                ref.name.includes(
-                                                    'heads/develop'
-                                                )
-                                            ) {
-                                                hasDevelop = true;
-                                            } else if (
-                                                ref.name.includes(
-                                                    'heads/master'
-                                                )
-                                            ) {
-                                                hasMaster = true;
-                                            } else if (
-                                                ref.name.includes('heads/main')
-                                            ) {
-                                                hasMain = true;
-                                            }
-                                        }
+            totalRepositoriesToProcess.value = filteredRepos.length;
 
-                                        const processRepo: boolean =
-                                            hasDevelop &&
-                                            (hasMaster || hasMain);
-                                        if (processRepo === true) {
-                                            const baseVersion: GitBaseVersionDescriptor =
-                                                {
-                                                    baseVersion: hasMaster
-                                                        ? 'master'
-                                                        : 'main',
-                                                    baseVersionOptions: 0,
-                                                    baseVersionType: 0,
-                                                    version: hasMaster
-                                                        ? 'master'
-                                                        : 'main',
-                                                    versionOptions: 0,
-                                                    versionType: 0,
-                                                };
-                                            const targetVersion: GitTargetVersionDescriptor =
-                                                {
-                                                    targetVersion: 'develop',
-                                                    targetVersionOptions: 0,
-                                                    targetVersionType: 0,
-                                                    version: 'develop',
-                                                    versionOptions: 0,
-                                                    versionType: 0,
-                                                };
+            filteredRepos.forEach(async (repo: GitRepository) => {
+                const refs: GitRef[] = await getClient(GitRestClient).getRefs(
+                    repo.id,
+                    undefined,
+                    undefined,
+                    true,
+                    true,
+                    undefined,
+                    undefined,
+                    false,
+                    undefined
+                );
+                let hasDevelop: boolean = false;
+                let hasMaster: boolean = false;
+                let hasMain: boolean = false;
 
-                                            const commitsDiff: GitCommitDiffs =
-                                                await getClient(
-                                                    GitRestClient
-                                                ).getCommitDiffs(
-                                                    repo.id,
-                                                    undefined,
-                                                    undefined,
-                                                    1000,
-                                                    0,
-                                                    baseVersion,
-                                                    targetVersion
-                                                );
-
-                                            let createRelease: boolean = true;
-                                            if (
-                                                Object.keys(
-                                                    commitsDiff.changeCounts
-                                                ).length === 0 &&
-                                                commitsDiff.changes.length === 0
-                                            ) {
-                                                createRelease = false;
-                                            }
-
-                                            const existingReleaseNames: string[] =
-                                                [];
-                                            let hasExistingRelease: boolean =
-                                                false;
-                                            refs.forEach((ref: GitRef) => {
-                                                if (
-                                                    ref.name.includes(
-                                                        'heads/release'
-                                                    )
-                                                ) {
-                                                    hasExistingRelease = true;
-                                                    const refNameSplit: string[] =
-                                                        ref.name.split(
-                                                            'heads/'
-                                                        );
-                                                    existingReleaseNames.push(
-                                                        refNameSplit[1]
-                                                    );
-                                                }
-                                            });
-
-                                            reposExtended.push({
-                                                _links: repo._links,
-                                                defaultBranch:
-                                                    repo.defaultBranch,
-                                                id: repo.id,
-                                                isFork: repo.isFork,
-                                                name: repo.name,
-                                                parentRepository:
-                                                    repo.parentRepository,
-                                                project: repo.project,
-                                                remoteUrl: repo.remoteUrl,
-                                                size: repo.size,
-                                                sshUrl: repo.sshUrl,
-                                                url: repo.url,
-                                                validRemoteUrls:
-                                                    repo.validRemoteUrls,
-                                                webUrl: repo.webUrl,
-                                                createRelease,
-                                                hasExistingRelease,
-                                                existingReleaseNames,
-                                                refs,
-                                            });
-                                        }
-
-                                        this.setState({
-                                            repositories: new ArrayItemProvider(
-                                                reposExtended.sort(
-                                                    (
-                                                        a: GitRepositoryExtended,
-                                                        b: GitRepositoryExtended
-                                                    ) => {
-                                                        return a.name.localeCompare(
-                                                            b.name
-                                                        );
-                                                    }
-                                                )
-                                            ),
-                                        });
-                                    }
-                                );
-                            }
-                        );
+                for (const ref of refs) {
+                    if (ref.name.includes('heads/develop')) {
+                        hasDevelop = true;
+                    } else if (ref.name.includes('heads/master')) {
+                        hasMaster = true;
+                    } else if (ref.name.includes('heads/main')) {
+                        hasMain = true;
                     }
                 }
+
+                const processRepo: boolean =
+                    hasDevelop && (hasMaster || hasMain);
+                if (processRepo === true) {
+                    const baseVersion: GitBaseVersionDescriptor = {
+                        baseVersion: hasMaster ? 'master' : 'main',
+                        baseVersionOptions: 0,
+                        baseVersionType: 0,
+                        version: hasMaster ? 'master' : 'main',
+                        versionOptions: 0,
+                        versionType: 0,
+                    };
+                    const targetVersion: GitTargetVersionDescriptor = {
+                        targetVersion: 'develop',
+                        targetVersionOptions: 0,
+                        targetVersionType: 0,
+                        version: 'develop',
+                        versionOptions: 0,
+                        versionType: 0,
+                    };
+
+                    const commitsDiff: GitCommitDiffs = await getClient(
+                        GitRestClient
+                    ).getCommitDiffs(
+                        repo.id,
+                        undefined,
+                        undefined,
+                        1000,
+                        0,
+                        baseVersion,
+                        targetVersion
+                    );
+
+                    let createRelease: boolean = true;
+                    if (!this.codeChangesInCommitDiffs(commitsDiff)) {
+                        createRelease = false;
+                    }
+
+                    const existingReleaseNames: string[] = [];
+                    let hasExistingRelease: boolean = false;
+                    refs.forEach((ref: GitRef) => {
+                        if (ref.name.includes('heads/release')) {
+                            hasExistingRelease = true;
+                            const refNameSplit: string[] =
+                                ref.name.split('heads/');
+                            existingReleaseNames.push(refNameSplit[1]);
+                        }
+                    });
+
+                    reposExtended.push({
+                        _links: repo._links,
+                        defaultBranch: repo.defaultBranch,
+                        id: repo.id,
+                        isFork: repo.isFork,
+                        name: repo.name,
+                        parentRepository: repo.parentRepository,
+                        project: repo.project,
+                        remoteUrl: repo.remoteUrl,
+                        size: repo.size,
+                        sshUrl: repo.sshUrl,
+                        url: repo.url,
+                        validRemoteUrls: repo.validRemoteUrls,
+                        webUrl: repo.webUrl,
+                        createRelease,
+                        hasExistingRelease,
+                        existingReleaseNames,
+                        refs,
+                    });
+                    this.setState({
+                        repositories: new ArrayItemProvider(
+                            reposExtended.sort(
+                                (
+                                    a: GitRepositoryExtended,
+                                    b: GitRepositoryExtended
+                                ) => {
+                                    return a.name.localeCompare(b.name);
+                                }
+                            )
+                        ),
+                    });
+                }
             });
+        });
+    }
+
+    private codeChangesInCommitDiffs(commitsDiff: GitCommitDiffs): boolean {
+        return (
+            Object.keys(commitsDiff.changeCounts).length > 0 ||
+            commitsDiff.changes.length > 0
+        );
     }
 
     public render(): JSX.Element {
@@ -336,7 +307,6 @@ export class SprintlyPage extends React.Component<
             isTagsDialogOpen.value = false;
         };
         return (
-            // TODO: If repos to process = 0, add ZeroData page.
             /* tslint:disable */
             <Observer totalRepositoriesToProcess={totalRepositoriesToProcess}>
                 {(props: { totalRepositoriesToProcess: number }) => {
@@ -567,7 +537,6 @@ function renderCreateReleaseBranch(
                             const newDevObjectId =
                                 developBranch.commit.commitId;
 
-                            // regular code
                             createRefOptions.push({
                                 repositoryId: tableItem.id,
                                 name:

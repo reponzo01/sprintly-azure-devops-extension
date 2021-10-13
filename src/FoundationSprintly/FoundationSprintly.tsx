@@ -1,6 +1,12 @@
 import * as React from 'react';
+import axios from 'axios';
 
 import * as SDK from 'azure-devops-extension-sdk';
+import {
+    CommonServiceIds,
+    IExtensionDataManager,
+    IExtensionDataService,
+} from 'azure-devops-extension-api';
 
 import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
@@ -14,12 +20,13 @@ import { SprintlyPage } from './SprintlyPage';
 import SprintlyPostRelease from './SprintlyPostRelease';
 import SprintlySettings from './SprintlySettings';
 import { showRootComponent } from '../Common';
-import {
-    CommonServiceIds,
-    IExtensionDataManager,
-    IExtensionDataService,
-} from 'azure-devops-extension-api';
-import axios from 'axios';
+
+const selectedTabKey: string = 'selected-tab';
+const allowedUserGroupsKey: string = 'allowed-user-groups';
+const allowedUsersKey: string = 'allowed-users';
+const sprintlyPageTab: string = 'sprintly-page';
+const sprintlyPostReleaseTab: string = 'sprintly-post-release';
+const sprintlySettingsTab: string = 'sprintly-settings';
 
 const selectedTabId: ObservableValue<string> = new ObservableValue<string>('');
 const userIsAllowed: ObservableValue<boolean> = new ObservableValue<boolean>(
@@ -33,13 +40,10 @@ const organizationNameObservable: ObservableValue<string> =
 export interface AllowedEntity {
     displayName: string;
     originId: string;
-    descriptor: string;
+    descriptor?: string;
 }
 
 export interface IFoundationSprintlyState {
-    // TODO: These "persisted" properties may not be needed
-    persistedAllowedUserGroups?: AllowedEntity[];
-    persistedAllowedUsers?: AllowedEntity[];
     allAllowedUsersDescriptors: string[];
 }
 
@@ -58,32 +62,41 @@ export default class FoundationSprintly extends React.Component<
     }
 
     public async componentDidMount() {
-        await SDK.init();
+        await this.initializeSdk();
         await this.initializeComponent();
     }
 
-    private async initializeComponent(): Promise<void> {
+    private async initializeSdk(): Promise<void> {
+        await SDK.init();
         await SDK.ready();
+    }
+
+    private async initializeComponent(): Promise<void> {
         loggedInUserDescriptorObservable.value = SDK.getUser().descriptor;
         organizationNameObservable.value = SDK.getHost().name;
 
         this.accessToken = await SDK.getAccessToken();
+        this._dataManager = await this.initializeDataManager();
+
+        selectedTabId.value = getUserSelectedTab();
+        console.log('saved tab ', selectedTabId.value);
+
+        this.loadAllowedUserGroupsUsers();
+        this.loadAllowedUsers();
+    }
+
+    private async initializeDataManager(): Promise<IExtensionDataManager> {
         const extDataService = await SDK.getService<IExtensionDataService>(
             CommonServiceIds.ExtensionDataService
         );
-        this._dataManager = await extDataService.getExtensionDataManager(
+        return await extDataService.getExtensionDataManager(
             SDK.getExtensionContext().id,
             this.accessToken
         );
+    }
 
-        selectedTabId.value =
-            localStorage.getItem(
-                loggedInUserDescriptorObservable.value.replace('.', '-') +
-                    '-selected-tab'
-            ) ?? 'sprintly-page';
-        console.log('saved tab ', selectedTabId.value);
-
-        this._dataManager.getValue<AllowedEntity[]>('allowed-user-groups').then(
+    private loadAllowedUserGroupsUsers(): void {
+        this._dataManager!.getValue<AllowedEntity[]>(allowedUserGroupsKey).then(
             (userGroups) => {
                 console.log('data is this ', userGroups);
                 for (const group of userGroups) {
@@ -120,24 +133,18 @@ export default class FoundationSprintly extends React.Component<
                             console.error(error);
                         });
                 }
-                this.setState({
-                    persistedAllowedUserGroups: userGroups,
-                });
             },
-            () => {
-                this.setState({
-                    persistedAllowedUserGroups: [],
-                });
-            }
+            () => {}
         );
+    }
 
-        this._dataManager.getValue<AllowedEntity[]>('allowed-users').then(
+    private loadAllowedUsers(): void {
+        this._dataManager!.getValue<AllowedEntity[]>(allowedUsersKey).then(
             (users) => {
                 const allAllowedUsersDescriptors = users.map(
-                    (user) => user.descriptor
+                    (user) => user.descriptor || ''
                 );
                 this.setState({
-                    persistedAllowedUsers: users,
                     allAllowedUsersDescriptors:
                         allAllowedUsersDescriptors.concat(
                             this.state.allAllowedUsersDescriptors
@@ -152,11 +159,7 @@ export default class FoundationSprintly extends React.Component<
                     userIsAllowed.value
                 );
             },
-            () => {
-                this.setState({
-                    persistedAllowedUsers: [],
-                });
-            }
+            () => {}
         );
     }
 
@@ -184,14 +187,14 @@ export default class FoundationSprintly extends React.Component<
                                     selectedTabId={selectedTabId}
                                     tabSize={TabSize.Tall}
                                 >
-                                    <Tab name="Sprintly" id="sprintly-page" />
+                                    <Tab name="Sprintly" id={sprintlyPageTab} />
                                     <Tab
                                         name="Post Release"
-                                        id="sprintly-post-release"
+                                        id={sprintlyPostReleaseTab}
                                     />
                                     <Tab
                                         name="Settings"
-                                        id="sprintly-settings"
+                                        id={sprintlySettingsTab}
                                     />
                                 </TabBar>
                             );
@@ -212,28 +215,18 @@ export default class FoundationSprintly extends React.Component<
                             console.log('user is allowed', selectedTabId.value);
 
                             switch (selectedTabId.value) {
-                                case 'sprintly-page':
+                                case sprintlyPageTab:
                                 case '':
-                                    return (
-                                        <SprintlyPage
-                                            loggedInUserDescriptor={
-                                                loggedInUserDescriptorObservable.value
-                                            }
-                                        />
-                                    );
-                                case 'sprintly-settings':
+                                    return <SprintlyPage />;
+                                case sprintlySettingsTab:
                                     return (
                                         <SprintlySettings
-                                            sampleProp={selectedTabId.value}
-                                            loggedInUserDescriptor={
-                                                loggedInUserDescriptorObservable.value
-                                            }
                                             organizationName={
                                                 organizationNameObservable.value
                                             }
                                         />
                                     );
-                                case 'sprintly-post-release':
+                                case sprintlyPostReleaseTab:
                                     return <SprintlyPostRelease />;
                                 default:
                                     return <div></div>;
@@ -268,9 +261,16 @@ function onSelectedTabChanged(newTabId: string) {
     console.log('setting tab to ', loggedInUserDescriptorObservable.value);
     selectedTabId.value = newTabId;
     localStorage.setItem(
-        loggedInUserDescriptorObservable.value.replace('.', '-') +
-            '-selected-tab',
+        loggedInUserDescriptorObservable.value + '-' + selectedTabKey,
         newTabId
+    );
+}
+
+function getUserSelectedTab(): string {
+    return (
+        localStorage.getItem(
+            loggedInUserDescriptorObservable.value + '-' + selectedTabKey
+        ) ?? 'sprintly-page'
     );
 }
 
