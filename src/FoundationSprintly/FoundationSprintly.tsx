@@ -20,6 +20,7 @@ import { SprintlyPage } from './SprintlyPage';
 import SprintlyPostRelease from './SprintlyPostRelease';
 import SprintlySettings from './SprintlySettings';
 import { showRootComponent } from '../Common';
+import { IHeaderCommandBarItem } from 'azure-devops-ui/HeaderCommandBar';
 
 const selectedTabKey: string = 'selected-tab';
 const allowedUserGroupsKey: string = 'allowed-user-groups';
@@ -152,21 +153,33 @@ export default class FoundationSprintly extends React.Component<
         );
     }
 
+    private getCommandBarItems(): IHeaderCommandBarItem[] {
+        return [
+            {
+                id: 'refresh',
+                text: 'Refresh Data',
+                onActivate: () => {
+                    window.location.reload();
+                },
+                iconProps: {
+                    iconName: 'Refresh',
+                },
+                tooltipProps: {
+                    text: 'Refresh the data on the page',
+                },
+            },
+        ];
+    }
+
     public render(): JSX.Element {
         return (
             /* tslint:disable */
             <Page className="flex-grow foundation-sprintly">
                 <Header
                     title="Foundation Sprintly"
+                    commandBarItems={this.getCommandBarItems()}
                     titleSize={TitleSize.Large}
                 />
-                <div className="page-content page-content-top flex-column rhythm-vertical-16">
-                    <Button
-                        text="Refresh Data"
-                        iconProps={{ iconName: 'Refresh' }}
-                        onClick={() => window.location.reload()}
-                    />
-                </div>
                 <Observer userIsAllowed={userIsAllowed}>
                     {(props: { userIsAllowed: boolean }) => {
                         if (userIsAllowed.value) {
