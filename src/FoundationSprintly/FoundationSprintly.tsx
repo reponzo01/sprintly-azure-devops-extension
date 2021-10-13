@@ -1,552 +1,277 @@
-import './FoundationSprintly.scss';
-
 import * as React from 'react';
-import * as SDK from 'azure-devops-extension-sdk';
-import { showRootComponent } from '../Common';
+import axios from 'axios';
 
+import * as SDK from 'azure-devops-extension-sdk';
 import {
     CommonServiceIds,
-    getClient,
-    IGlobalMessagesService,
+    IExtensionDataManager,
+    IExtensionDataService,
 } from 'azure-devops-extension-api';
-import {
-    CoreRestClient,
-    TeamProjectReference,
-} from 'azure-devops-extension-api/Core';
-import {
-    GitRestClient,
-    GitBaseVersionDescriptor,
-    GitTargetVersionDescriptor,
-    GitRepository,
-    GitRefUpdate,
-    GitRef,
-    GitBranchStats,
-    GitCommitDiffs,
-} from 'azure-devops-extension-api/Git';
 
-import {
-    Table,
-    ITableColumn,
-    SimpleTableCell,
-    TwoLineTableCell,
-} from 'azure-devops-ui/Table';
-import { Link } from 'azure-devops-ui/Link';
-import { Pill, PillVariant, PillSize } from 'azure-devops-ui/Pill';
-import { Button } from 'azure-devops-ui/Button';
-import { TextField } from 'azure-devops-ui/TextField';
-import { IColor } from 'azure-devops-ui/Utilities/Color';
-import { Spinner } from 'azure-devops-ui/Spinner';
-import { Icon } from 'azure-devops-ui/Icon';
-import { ArrayItemProvider } from 'azure-devops-ui/Utilities/Provider';
 import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
-import { Dialog } from 'azure-devops-ui/Dialog';
-import { SimpleList } from 'azure-devops-ui/List';
+import { Tab, TabBar, TabSize } from 'azure-devops-ui/Tabs';
+import { Page } from 'azure-devops-ui/Page';
+import { Header, TitleSize } from 'azure-devops-ui/Header';
+import { ZeroData } from 'azure-devops-ui/ZeroData';
+import { Button } from 'azure-devops-ui/Button';
 
-export interface IFoundationSprintlyContentState {
-    repositories?: ArrayItemProvider<GitRepositoryExtended>;
-}
+import { SprintlyPage } from './SprintlyPage';
+import SprintlyPostRelease from './SprintlyPostRelease';
+import SprintlySettings from './SprintlySettings';
+import { showRootComponent } from '../Common';
+import { IHeaderCommandBarItem } from 'azure-devops-ui/HeaderCommandBar';
 
-export interface GitRepositoryExtended extends GitRepository {
-    hasExistingRelease: boolean;
-    existingReleaseName: string;
-    createRelease: boolean;
-    refs: GitRef[];
-}
+const selectedTabKey: string = 'selected-tab';
+const allowedUserGroupsKey: string = 'allowed-user-groups';
+const allowedUsersKey: string = 'allowed-users';
+const sprintlyPageTab: string = 'sprintly-page';
+const sprintlyPostReleaseTab: string = 'sprintly-post-release';
+const sprintlySettingsTab: string = 'sprintly-settings';
 
-const newReleaseBranchNamesObservable: Array<ObservableValue<string>> = [];
-const isTagsDialogOpen: ObservableValue<boolean> = new ObservableValue<boolean>(
+const selectedTabId: ObservableValue<string> = new ObservableValue<string>('');
+const userIsAllowed: ObservableValue<boolean> = new ObservableValue<boolean>(
     false
 );
-const tagsRepoName: ObservableValue<string> = new ObservableValue<string>('');
-const tags: ObservableValue<string[]> = new ObservableValue<string[]>([]);
-const columns: any = [
-    {
-        id: 'name',
-        name: 'Repository',
-        onSize,
-        renderCell: renderName,
-        width: new ObservableValue(-30),
-    },
-    {
-        id: 'releaseNeeded',
-        name: 'Release Needed?',
-        onSize,
-        renderCell: renderReleaseNeeded,
-        width: new ObservableValue(-30),
-    },
-    {
-        id: 'tags',
-        name: 'Tags',
-        onSize,
-        renderCell: renderTags,
-        width: new ObservableValue(-30),
-    },
-    {
-        id: 'createReleaseBranch',
-        name: 'Create Release Branch',
-        renderCell: renderCreateReleaseBranch,
-        width: new ObservableValue(-40),
-    },
-];
+const loggedInUserDescriptorObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
+const organizationNameObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
 
-const useFilteredRepos: boolean = true;
-const reposToProcess: string[] = [
-    'repository-1.git',
-    'repository-2.git',
-    'repository-3.git',
-    'fsi.myprojecthq.jobcosting.api',
-    'fsi.myprojecthq.reports.api',
-    'fsi.myprojecthq.reports.database',
-    'fsi.myprojecthq.reports.web',
-    'fsi.myprojecthq.reportsint.api',
-    'fsi.myprojecthq.stimulsoftviewer.api',
-    'fsi.myprojecthq.web',
-    'fsi.pm.api',
-    'fsi.pm.database',
-    'fsi.pm.messageprocessor.functionapp',
-    'fsi.pm.webhookemail.functionapp',
-    'fsi.pmint.api',
-    'fsl.auth.b2c.apim',
-    'fsl.auth.b2c.appregistration',
-    'fsl.auth.b2c.functionapp',
-    'fsl.auth.b2c.userflows',
-    'fsl.auth.b2c.migration',
-    'fsl.authz.cosmosdb',
-    'fsl.myprojecthq.apim',
-    'fsl.myprojecthq.dailylogs.api',
-    'fsl.myprojecthq.purchaseorders.api',
-    'fsl.myprojecthq.reportdataint.api',
-    'fsl.myprojecthq.reports.stimulsoftviewer.api',
-    'fsl.myprojecthq.weatherautomation.functionapp',
-    'fsl.systemnotifications.api',
-    'fsl.systemnotifications.apim',
-    'fsl.systemnotifications.database',
-];
+export interface AllowedEntity {
+    displayName: string;
+    originId: string;
+    descriptor?: string;
+}
 
-export class FoundationSprintlyContent extends React.Component<
+export interface IFoundationSprintlyState {
+    allAllowedUsersDescriptors: string[];
+}
+
+export default class FoundationSprintly extends React.Component<
     {},
-    IFoundationSprintlyContentState
+    IFoundationSprintlyState
 > {
+    private _dataManager?: IExtensionDataManager;
+    private accessToken: string = '';
+
     constructor(props: {}) {
         super(props);
-
-        this.state = {};
+        this.state = {
+            allAllowedUsersDescriptors: [],
+        };
     }
 
-    public componentDidMount(): void {
-        SDK.init();
-        this.initializeComponent();
+    public async componentDidMount(): Promise<void> {
+        await this.initializeSdk();
+        await this.initializeComponent();
+    }
+
+    private async initializeSdk(): Promise<void> {
+        await SDK.init();
+        await SDK.ready();
     }
 
     private async initializeComponent(): Promise<void> {
-        const _this: this = this;
-        const projects: TeamProjectReference[] = await getClient(
-            CoreRestClient
-        ).getProjects();
-        const reposExtended: GitRepositoryExtended[] = [];
-        projects.forEach(async (project: TeamProjectReference) => {
-            const repos: GitRepository[] = await getClient(
-                GitRestClient
-            ).getRepositories(project.id);
-            let filteredRepos: GitRepository[] = repos;
-            if (useFilteredRepos) {
-                filteredRepos = repos.filter((repo: GitRepository) =>
-                    reposToProcess.includes(repo.name.toLowerCase())
-                );
-            }
+        loggedInUserDescriptorObservable.value = SDK.getUser().descriptor;
+        organizationNameObservable.value = SDK.getHost().name;
 
-            filteredRepos.forEach(async (repo: GitRepository) => {
-                const refs: GitRef[] = await getClient(GitRestClient).getRefs(
-                    repo.id,
-                    undefined,
-                    undefined,
-                    true,
-                    true,
-                    undefined,
-                    undefined,
-                    false,
-                    undefined
-                );
-                let hasDevelop: boolean = false;
-                let hasMaster: boolean = false;
-                let hasMain: boolean = false;
+        this.accessToken = await SDK.getAccessToken();
+        this._dataManager = await this.initializeDataManager();
 
-                for (const ref of refs) {
-                    if (ref.name.includes('heads/develop')) {
-                        hasDevelop = true;
-                    } else if (ref.name.includes('heads/master')) {
-                        hasMaster = true;
-                    } else if (ref.name.includes('heads/main')) {
-                        hasMain = true;
-                    }
-                }
+        selectedTabId.value = getUserSelectedTab();
 
-                const processRepo: boolean =
-                    hasDevelop && (hasMaster || hasMain);
-                if (processRepo === true) {
-                    const baseVersion: GitBaseVersionDescriptor = {
-                        baseVersion: hasMaster ? 'master' : 'main',
-                        baseVersionOptions: 0,
-                        baseVersionType: 0,
-                        version: hasMaster ? 'master' : 'main',
-                        versionOptions: 0,
-                        versionType: 0,
-                    };
-                    const targetVersion: GitTargetVersionDescriptor = {
-                        targetVersion: 'develop',
-                        targetVersionOptions: 0,
-                        targetVersionType: 0,
-                        version: 'develop',
-                        versionOptions: 0,
-                        versionType: 0,
-                    };
+        this.loadAllowedUserGroupsUsers();
+        this.loadAllowedUsers();
+    }
 
-                    const commitsDiff: GitCommitDiffs = await getClient(
-                        GitRestClient
-                    ).getCommitDiffs(
-                        repo.id,
-                        undefined,
-                        undefined,
-                        1000,
-                        0,
-                        baseVersion,
-                        targetVersion
-                    );
+    private async initializeDataManager(): Promise<IExtensionDataManager> {
+        const extDataService: IExtensionDataService =
+            await SDK.getService<IExtensionDataService>(
+                CommonServiceIds.ExtensionDataService
+            );
+        return await extDataService.getExtensionDataManager(
+            SDK.getExtensionContext().id,
+            this.accessToken
+        );
+    }
 
-                    let createRelease: boolean = true;
-                    if (
-                        Object.keys(commitsDiff.changeCounts).length === 0 &&
-                        commitsDiff.changes.length === 0
-                    ) {
-                        createRelease = false;
-                    }
-
-                    let existingReleaseName: string = '';
-                    let hasExistingRelease: boolean = false;
-                    refs.forEach((ref: GitRef) => {
-                        if (ref.name.includes('heads/release')) {
-                            hasExistingRelease = true;
-                            const refNameSplit: string[] =
-                                ref.name.split('heads/');
-                            existingReleaseName = refNameSplit[1];
-                        }
-                    });
-
-                    reposExtended.push({
-                        _links: repo._links,
-                        defaultBranch: repo.defaultBranch,
-                        id: repo.id,
-                        isFork: repo.isFork,
-                        name: repo.name,
-                        parentRepository: repo.parentRepository,
-                        project: repo.project,
-                        remoteUrl: repo.remoteUrl,
-                        size: repo.size,
-                        sshUrl: repo.sshUrl,
-                        url: repo.url,
-                        validRemoteUrls: repo.validRemoteUrls,
-                        webUrl: repo.webUrl,
-                        createRelease,
-                        hasExistingRelease,
-                        existingReleaseName,
-                        refs,
-                    });
-                }
-
-                _this.setState({
-                    repositories: new ArrayItemProvider(
-                        reposExtended.sort(
-                            (
-                                a: GitRepositoryExtended,
-                                b: GitRepositoryExtended
-                            ) => {
-                                return a.name.localeCompare(b.name);
+    private loadAllowedUserGroupsUsers(): void {
+        this._dataManager!.getValue<AllowedEntity[]>(allowedUserGroupsKey).then(
+            (userGroups: AllowedEntity[]) => {
+                for (const group of userGroups) {
+                    axios
+                        .get(
+                            `https://vsaex.dev.azure.com/${organizationNameObservable.value}/_apis/GroupEntitlements/${group.originId}/members`,
+                            {
+                                headers: {
+                                    Authorization: `Bearer ${this.accessToken}`,
+                                },
                             }
                         )
-                    ),
+                        .then((res: any) => {
+                            const allAllowedUsersDescriptors: string[] =
+                                res.data['members'].map(
+                                    (item: any) => item['user']['descriptor']
+                                );
+                            this.setState({
+                                allAllowedUsersDescriptors:
+                                    allAllowedUsersDescriptors.concat(
+                                        this.state.allAllowedUsersDescriptors
+                                    ),
+                            });
+                            userIsAllowed.value =
+                                this.state.allAllowedUsersDescriptors.includes(
+                                    loggedInUserDescriptorObservable.value
+                                );
+                        })
+                        .catch((error: any) => {
+                            console.error(error);
+                        });
+                }
+            }
+        );
+    }
+
+    private loadAllowedUsers(): void {
+        this._dataManager!.getValue<AllowedEntity[]>(allowedUsersKey).then(
+            (users: AllowedEntity[]) => {
+                const allAllowedUsersDescriptors: string[] = users.map(
+                    (user: AllowedEntity) => user.descriptor || ''
+                );
+                this.setState({
+                    allAllowedUsersDescriptors:
+                        allAllowedUsersDescriptors.concat(
+                            this.state.allAllowedUsersDescriptors
+                        ),
                 });
-            });
-        });
+                userIsAllowed.value =
+                    this.state.allAllowedUsersDescriptors.includes(
+                        loggedInUserDescriptorObservable.value
+                    );
+            }
+        );
+    }
+
+    private getCommandBarItems(): IHeaderCommandBarItem[] {
+        return [
+            {
+                id: 'refresh',
+                text: 'Refresh Data',
+                onActivate: () => {
+                    window.location.reload();
+                },
+                iconProps: {
+                    iconName: 'Refresh',
+                },
+                tooltipProps: {
+                    text: 'Refresh the data on the page',
+                },
+            },
+        ];
     }
 
     public render(): JSX.Element {
-        const onDismiss: () => void = () => {
-            isTagsDialogOpen.value = false;
-        };
         return (
             /* tslint:disable */
-            <div className="foundation-sprintly">
-                {!this.state.repositories && (
-                    <div className="flex-row">
-                        <Spinner label="loading" />
-                    </div>
-                )}
-                {this.state.repositories && (
-                    <Table
-                        columns={columns}
-                        itemProvider={this.state.repositories}
-                    />
-                )}
-                <Observer
-                    isTagsDialogOpen={isTagsDialogOpen}
-                    tagsRepoName={tagsRepoName}
-                >
-                    {(props: {
-                        isTagsDialogOpen: boolean;
-                        tagsRepoName: string;
-                    }) => {
-                        return props.isTagsDialogOpen ? (
-                            <Dialog
-                                titleProps={{ text: props.tagsRepoName }}
-                                footerButtonProps={[
-                                    {
-                                        text: 'Close',
-                                        onClick: onDismiss,
-                                    },
-                                ]}
-                                onDismiss={onDismiss}
-                            >
-                                <SimpleList
-                                    itemProvider={
-                                        new ArrayItemProvider<string>(
-                                            tags.value
-                                        )
-                                    }
-                                />
-                            </Dialog>
-                        ) : null;
+            <Page className="flex-grow foundation-sprintly">
+                <Header
+                    title="Foundation Sprintly"
+                    commandBarItems={this.getCommandBarItems()}
+                    titleSize={TitleSize.Large}
+                />
+                <Observer userIsAllowed={userIsAllowed}>
+                    {(props: { userIsAllowed: boolean }) => {
+                        if (userIsAllowed.value) {
+                            return (
+                                <TabBar
+                                    onSelectedTabChanged={onSelectedTabChanged}
+                                    selectedTabId={selectedTabId}
+                                    tabSize={TabSize.Tall}
+                                >
+                                    <Tab name="Sprintly" id={sprintlyPageTab} />
+                                    <Tab
+                                        name="Post Release"
+                                        id={sprintlyPostReleaseTab}
+                                    />
+                                    <Tab
+                                        name="Settings"
+                                        id={sprintlySettingsTab}
+                                    />
+                                </TabBar>
+                            );
+                        }
+                        return <div></div>;
                     }}
                 </Observer>
-            </div>
+
+                <Observer
+                    selectedTabId={selectedTabId}
+                    userIsAllowed={userIsAllowed}
+                >
+                    {(props: {
+                        selectedTabId: string;
+                        userIsAllowed: boolean;
+                    }) => {
+                        if (userIsAllowed.value) {
+                            switch (selectedTabId.value) {
+                                case sprintlyPageTab:
+                                case '':
+                                    return <SprintlyPage />;
+                                case sprintlySettingsTab:
+                                    return (
+                                        <SprintlySettings
+                                            organizationName={
+                                                organizationNameObservable.value
+                                            }
+                                        />
+                                    );
+                                case sprintlyPostReleaseTab:
+                                    return <SprintlyPostRelease />;
+                                default:
+                                    return <div></div>;
+                            }
+                        }
+
+                        return (
+                            <div>
+                                <ZeroData
+                                    primaryText="Sorry, you don't have access yet."
+                                    secondaryText={
+                                        <span>
+                                            Please contact the DevOps team or{' '}
+                                            your team lead for access to this{' '}
+                                            extension.
+                                        </span>
+                                    }
+                                    imageAltText="No Access"
+                                    imagePath={'../static/notfound.png'}
+                                />
+                            </div>
+                        );
+                    }}
+                </Observer>
+            </Page>
             /* tslint:disable */
         );
     }
 }
 
-function renderName(
-    rowIndex: number,
-    columnIndex: number,
-    tableColumn: ITableColumn<GitRepositoryExtended>,
-    tableItem: GitRepositoryExtended
-): JSX.Element {
-    return (
-        <SimpleTableCell
-            key={'col-' + columnIndex}
-            columnIndex={columnIndex}
-            tableColumn={tableColumn}
-            children={
-                <>
-                    <Icon ariaLabel="Repository" iconName="Repo" />
-                    &nbsp;
-                    <Link
-                        excludeTabStop
-                        href={tableItem.webUrl + '/branches'}
-                        subtle={true}
-                        target="_blank"
-                    >
-                        <u>{tableItem.name}</u>
-                    </Link>
-                </>
-            }
-        ></SimpleTableCell>
+function onSelectedTabChanged(newTabId: string) {
+    console.log('setting tab to ', loggedInUserDescriptorObservable.value);
+    selectedTabId.value = newTabId;
+    localStorage.setItem(
+        loggedInUserDescriptorObservable.value + '-' + selectedTabKey,
+        newTabId
     );
 }
 
-function renderReleaseNeeded(
-    rowIndex: number,
-    columnIndex: number,
-    tableColumn: ITableColumn<GitRepositoryExtended>,
-    tableItem: GitRepositoryExtended
-): JSX.Element {
-    const redColor: IColor = {
-        red: 191,
-        green: 65,
-        blue: 65,
-    };
-    const greenColor: IColor = {
-        red: 109,
-        green: 210,
-        blue: 109,
-    };
-    const orangeColor: IColor = {
-        red: 225,
-        green: 172,
-        blue: 74,
-    };
-    let color: IColor = redColor;
-    let text: string = 'No';
-    if (tableItem.createRelease === true) {
-        color = greenColor;
-        text = 'Yes';
-    }
-    if (tableItem.hasExistingRelease === true) {
-        color = orangeColor;
-        text = 'Release Exists';
-    }
-    if (tableItem.hasExistingRelease) {
-        const releaseUrl = encodeURI(tableItem.existingReleaseName);
-        return (
-            <TwoLineTableCell
-                key={'col-' + columnIndex}
-                columnIndex={columnIndex}
-                tableColumn={tableColumn}
-                line1={
-                    <>
-                        <Pill
-                            color={color}
-                            size={PillSize.large}
-                            variant={PillVariant.colored}
-                            iconProps={{ iconName: 'Warning' }}
-                            className="bolt-list-overlay"
-                        >
-                            <b>{text}</b>
-                        </Pill>
-                    </>
-                }
-                line2={
-                    <>
-                        <Link
-                            excludeTabStop
-                            href={tableItem.webUrl + '?version=GB' + releaseUrl}
-                            target="_blank"
-                        >
-                            {tableItem.existingReleaseName}
-                        </Link>
-                    </>
-                }
-            ></TwoLineTableCell>
-        );
-    }
+function getUserSelectedTab(): string {
     return (
-        <SimpleTableCell
-            key={'col-' + columnIndex}
-            columnIndex={columnIndex}
-            tableColumn={tableColumn}
-            children={
-                <>
-                    <Pill
-                        color={color}
-                        size={PillSize.large}
-                        variant={PillVariant.colored}
-                        className="bolt-list-overlay"
-                    >
-                        <b>{text}</b>
-                    </Pill>
-                </>
-            }
-        ></SimpleTableCell>
+        localStorage.getItem(
+            loggedInUserDescriptorObservable.value + '-' + selectedTabKey
+        ) ?? 'sprintly-page'
     );
 }
 
-function renderCreateReleaseBranch(
-    rowIndex: number,
-    columnIndex: number,
-    tableColumn: ITableColumn<GitRepositoryExtended>,
-    tableItem: GitRepositoryExtended
-): JSX.Element {
-    newReleaseBranchNamesObservable[rowIndex] = new ObservableValue<string>('');
-    return (
-        <SimpleTableCell
-            key={'col-' + columnIndex}
-            columnIndex={columnIndex}
-            tableColumn={tableColumn}
-            children={
-                <>
-                    release /&nbsp;
-                    <TextField
-                        value={newReleaseBranchNamesObservable[rowIndex]}
-                        onChange={(e, newValue) =>
-                            (newReleaseBranchNamesObservable[rowIndex].value =
-                                newValue.trim())
-                        }
-                    />
-                    &nbsp;
-                    <Button
-                        text="Create Branch"
-                        iconProps={{ iconName: 'OpenSource' }}
-                        primary={true}
-                        onClick={async () => {
-                            const createRefOptions: GitRefUpdate[] = [];
-                            const developBranch = await getClient(
-                                GitRestClient
-                            ).getBranch(tableItem.id, 'develop');
-                            const newObjectId = developBranch.commit.commitId;
-                            createRefOptions.push({
-                                repositoryId: tableItem.id,
-                                name:
-                                    'refs/heads/release/' +
-                                    newReleaseBranchNamesObservable[rowIndex]
-                                        .value,
-                                isLocked: false,
-                                newObjectId: newObjectId,
-                                oldObjectId:
-                                    '0000000000000000000000000000000000000000',
-                            });
-                            const createRef = await getClient(
-                                GitRestClient
-                            ).updateRefs(createRefOptions, tableItem.id);
-
-                            newReleaseBranchNamesObservable[rowIndex].value =
-                                '';
-                            createRef.forEach(async (ref) => {
-                                const globalMessagesSvc =
-                                    await SDK.getService<IGlobalMessagesService>(
-                                        CommonServiceIds.GlobalMessagesService
-                                    );
-                                globalMessagesSvc.addToast({
-                                    duration: 3000,
-                                    forceOverrideExisting: true,
-                                    message: ref.success
-                                        ? 'Branch Created!'
-                                        : 'Error Creating Branch: ' +
-                                          ref.customMessage,
-                                });
-                            });
-                        }}
-                    />
-                </>
-            }
-        ></SimpleTableCell>
-    );
-}
-
-function renderTags(
-    rowIndex: number,
-    columnIndex: number,
-    tableColumn: ITableColumn<GitRepositoryExtended>,
-    tableItem: GitRepositoryExtended
-): JSX.Element {
-    return (
-        <SimpleTableCell
-            key={'col-' + columnIndex}
-            columnIndex={columnIndex}
-            tableColumn={tableColumn}
-            children={
-                <>
-                    <Button
-                        text="View Tags"
-                        subtle={true}
-                        iconProps={{ iconName: 'Tag' }}
-                        onClick={() => {
-                            isTagsDialogOpen.value = true;
-                            tagsRepoName.value = tableItem.name + ' Tags';
-                            tags.value = [];
-                            tableItem.refs.forEach((ref) => {
-                                if (ref.name.includes('refs/tags')) {
-                                    tags.value.push(ref.name);
-                                }
-                            });
-                        }}
-                    />
-                </>
-            }
-        ></SimpleTableCell>
-    );
-}
-
-function onSize(event: MouseEvent, index: number, width: number) {
-    (columns[index].width as ObservableValue<number>).value = width;
-}
-
-showRootComponent(<FoundationSprintlyContent />);
+showRootComponent(<FoundationSprintly />);

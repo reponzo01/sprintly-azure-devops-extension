@@ -1,12 +1,15 @@
 {
     "manifestVersion": 1,
-    "id": "foundation-sprintly",
     "publisher": "EmanuelVargas",
-    "version": "1.0.0",
-    "name": "Foundation Sprintly",
     "description": "Azure Devops Extension to help facilitate releases at Foundation Software LLC.",
     "scopes": [
-        "vso.code_write"
+        "vso.code_manage",
+        "vso.code_status",
+        "vso.memberentitlementmanagement",
+        "vso.graph",
+        "vso.identity",
+        "vso.tokens",
+        "vso.project"
     ],
     "categories": [
         "Azure Repos"
