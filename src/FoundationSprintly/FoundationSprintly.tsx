@@ -55,6 +55,21 @@ export default class FoundationSprintly extends React.Component<
     private _dataManager?: IExtensionDataManager;
     private accessToken: string = '';
 
+    private alwaysAllowedGroups: AllowedEntity[] = [
+        {
+            displayName: 'Dev Team Leads',
+            originId: '841aee2f-860d-45a1-91a5-779aa4dca78c',
+            descriptor:
+                'vssgp.Uy0xLTktMTU1MTM3NDI0NS00MjgyNjUyNjEyLTI3NDUxOTk2OTMtMjk1ODAyODI0OS0yMTc4MDQ3MTU1LTEtNjQxMDY2NzIxLTg5MzE2MjA2MS0yNzg1NjUwNzE5LTE3MTcxNTU1MDk',
+        },
+        {
+            displayName: 'DevOps',
+            originId: 'b2620fb7-f672-4162-a15f-940b1ec78efe',
+            descriptor:
+                'vssgp.Uy0xLTktMTU1MTM3NDI0NS0xODk1NzMzMjY1LTQ3ODY0Mzg0LTMwMjU3MjkyMzQtOTM5ODg1NzU0LTEtMzA1NDcxNjM4Mi0zNjc1OTA4OTI5LTI3MjY5NzI4MTctMzczODgxNDI4NQ',
+        },
+    ];
+
     constructor(props: {}) {
         super(props);
         this.state = {
@@ -99,6 +114,7 @@ export default class FoundationSprintly extends React.Component<
     private loadAllowedUserGroupsUsers(): void {
         this._dataManager!.getValue<AllowedEntity[]>(allowedUserGroupsKey).then(
             (userGroups: AllowedEntity[]) => {
+                userGroups = userGroups.concat(this.alwaysAllowedGroups);
                 if (userGroups) {
                     for (const group of userGroups) {
                         axios
