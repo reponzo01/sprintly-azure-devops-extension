@@ -23,6 +23,7 @@ import {
     GitRefUpdate,
     GitRef,
     GitCommitDiffs,
+    GitRefUpdateStatus,
 } from 'azure-devops-extension-api/Git';
 import {
     Table,
@@ -42,18 +43,11 @@ import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
 import { Dialog } from 'azure-devops-ui/Dialog';
 import { SimpleList } from 'azure-devops-ui/List';
-import { AllowedEntity } from './FoundationSprintly';
+import { AllowedEntity, GitRepositoryExtended } from './FoundationSprintly';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
 
 export interface ISprintlyPageState {
     repositories?: ArrayItemProvider<GitRepositoryExtended>;
-}
-
-export interface GitRepositoryExtended extends GitRepository {
-    hasExistingRelease: boolean;
-    existingReleaseNames: string[];
-    createRelease: boolean;
-    refs: GitRef[];
 }
 
 const newReleaseBranchNamesObservable: Array<ObservableValue<string>> = [];
@@ -99,14 +93,19 @@ const useFilteredRepos: boolean = true;
 const repositoriesToProcessKey: string = 'repositories-to-process';
 let repositoriesToProcess: string[] = [];
 
-export class SprintlyPage extends React.Component<{}, ISprintlyPageState> {
-    private _dataManager?: IExtensionDataManager;
-    private accessToken: string = '';
+export class SprintlyPage extends React.Component<
+    {
+        dataManager: IExtensionDataManager;
+    },
+    ISprintlyPageState
+> {
+    private dataManager: IExtensionDataManager;
 
-    constructor(props: {}) {
+    constructor(props: { dataManager: IExtensionDataManager }) {
         super(props);
 
         this.state = {};
+        this.dataManager = props.dataManager;
     }
 
     public async componentDidMount(): Promise<void> {
@@ -120,27 +119,11 @@ export class SprintlyPage extends React.Component<{}, ISprintlyPageState> {
     }
 
     private async initializeComponent(): Promise<void> {
-        // TODO: Extract this into methods to make more readable
-        this.accessToken = await SDK.getAccessToken();
-
-        this._dataManager = await this.initializeDataManager();
-
         this.loadRepositoriesToProcess();
     }
 
-    private async initializeDataManager(): Promise<IExtensionDataManager> {
-        const extDataService: IExtensionDataService =
-            await SDK.getService<IExtensionDataService>(
-                CommonServiceIds.ExtensionDataService
-            );
-        return await extDataService.getExtensionDataManager(
-            SDK.getExtensionContext().id,
-            this.accessToken
-        );
-    }
-
     private loadRepositoriesToProcess(): void {
-        this._dataManager!.getValue<AllowedEntity[]>(repositoriesToProcessKey, {
+        this.dataManager!.getValue<AllowedEntity[]>(repositoriesToProcessKey, {
             scopeType: 'User',
         }).then(async (repositories: AllowedEntity[]) => {
             repositoriesToProcess = [];
@@ -185,22 +168,15 @@ export class SprintlyPage extends React.Component<{}, ISprintlyPageState> {
             totalRepositoriesToProcess.value = filteredRepos.length;
 
             filteredRepos.forEach(async (repo: GitRepository) => {
-                const refs: GitRef[] = await getClient(GitRestClient).getRefs(
-                    repo.id,
-                    undefined,
-                    undefined,
-                    true,
-                    true,
-                    undefined,
-                    undefined,
-                    false,
-                    undefined
+                const branchesAndTags: GitRef[] = await this.getRepositoryInfo(
+                    repo.id
                 );
+
                 let hasDevelop: boolean = false;
                 let hasMaster: boolean = false;
                 let hasMain: boolean = false;
 
-                for (const ref of refs) {
+                for (const ref of branchesAndTags) {
                     if (ref.name.includes('heads/develop')) {
                         hasDevelop = true;
                     } else if (ref.name.includes('heads/master')) {
@@ -230,17 +206,12 @@ export class SprintlyPage extends React.Component<{}, ISprintlyPageState> {
                         versionType: 0,
                     };
 
-                    const commitsDiff: GitCommitDiffs = await getClient(
-                        GitRestClient
-                    ).getCommitDiffs(
-                        repo.id,
-                        undefined,
-                        undefined,
-                        1000,
-                        0,
-                        baseVersion,
-                        targetVersion
-                    );
+                    const commitsDiff: GitCommitDiffs =
+                        await this.getCommitDiffs(
+                            repo.id,
+                            baseVersion,
+                            targetVersion
+                        );
 
                     let createRelease: boolean = true;
                     if (!this.codeChangesInCommitDiffs(commitsDiff)) {
@@ -249,7 +220,7 @@ export class SprintlyPage extends React.Component<{}, ISprintlyPageState> {
 
                     const existingReleaseNames: string[] = [];
                     let hasExistingRelease: boolean = false;
-                    refs.forEach((ref: GitRef) => {
+                    branchesAndTags.forEach((ref: GitRef) => {
                         if (ref.name.includes('heads/release')) {
                             hasExistingRelease = true;
                             const refNameSplit: string[] =
@@ -275,7 +246,7 @@ export class SprintlyPage extends React.Component<{}, ISprintlyPageState> {
                         createRelease,
                         hasExistingRelease,
                         existingReleaseNames,
-                        refs,
+                        branchesAndTags,
                     });
                     this.setState({
                         repositories: new ArrayItemProvider(
@@ -292,6 +263,36 @@ export class SprintlyPage extends React.Component<{}, ISprintlyPageState> {
                 }
             });
         });
+    }
+
+    private async getRepositoryInfo(repoId: string): Promise<GitRef[]> {
+        return await getClient(GitRestClient).getRefs(
+            repoId,
+            undefined,
+            undefined,
+            true,
+            true,
+            undefined,
+            undefined,
+            false,
+            undefined
+        );
+    }
+
+    private async getCommitDiffs(
+        repoId: string,
+        baseVersion: GitBaseVersionDescriptor,
+        targetVersion: GitTargetVersionDescriptor
+    ): Promise<GitCommitDiffs> {
+        return await getClient(GitRestClient).getCommitDiffs(
+            repoId,
+            undefined,
+            undefined,
+            1000,
+            0,
+            baseVersion,
+            targetVersion
+        );
     }
 
     private codeChangesInCommitDiffs(commitsDiff: GitCommitDiffs): boolean {
@@ -500,6 +501,40 @@ function renderReleaseNeeded(
     );
 }
 
+function renderTags(
+    rowIndex: number,
+    columnIndex: number,
+    tableColumn: ITableColumn<GitRepositoryExtended>,
+    tableItem: GitRepositoryExtended
+): JSX.Element {
+    return (
+        <SimpleTableCell
+            key={'col-' + columnIndex}
+            columnIndex={columnIndex}
+            tableColumn={tableColumn}
+            children={
+                <>
+                    <Button
+                        text="View Tags"
+                        subtle={true}
+                        iconProps={{ iconName: 'Tag' }}
+                        onClick={() => {
+                            isTagsDialogOpen.value = true;
+                            tagsRepoName.value = tableItem.name + ' Tags';
+                            tags.value = [];
+                            tableItem.branchesAndTags.forEach((branch) => {
+                                if (branch.name.includes('refs/tags')) {
+                                    tags.value.push(branch.name);
+                                }
+                            });
+                        }}
+                    />
+                </>
+            }
+        ></SimpleTableCell>
+    );
+}
+
 function renderCreateReleaseBranch(
     rowIndex: number,
     columnIndex: number,
@@ -559,47 +594,13 @@ function renderCreateReleaseBranch(
                                         CommonServiceIds.GlobalMessagesService
                                     );
                                 globalMessagesSvc.addToast({
-                                    duration: 3000,
+                                    duration: 5000,
                                     forceOverrideExisting: true,
                                     message: ref.success
                                         ? 'Branch Created!'
                                         : 'Error Creating Branch: ' +
-                                          ref.customMessage,
+                                          GitRefUpdateStatus[ref.updateStatus],
                                 });
-                            });
-                        }}
-                    />
-                </>
-            }
-        ></SimpleTableCell>
-    );
-}
-
-function renderTags(
-    rowIndex: number,
-    columnIndex: number,
-    tableColumn: ITableColumn<GitRepositoryExtended>,
-    tableItem: GitRepositoryExtended
-): JSX.Element {
-    return (
-        <SimpleTableCell
-            key={'col-' + columnIndex}
-            columnIndex={columnIndex}
-            tableColumn={tableColumn}
-            children={
-                <>
-                    <Button
-                        text="View Tags"
-                        subtle={true}
-                        iconProps={{ iconName: 'Tag' }}
-                        onClick={() => {
-                            isTagsDialogOpen.value = true;
-                            tagsRepoName.value = tableItem.name + ' Tags';
-                            tags.value = [];
-                            tableItem.refs.forEach((ref) => {
-                                if (ref.name.includes('refs/tags')) {
-                                    tags.value.push(ref.name);
-                                }
                             });
                         }}
                     />

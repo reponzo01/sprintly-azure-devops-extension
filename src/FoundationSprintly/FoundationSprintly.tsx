@@ -14,13 +14,13 @@ import { Tab, TabBar, TabSize } from 'azure-devops-ui/Tabs';
 import { Page } from 'azure-devops-ui/Page';
 import { Header, TitleSize } from 'azure-devops-ui/Header';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
-import { Button } from 'azure-devops-ui/Button';
 
 import { SprintlyPage } from './SprintlyPage';
 import SprintlyPostRelease from './SprintlyPostRelease';
 import SprintlySettings from './SprintlySettings';
 import { showRootComponent } from '../Common';
 import { IHeaderCommandBarItem } from 'azure-devops-ui/HeaderCommandBar';
+import { GitRef, GitRepository } from 'azure-devops-extension-api/Git';
 
 const selectedTabKey: string = 'selected-tab';
 const allowedUserGroupsKey: string = 'allowed-user-groups';
@@ -44,6 +44,13 @@ export interface AllowedEntity {
     descriptor?: string;
 }
 
+export interface GitRepositoryExtended extends GitRepository {
+    hasExistingRelease: boolean;
+    existingReleaseNames: string[];
+    createRelease: boolean;
+    branchesAndTags: GitRef[];
+}
+
 export interface IFoundationSprintlyState {
     allAllowedUsersDescriptors: string[];
 }
@@ -52,7 +59,7 @@ export default class FoundationSprintly extends React.Component<
     {},
     IFoundationSprintlyState
 > {
-    private _dataManager?: IExtensionDataManager;
+    private dataManager!: IExtensionDataManager;
     private accessToken: string = '';
 
     constructor(props: {}) {
@@ -77,7 +84,7 @@ export default class FoundationSprintly extends React.Component<
         organizationNameObservable.value = SDK.getHost().name;
 
         this.accessToken = await SDK.getAccessToken();
-        this._dataManager = await this.initializeDataManager();
+        this.dataManager = await this.initializeDataManager();
 
         selectedTabId.value = getUserSelectedTab();
 
@@ -97,7 +104,7 @@ export default class FoundationSprintly extends React.Component<
     }
 
     private loadAllowedUserGroupsUsers(): void {
-        this._dataManager!.getValue<AllowedEntity[]>(allowedUserGroupsKey).then(
+        this.dataManager!.getValue<AllowedEntity[]>(allowedUserGroupsKey).then(
             (userGroups: AllowedEntity[]) => {
                 for (const group of userGroups) {
                     axios
@@ -134,7 +141,7 @@ export default class FoundationSprintly extends React.Component<
     }
 
     private loadAllowedUsers(): void {
-        this._dataManager!.getValue<AllowedEntity[]>(allowedUsersKey).then(
+        this.dataManager!.getValue<AllowedEntity[]>(allowedUsersKey).then(
             (users: AllowedEntity[]) => {
                 const allAllowedUsersDescriptors: string[] = users.map(
                     (user: AllowedEntity) => user.descriptor || ''
@@ -217,17 +224,26 @@ export default class FoundationSprintly extends React.Component<
                             switch (selectedTabId.value) {
                                 case sprintlyPageTab:
                                 case '':
-                                    return <SprintlyPage />;
+                                    return (
+                                        <SprintlyPage
+                                            dataManager={this.dataManager}
+                                        />
+                                    );
                                 case sprintlySettingsTab:
                                     return (
                                         <SprintlySettings
                                             organizationName={
                                                 organizationNameObservable.value
                                             }
+                                            dataManager={this.dataManager}
                                         />
                                     );
                                 case sprintlyPostReleaseTab:
-                                    return <SprintlyPostRelease />;
+                                    return (
+                                        <SprintlyPostRelease
+                                            dataManager={this.dataManager}
+                                        />
+                                    );
                                 default:
                                     return <div></div>;
                             }

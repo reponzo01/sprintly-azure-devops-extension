@@ -43,6 +43,7 @@ export interface ISprintlySettingsState {
 export default class SprintlySettings extends React.Component<
     {
         organizationName: string;
+        dataManager?: IExtensionDataManager;
     },
     ISprintlySettingsState
 > {
@@ -57,15 +58,16 @@ export default class SprintlySettings extends React.Component<
     private allUsers: AllowedEntity[] = [];
     private allRepositories: AllowedEntity[] = [];
 
-    private _dataManager?: IExtensionDataManager;
+    private dataManager: IExtensionDataManager;
     private accessToken: string = '';
     private organizationName: string;
 
-    constructor(props: { organizationName: string }) {
+    constructor(props: { organizationName: string; dataManager: IExtensionDataManager }) {
         super(props);
 
         this.state = {};
         this.organizationName = props.organizationName;
+        this.dataManager = props.dataManager;
     }
 
     public async componentDidMount(): Promise<void> {
@@ -81,8 +83,6 @@ export default class SprintlySettings extends React.Component<
     private async initializeComponent(): Promise<void> {
         this.accessToken = await SDK.getAccessToken();
 
-        this._dataManager = await this.initializeDataManager();
-
         await this.getGroups();
         await this.getUsers();
         await this.getRepositories();
@@ -92,17 +92,6 @@ export default class SprintlySettings extends React.Component<
         this.loadAllowedUserGroupsUsers();
         this.loadAllowedUsers();
         this.loadRepositoriesToProcess();
-    }
-
-    private async initializeDataManager(): Promise<IExtensionDataManager> {
-        const extDataService: IExtensionDataService =
-            await SDK.getService<IExtensionDataService>(
-                CommonServiceIds.ExtensionDataService
-            );
-        return await extDataService.getExtensionDataManager(
-            SDK.getExtensionContext().id,
-            this.accessToken
-        );
     }
 
     private async getGraphResource(
@@ -194,7 +183,7 @@ export default class SprintlySettings extends React.Component<
     }
 
     private loadAllowedUserGroupsUsers(): void {
-        this._dataManager!.getValue<AllowedEntity[]>(allowedUserGroupsKey).then(
+        this.dataManager!.getValue<AllowedEntity[]>(allowedUserGroupsKey).then(
             (userGroups: AllowedEntity[]) => {
                 this.userGroupsSelection.clear();
                 for (const selectedUserGroup of userGroups) {
@@ -222,7 +211,7 @@ export default class SprintlySettings extends React.Component<
     }
 
     private loadAllowedUsers(): void {
-        this._dataManager!.getValue<AllowedEntity[]>(allowedUsersKey).then(
+        this.dataManager!.getValue<AllowedEntity[]>(allowedUsersKey).then(
             (users: AllowedEntity[]) => {
                 this.usersSelection.clear();
                 for (const selectedUser of users) {
@@ -250,7 +239,7 @@ export default class SprintlySettings extends React.Component<
     }
 
     private loadRepositoriesToProcess(): void {
-        this._dataManager!.getValue<AllowedEntity[]>(repositoriesToProcessKey, {
+        this.dataManager!.getValue<AllowedEntity[]>(repositoriesToProcessKey, {
             scopeType: 'User',
         }).then(
             (repositories: AllowedEntity[]) => {
@@ -296,15 +285,15 @@ export default class SprintlySettings extends React.Component<
                 this.allRepositories
             );
 
-        this._dataManager!.setValue<AllowedEntity[]>(
+        this.dataManager!.setValue<AllowedEntity[]>(
             allowedUserGroupsKey,
             userGroupsSelectedArray || []
         ).then(() => {
-            this._dataManager!.setValue<AllowedEntity[]>(
+            this.dataManager!.setValue<AllowedEntity[]>(
                 allowedUsersKey,
                 usersSelectedArray || []
             ).then(() => {
-                this._dataManager!.setValue<AllowedEntity[]>(
+                this.dataManager!.setValue<AllowedEntity[]>(
                     repositoriesToProcessKey,
                     repositoriesSelectedArray || [],
                     { scopeType: 'User' }
