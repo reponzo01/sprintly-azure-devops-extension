@@ -445,6 +445,18 @@ export default class SprintlySettings extends React.Component<
                                     {
                                         className:
                                             'bolt-dropdown-action-right-button',
+                                        iconProps: { iconName: 'Accept' },
+                                        text: 'Select All',
+                                        onClick: () => {
+                                            this.repositoriesToProcessSelection.select(
+                                                0,
+                                                this.allRepositories.length
+                                            );
+                                        },
+                                    },
+                                    {
+                                        className:
+                                            'bolt-dropdown-action-right-button',
                                         disabled:
                                             this.repositoriesToProcessSelection
                                                 .selectedCount === 0,
@@ -501,7 +513,7 @@ export default class SprintlySettings extends React.Component<
 
                 <div className="bolt-button-group flex-row rhythm-horizontal-8">
                     <Button
-                        text="Save"
+                        text="Save Settings"
                         primary={true}
                         onClick={this.onSaveData}
                         disabled={!ready}
