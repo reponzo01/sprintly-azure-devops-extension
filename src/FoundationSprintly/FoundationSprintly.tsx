@@ -55,6 +55,10 @@ export interface IFoundationSprintlyState {
     allAllowedUsersDescriptors: string[];
 }
 
+// TODO: Clean up arrow functions for the cases in which I thought I
+// couldn't use regular functions because the this.* was undefined errors.
+// The solution is to bind those functions to `this` in the constructor.
+// See SprintlyPostRelease as an example.
 export default class FoundationSprintly extends React.Component<
     {},
     IFoundationSprintlyState
