@@ -93,7 +93,7 @@ const useFilteredRepos: boolean = true;
 const repositoriesToProcessKey: string = 'repositories-to-process';
 let repositoriesToProcess: string[] = [];
 
-export class SprintlyPage extends React.Component<
+export default class SprintlyPage extends React.Component<
     {
         dataManager: IExtensionDataManager;
     },
@@ -270,10 +270,10 @@ export class SprintlyPage extends React.Component<
             repoId,
             undefined,
             undefined,
-            true,
-            true,
+            false,
+            false,
             undefined,
-            undefined,
+            true,
             false,
             undefined
         );

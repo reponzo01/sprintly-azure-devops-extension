@@ -1,8 +1,57 @@
-@import "node_modules/azure-devops-ui/Core/_platformCommon.scss";
+@import 'node_modules/azure-devops-ui/Core/_platformCommon.scss';
 
 .foundation-sprintly {
     font-size: $fontSizeM;
 }
 .flex-direction-col > div {
     flex-direction: column;
+}
+
+.master-row {
+    background-color: inherit;
+    cursor: pointer;
+}
+
+.master-row-content {
+    padding: 8px 8px 8px 20px;
+}
+
+.master-scroll-container {
+    /*max-height: 200px;*/
+    height: 100%;
+    width: 100%;
+}
+
+@media screen and (max-width: 1023px) {
+    .single-layer-details {
+        max-width: 150px;
+    }
+}
+
+.single-layer-details-contents {
+    font-size: 18px;
+    margin-left: 12px;
+}
+
+.description-primary-text.secondary-text,
+.bolt-master-panel-header-subtitle.secondary-text {
+    color: inherit;
+}
+
+@media screen and (max-width: 800px) {
+    .context-details {
+        max-width: 320px;
+    }
+}
+
+.details-view-title {
+    white-space: normal;
+}
+
+.bolt-master-panel-header-title {
+    white-space: normal;
+}
+
+.light-grey {
+    background-color: #252423;
 }

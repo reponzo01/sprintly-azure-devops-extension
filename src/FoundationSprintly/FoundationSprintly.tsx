@@ -15,7 +15,7 @@ import { Page } from 'azure-devops-ui/Page';
 import { Header, TitleSize } from 'azure-devops-ui/Header';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
 
-import { SprintlyPage } from './SprintlyPage';
+import SprintlyPage from './SprintlyPage';
 import SprintlyPostRelease from './SprintlyPostRelease';
 import SprintlySettings from './SprintlySettings';
 import { showRootComponent } from '../Common';
