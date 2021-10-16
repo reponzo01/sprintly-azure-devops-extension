@@ -1,6 +1,10 @@
 import * as React from 'react';
 import * as SDK from 'azure-devops-extension-sdk';
-import { getClient, IExtensionDataManager } from 'azure-devops-extension-api';
+import {
+    getClient,
+    IColor,
+    IExtensionDataManager,
+} from 'azure-devops-extension-api';
 import {
     CoreRestClient,
     TeamProjectReference,
@@ -14,16 +18,13 @@ import {
     GitTargetVersionDescriptor,
 } from 'azure-devops-extension-api/Git';
 
-import {
-    IObservableValue,
-    ObservableValue,
-} from 'azure-devops-ui/Core/Observable';
+import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
 import { bindSelectionToObservable } from 'azure-devops-ui/MasterDetailsContext';
 import { ArrayItemProvider } from 'azure-devops-ui/Utilities/Provider';
 import { ITableColumn, SimpleTableCell } from 'azure-devops-ui/Table';
-import { Icon } from 'azure-devops-ui/Icon';
+import { Icon, IconSize } from 'azure-devops-ui/Icon';
 import { Link } from 'azure-devops-ui/Link';
 import { Button } from 'azure-devops-ui/Button';
 import {
@@ -41,14 +42,12 @@ import { Tooltip } from 'azure-devops-ui/TooltipEx';
 import { Page } from 'azure-devops-ui/Page';
 
 import { AllowedEntity, GitRepositoryExtended } from './FoundationSprintly';
-import { Spinner } from 'azure-devops-ui/Spinner';
-import { ISelectionRange } from 'azure-devops-ui/Utilities/Selection';
+import { Pill, PillSize, PillVariant } from 'azure-devops-ui/Pill';
 
 export interface ISprintlyPostReleaseState {
     repositories: ArrayItemProvider<GitRepositoryExtended>;
     selection: ListSelection;
-    itemProvider: ArrayItemProvider<AllowedEntity>;
-    selectedItemObservable: ObservableValue<AllowedEntity> | undefined;
+    selectedItemObservable: ObservableValue<GitRepositoryExtended>;
 }
 
 const isTagsDialogOpen: ObservableValue<boolean> = new ObservableValue<boolean>(
@@ -95,9 +94,8 @@ export default class SprintlyPostRelease extends React.Component<
         super(props);
 
         this.state = {
-            repositories: new ArrayItemProvider([]),
+            repositories: new ArrayItemProvider<GitRepositoryExtended>([]),
             selection: new ListSelection({ selectOnFocus: false }),
-            itemProvider: new ArrayItemProvider<AllowedEntity>([]),
             selectedItemObservable: new ObservableValue<any>({}),
         };
 
@@ -264,18 +262,13 @@ export default class SprintlyPostRelease extends React.Component<
             }
             this.setState({
                 repositories: new ArrayItemProvider(reposExtended),
-                itemProvider: new ArrayItemProvider(
-                    reposExtended.map<AllowedEntity>((item) => ({
-                        displayName: item.name,
-                        originId: item.id,
-                    }))
-                ),
             });
 
             bindSelectionToObservable(
                 this.state.selection,
-                this.state.itemProvider,
-                this.state.selectedItemObservable as ObservableValue<AllowedEntity>
+                this.state.repositories,
+                this.state
+                    .selectedItemObservable as ObservableValue<GitRepositoryExtended>
             );
         });
     }
@@ -324,7 +317,7 @@ export default class SprintlyPostRelease extends React.Component<
         return (
             <List
                 ariaLabel={'Repositories'}
-                itemProvider={this.state.itemProvider}
+                itemProvider={this.state.repositories}
                 selection={this.state.selection}
                 renderRow={this.renderListItem}
                 width="100%"
@@ -335,33 +328,92 @@ export default class SprintlyPostRelease extends React.Component<
 
     private renderListItem(
         index: number,
-        item: AllowedEntity,
-        details: IListItemDetails<AllowedEntity>,
+        item: GitRepositoryExtended,
+        details: IListItemDetails<GitRepositoryExtended>,
         key?: string
     ): JSX.Element {
+        const primaryColor: IColor = {
+            red: 0,
+            green: 90,
+            blue: 158,
+        };
+        const primaryColorShade30: IColor = {
+            red: 0,
+            green: 69,
+            blue: 120,
+        };
+        const releaseLinks: JSX.Element[] =
+            item.existingReleaseNames.map<JSX.Element>((release, index) => (
+                <div className="flex-row padding-vertical-10" key={index}>
+                    <Link
+                        excludeTabStop
+                        href={item.webUrl + '?version=GB' + encodeURI(release)}
+                        subtle={false}
+                        target="_blank"
+                        className="padding-horizontal-6"
+                    >
+                        {release}
+                    </Link>
+                    <Pill
+                        color={primaryColor}
+                        size={PillSize.regular}
+                        className="bolt-list-overlay margin-horizontal-3"
+                    >
+                        Ahead of develop{' '}
+                        <i>
+                            <Icon
+                                ariaLabel="Pull Request"
+                                iconName="BranchPullRequest"
+                                size={IconSize.small}
+                            />{' '}
+                            #8542
+                        </i>
+                    </Pill>
+                    <Pill
+                        color={primaryColorShade30}
+                        size={PillSize.regular}
+                        className="bolt-list-overlay margin-horizontal-3"
+                        variant={PillVariant.outlined}
+                    >
+                        Ahead of master{' '}
+                        <i>
+                            <Icon
+                                ariaLabel="Pull Request"
+                                iconName="BranchPullRequest"
+                                size={IconSize.small}
+                            />{' '}
+                            #8542
+                        </i>
+                    </Pill>
+                </div>
+            ));
         return (
             <ListItem
-                className="master-row"
+                className="master-row border-bottom"
                 key={key || 'list-item' + index}
                 index={index}
                 details={details}
             >
                 <div className="master-row-content flex-row flex-center h-scroll-hidden">
-                    {/* <Tooltip overflowOnly={true}>
-                        <div className="primary-text text-ellipsis">
-                            {item.displayName}
-                        </div>
-                    </Tooltip> */}
-                    <Icon ariaLabel="Repository" iconName="Repo" />
-                    &nbsp;
-                    <Link
-                        excludeTabStop
-                        href={'/branches'}
-                        subtle={true}
-                        target="_blank"
-                    >
-                        <u>{item.displayName}</u>
-                    </Link>
+                    <div className="flex-column text-ellipsis">
+                        <Tooltip overflowOnly={true}>
+                            <div className="primary-text text-ellipsis">
+                                <Link
+                                    excludeTabStop
+                                    href={item.webUrl + '/branches'}
+                                    subtle={true}
+                                    target="_blank"
+                                >
+                                    <u>{item.name}</u>
+                                </Link>
+                            </div>
+                        </Tooltip>
+                        <Tooltip overflowOnly={true}>
+                            <div className="flex-column primary-text text-ellipsis">
+                                {<>{releaseLinks}</>}
+                            </div>
+                        </Tooltip>
+                    </div>
                 </div>
             </ListItem>
         );
@@ -370,7 +422,7 @@ export default class SprintlyPostRelease extends React.Component<
     private renderDetailPage(): JSX.Element {
         return (
             <Observer selectedItem={this.state.selectedItemObservable}>
-                {(observerProps: { selectedItem: AllowedEntity }) => (
+                {(observerProps: { selectedItem: GitRepositoryExtended }) => (
                     <Page className="flex-grow single-layer-details">
                         {this.state.selection.selectedCount == 0 && (
                             <span className="single-layer-details-contents">
@@ -380,14 +432,12 @@ export default class SprintlyPostRelease extends React.Component<
                         {observerProps.selectedItem &&
                             this.state.selection.selectedCount > 0 && (
                                 <Tooltip
-                                    text={
-                                        observerProps.selectedItem.displayName
-                                    }
+                                    text={observerProps.selectedItem.name}
                                     overflowOnly={true}
                                 >
                                     <span className="single-layer-details-contents">
-                                        {observerProps.selectedItem.displayName}{' '}
-                                        This is the Detail Page
+                                        {observerProps.selectedItem.name} This
+                                        is the Detail Page
                                     </span>
                                 </Tooltip>
                             )}

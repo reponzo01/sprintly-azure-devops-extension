@@ -37,7 +37,7 @@ import { Button } from 'azure-devops-ui/Button';
 import { TextField } from 'azure-devops-ui/TextField';
 import { IColor } from 'azure-devops-ui/Utilities/Color';
 import { Spinner } from 'azure-devops-ui/Spinner';
-import { Icon } from 'azure-devops-ui/Icon';
+import { Icon, IconSize } from 'azure-devops-ui/Icon';
 import { ArrayItemProvider } from 'azure-devops-ui/Utilities/Provider';
 import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
@@ -395,8 +395,12 @@ function renderName(
             tableColumn={tableColumn}
             children={
                 <>
-                    <Icon ariaLabel="Repository" iconName="Repo" />
-                    &nbsp;
+                    <Icon
+                        ariaLabel="Repository"
+                        iconName="Repo"
+                        size={IconSize.large}
+                    />
+                    {' '}
                     <Link
                         excludeTabStop
                         href={tableItem.webUrl + '/branches'}
@@ -443,21 +447,23 @@ function renderReleaseNeeded(
         text = 'Release Exists';
     }
     if (tableItem.hasExistingRelease) {
-        const releaseLinks: JSX.Element[] = [];
-        let counter: number = 0;
-        for (const release of tableItem.existingReleaseNames) {
-            releaseLinks.push(
-                <Link
-                    key={counter}
-                    excludeTabStop
-                    href={tableItem.webUrl + '?version=GB' + encodeURI(release)}
-                    target="_blank"
-                >
-                    {release}
-                </Link>
+        const releaseLinks: JSX.Element[] =
+            tableItem.existingReleaseNames.map<JSX.Element>(
+                (release, index) => (
+                    <Link
+                        key={index}
+                        excludeTabStop
+                        href={
+                            tableItem.webUrl +
+                            '?version=GB' +
+                            encodeURI(release)
+                        }
+                        target="_blank"
+                    >
+                        {release}
+                    </Link>
+                )
             );
-            counter++;
-        }
 
         return (
             <TwoLineTableCell
