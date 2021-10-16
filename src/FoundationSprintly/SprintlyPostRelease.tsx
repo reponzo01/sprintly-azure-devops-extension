@@ -14,7 +14,10 @@ import {
     GitTargetVersionDescriptor,
 } from 'azure-devops-extension-api/Git';
 
-import { ObservableValue } from 'azure-devops-ui/Core/Observable';
+import {
+    IObservableValue,
+    ObservableValue,
+} from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
 import { bindSelectionToObservable } from 'azure-devops-ui/MasterDetailsContext';
@@ -23,18 +26,29 @@ import { ITableColumn, SimpleTableCell } from 'azure-devops-ui/Table';
 import { Icon } from 'azure-devops-ui/Icon';
 import { Link } from 'azure-devops-ui/Link';
 import { Button } from 'azure-devops-ui/Button';
-import { IListItemDetails, List, ListItem, ListSelection } from 'azure-devops-ui/List';
-import { Splitter, SplitterDirection, SplitterElementPosition } from 'azure-devops-ui/Splitter';
+import {
+    IListItemDetails,
+    List,
+    ListItem,
+    ListSelection,
+} from 'azure-devops-ui/List';
+import {
+    Splitter,
+    SplitterDirection,
+    SplitterElementPosition,
+} from 'azure-devops-ui/Splitter';
 import { Tooltip } from 'azure-devops-ui/TooltipEx';
 import { Page } from 'azure-devops-ui/Page';
 
 import { AllowedEntity, GitRepositoryExtended } from './FoundationSprintly';
+import { Spinner } from 'azure-devops-ui/Spinner';
+import { ISelectionRange } from 'azure-devops-ui/Utilities/Selection';
 
 export interface ISprintlyPostReleaseState {
-    repositories?: ArrayItemProvider<GitRepositoryExtended>;
+    repositories: ArrayItemProvider<GitRepositoryExtended>;
     selection: ListSelection;
-    itemProvider: ArrayItemProvider<string>;
-    selectedItemObservable: ObservableValue<string>;
+    itemProvider: ArrayItemProvider<AllowedEntity>;
+    selectedItemObservable: ObservableValue<AllowedEntity> | undefined;
 }
 
 const isTagsDialogOpen: ObservableValue<boolean> = new ObservableValue<boolean>(
@@ -66,35 +80,6 @@ const useFilteredRepos: boolean = true;
 const repositoriesToProcessKey: string = 'repositories-to-process';
 let repositoriesToProcess: string[] = [];
 
-const sampleData: string[] = [
-    'Added GitHub aliases',
-    'Remove reference to Design System components',
-    'Using new design/pattern/components',
-    'Fixing bug with spacing',
-    'Added some new components',
-    'Setting up theme variables',
-    'Updating Button focus behavior',
-    'Added some new components',
-    'Setting up theme variables',
-    'Updating Button focus behavior',
-    'Updating Button focus behavior',
-    'Added some new components',
-    'Setting up theme variables',
-    'Updating Button focus behavior',
-    'Updating Button focus behavior',
-    'Added some new components',
-    'Setting up theme variables',
-    'Updating Button focus behavior',
-    'Updating Button focus behavior',
-    'Added some new components',
-    'Setting up theme variables',
-    'Updating Button focus behavior',
-    'Updating Button focus behavior',
-    'Added some new components',
-    'Setting up theme variables',
-    'Updating Button focus behavior',
-];
-
 // TODO: Clean up arrow functions for the cases in which I thought I
 // couldn't use regular functions because the this.* was undefined errors.
 // The solution is to bind those functions to `this` in the constructor.
@@ -110,23 +95,20 @@ export default class SprintlyPostRelease extends React.Component<
         super(props);
 
         this.state = {
+            repositories: new ArrayItemProvider([]),
             selection: new ListSelection({ selectOnFocus: false }),
-            itemProvider: new ArrayItemProvider(sampleData),
-            selectedItemObservable: new ObservableValue<string>(sampleData[0]),
+            itemProvider: new ArrayItemProvider<AllowedEntity>([]),
+            selectedItemObservable: new ObservableValue<any>({}),
         };
 
         this.renderRepositoryList = this.renderRepositoryList.bind(this);
+        this.renderListItem = this.renderListItem.bind(this);
         this.renderDetailPage = this.renderDetailPage.bind(this);
 
         this.dataManager = props.dataManager;
     }
 
     public async componentDidMount(): Promise<void> {
-        bindSelectionToObservable(
-            this.state.selection,
-            this.state.itemProvider,
-            this.state.selectedItemObservable
-        );
         await this.initializeSdk();
         await this.initializeComponent();
     }
@@ -139,11 +121,11 @@ export default class SprintlyPostRelease extends React.Component<
     private async initializeComponent(): Promise<void> {
         this.accessToken = await SDK.getAccessToken();
 
-        this.loadRepositoriesToProcess();
+        await this.loadRepositoriesToProcess();
     }
 
     // TODO: This function is repeated in SprintlyPage. See about extracting.
-    private loadRepositoriesToProcess(): void {
+    private async loadRepositoriesToProcess(): Promise<void> {
         this.dataManager!.getValue<AllowedEntity[]>(repositoriesToProcessKey, {
             scopeType: 'User',
         }).then(async (repositories: AllowedEntity[]) => {
@@ -165,17 +147,17 @@ export default class SprintlyPostRelease extends React.Component<
                                 project.name === 'Sample Project'
                             );
                         });
-                    this.loadRepositoriesDisplayState(filteredProjects);
+                    await this.loadRepositoriesDisplayState(filteredProjects);
                 }
             }
         });
     }
 
     // TODO: This function is repeated in SprintlyPage. See about extracting.
-    private loadRepositoriesDisplayState(
+    private async loadRepositoriesDisplayState(
         projects: TeamProjectReference[]
-    ): void {
-        const reposExtended: GitRepositoryExtended[] = [];
+    ): Promise<void> {
+        let reposExtended: GitRepositoryExtended[] = [];
         projects.forEach(async (project: TeamProjectReference) => {
             const repos: GitRepository[] = await getClient(
                 GitRestClient
@@ -189,7 +171,7 @@ export default class SprintlyPostRelease extends React.Component<
 
             totalRepositoriesToProcess.value = filteredRepos.length;
 
-            filteredRepos.forEach(async (repo: GitRepository) => {
+            for (const repo of filteredRepos) {
                 const branchesAndTags: GitRef[] = await this.getRepositoryInfo(
                     repo.id
                 );
@@ -270,20 +252,31 @@ export default class SprintlyPostRelease extends React.Component<
                         existingReleaseNames,
                         branchesAndTags,
                     });
-                    this.setState({
-                        repositories: new ArrayItemProvider(
-                            reposExtended.sort(
-                                (
-                                    a: GitRepositoryExtended,
-                                    b: GitRepositoryExtended
-                                ) => {
-                                    return a.name.localeCompare(b.name);
-                                }
-                            )
-                        ),
-                    });
                 }
+            }
+
+            if (reposExtended.length > 0) {
+                reposExtended = reposExtended.sort(
+                    (a: GitRepositoryExtended, b: GitRepositoryExtended) => {
+                        return a.name.localeCompare(b.name);
+                    }
+                );
+            }
+            this.setState({
+                repositories: new ArrayItemProvider(reposExtended),
+                itemProvider: new ArrayItemProvider(
+                    reposExtended.map<AllowedEntity>((item) => ({
+                        displayName: item.name,
+                        originId: item.id,
+                    }))
+                ),
             });
+
+            bindSelectionToObservable(
+                this.state.selection,
+                this.state.itemProvider,
+                this.state.selectedItemObservable as ObservableValue<AllowedEntity>
+            );
         });
     }
 
@@ -342,8 +335,8 @@ export default class SprintlyPostRelease extends React.Component<
 
     private renderListItem(
         index: number,
-        item: string,
-        details: IListItemDetails<string>,
+        item: AllowedEntity,
+        details: IListItemDetails<AllowedEntity>,
         key?: string
     ): JSX.Element {
         return (
@@ -354,9 +347,21 @@ export default class SprintlyPostRelease extends React.Component<
                 details={details}
             >
                 <div className="master-row-content flex-row flex-center h-scroll-hidden">
-                    <Tooltip overflowOnly={true}>
-                        <div className="primary-text text-ellipsis">{item}</div>
-                    </Tooltip>
+                    {/* <Tooltip overflowOnly={true}>
+                        <div className="primary-text text-ellipsis">
+                            {item.displayName}
+                        </div>
+                    </Tooltip> */}
+                    <Icon ariaLabel="Repository" iconName="Repo" />
+                    &nbsp;
+                    <Link
+                        excludeTabStop
+                        href={'/branches'}
+                        subtle={true}
+                        target="_blank"
+                    >
+                        <u>{item.displayName}</u>
+                    </Link>
                 </div>
             </ListItem>
         );
@@ -365,19 +370,27 @@ export default class SprintlyPostRelease extends React.Component<
     private renderDetailPage(): JSX.Element {
         return (
             <Observer selectedItem={this.state.selectedItemObservable}>
-                {(observerProps: { selectedItem: string }) => (
+                {(observerProps: { selectedItem: AllowedEntity }) => (
                     <Page className="flex-grow single-layer-details">
-                        {observerProps.selectedItem && (
-                            <Tooltip
-                                text={observerProps.selectedItem}
-                                overflowOnly={true}
-                            >
-                                <span className="single-layer-details-contents">
-                                    {observerProps.selectedItem} This is the
-                                    Detail Page
-                                </span>
-                            </Tooltip>
+                        {this.state.selection.selectedCount == 0 && (
+                            <span className="single-layer-details-contents">
+                                Select a repository on the right to get started.
+                            </span>
                         )}
+                        {observerProps.selectedItem &&
+                            this.state.selection.selectedCount > 0 && (
+                                <Tooltip
+                                    text={
+                                        observerProps.selectedItem.displayName
+                                    }
+                                    overflowOnly={true}
+                                >
+                                    <span className="single-layer-details-contents">
+                                        {observerProps.selectedItem.displayName}{' '}
+                                        This is the Detail Page
+                                    </span>
+                                </Tooltip>
+                            )}
                     </Page>
                 )}
             </Observer>
@@ -391,15 +404,25 @@ export default class SprintlyPostRelease extends React.Component<
                 {(props: { totalRepositoriesToProcess: number }) => {
                     if (totalRepositoriesToProcess.value > 0) {
                         return (
-                            <div style={{ height: '85%', width: '100%', display: 'flex' }}>
+                            <div
+                                style={{
+                                    height: '85%',
+                                    width: '100%',
+                                    display: 'flex',
+                                }}
+                            >
                                 <Splitter
                                     fixedElement={SplitterElementPosition.Near}
-                                    splitterDirection={SplitterDirection.Vertical}
+                                    splitterDirection={
+                                        SplitterDirection.Vertical
+                                    }
                                     initialFixedSize={450}
                                     minFixedSize={100}
                                     nearElementClassName="v-scroll-auto custom-scrollbar light-grey"
                                     farElementClassName="v-scroll-auto custom-scrollbar"
-                                    onRenderNearElement={this.renderRepositoryList}
+                                    onRenderNearElement={
+                                        this.renderRepositoryList
+                                    }
                                     onRenderFarElement={this.renderDetailPage}
                                 />
                             </div>

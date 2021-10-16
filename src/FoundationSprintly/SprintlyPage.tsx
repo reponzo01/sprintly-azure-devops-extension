@@ -123,10 +123,10 @@ export default class SprintlyPage extends React.Component<
     }
 
     private async initializeComponent(): Promise<void> {
-        this.loadRepositoriesToProcess();
+        await this.loadRepositoriesToProcess();
     }
 
-    private loadRepositoriesToProcess(): void {
+    private async loadRepositoriesToProcess(): Promise<void> {
         this.dataManager!.getValue<AllowedEntity[]>(repositoriesToProcessKey, {
             scopeType: 'User',
         }).then(async (repositories: AllowedEntity[]) => {
@@ -148,16 +148,16 @@ export default class SprintlyPage extends React.Component<
                                 project.name === 'Sample Project'
                             );
                         });
-                    this.loadRepositoriesDisplayState(filteredProjects);
+                    await this.loadRepositoriesDisplayState(filteredProjects);
                 }
             }
         });
     }
 
-    private loadRepositoriesDisplayState(
+    private async loadRepositoriesDisplayState(
         projects: TeamProjectReference[]
-    ): void {
-        const reposExtended: GitRepositoryExtended[] = [];
+    ): Promise<void> {
+        let reposExtended: GitRepositoryExtended[] = [];
         projects.forEach(async (project: TeamProjectReference) => {
             const repos: GitRepository[] = await getClient(
                 GitRestClient
@@ -171,7 +171,7 @@ export default class SprintlyPage extends React.Component<
 
             totalRepositoriesToProcess.value = filteredRepos.length;
 
-            filteredRepos.forEach(async (repo: GitRepository) => {
+            for (const repo of filteredRepos) {
                 const branchesAndTags: GitRef[] = await this.getRepositoryInfo(
                     repo.id
                 );
@@ -252,19 +252,17 @@ export default class SprintlyPage extends React.Component<
                         existingReleaseNames,
                         branchesAndTags,
                     });
-                    this.setState({
-                        repositories: new ArrayItemProvider(
-                            reposExtended.sort(
-                                (
-                                    a: GitRepositoryExtended,
-                                    b: GitRepositoryExtended
-                                ) => {
-                                    return a.name.localeCompare(b.name);
-                                }
-                            )
-                        ),
-                    });
                 }
+            }
+            if (reposExtended.length > 0) {
+                reposExtended = reposExtended.sort(
+                    (a: GitRepositoryExtended, b: GitRepositoryExtended) => {
+                        return a.name.localeCompare(b.name);
+                    }
+                );
+            }
+            this.setState({
+                repositories: new ArrayItemProvider(reposExtended),
             });
         });
     }
