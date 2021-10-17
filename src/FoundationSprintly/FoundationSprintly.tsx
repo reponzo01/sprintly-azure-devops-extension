@@ -20,7 +20,7 @@ import SprintlyPostRelease from './SprintlyPostRelease';
 import SprintlySettings from './SprintlySettings';
 import { showRootComponent } from '../Common';
 import { IHeaderCommandBarItem } from 'azure-devops-ui/HeaderCommandBar';
-import { GitRef, GitRepository } from 'azure-devops-extension-api/Git';
+import { GitPullRequest, GitRef, GitRepository } from 'azure-devops-extension-api/Git';
 
 const selectedTabKey: string = 'selected-tab';
 const allowedUserGroupsKey: string = 'allowed-user-groups';
@@ -44,18 +44,12 @@ export interface IAllowedEntity {
     descriptor?: string;
 }
 
-export interface IPullRequestInfo {
-    id: string;
-    number: string;
-    url: string;
-}
-
 export interface IBranchAheadOf {
     targetBranch: GitRef;
     aheadOfDevelop?: boolean;
     aheadOfMasterMain?: boolean;
-    developPR?: IPullRequestInfo;
-    masterMainPR?: IPullRequestInfo;
+    developPR?: GitPullRequest;
+    masterMainPR?: GitPullRequest;
 }
 
 export interface IGitRepositoryExtended extends GitRepository {

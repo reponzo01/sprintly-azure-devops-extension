@@ -12,10 +12,13 @@ import {
 import {
     GitBaseVersionDescriptor,
     GitCommitDiffs,
+    GitPullRequest,
+    GitPullRequestSearchCriteria,
     GitRef,
     GitRepository,
     GitRestClient,
     GitTargetVersionDescriptor,
+    PullRequestStatus,
 } from 'azure-devops-extension-api/Git';
 
 import { ObservableValue } from 'azure-devops-ui/Core/Observable';
@@ -50,6 +53,7 @@ import { Pill, PillSize, PillVariant } from 'azure-devops-ui/Pill';
 
 export interface ISprintlyPostReleaseState {
     repositories: ArrayItemProvider<IGitRepositoryExtended>;
+    pullRequests: GitPullRequest[];
     selection: ListSelection;
     selectedItemObservable: ObservableValue<IGitRepositoryExtended>;
 }
@@ -99,6 +103,7 @@ export default class SprintlyPostRelease extends React.Component<
 
         this.state = {
             repositories: new ArrayItemProvider<IGitRepositoryExtended>([]),
+            pullRequests: [],
             selection: new ListSelection({ selectOnFocus: false }),
             selectedItemObservable: new ObservableValue<any>({}),
         };
@@ -149,10 +154,36 @@ export default class SprintlyPostRelease extends React.Component<
                                 project.name === 'Sample Project'
                             );
                         });
+                    await this.loadPullRequests(filteredProjects);
                     await this.loadRepositoriesDisplayState(filteredProjects);
                 }
             }
         });
+    }
+
+    private async loadPullRequests(
+        projects: TeamProjectReference[]
+    ): Promise<void> {
+        // Statuses:
+        // 1 = Queued, 2 = Conflicts, 3 = Premerge Succeeded, 4 = RejectedByPolicy, 5 = Failure
+        const pullRequestCriteria: GitPullRequestSearchCriteria = {
+            includeLinks: false,
+            creatorId: '',
+            repositoryId: '',
+            reviewerId: '',
+            sourceRefName: '',
+            sourceRepositoryId: '',
+            status: PullRequestStatus.Active,
+            targetRefName: '',
+        };
+        for (const project of projects) {
+            const pullRequests: GitPullRequest[] = await getClient(
+                GitRestClient
+            ).getPullRequestsByProject(project.id, pullRequestCriteria);
+            this.setState({
+                pullRequests: this.state.pullRequests.concat(pullRequests),
+            });
+        }
     }
 
     // TODO: This function is repeated in SprintlyPage. See about extracting.
@@ -268,6 +299,32 @@ export default class SprintlyPostRelease extends React.Component<
                                 aheadOfDevelop,
                                 aheadOfMasterMain,
                             };
+
+                            for (const pullRequest of this.state.pullRequests) {
+                                if (
+                                    pullRequest.repository.id === repo.id &&
+                                    pullRequest.sourceRefName === branch.name
+                                ) {
+                                    if (
+                                        pullRequest.targetRefName.includes(
+                                            'heads/develop'
+                                        )
+                                    ) {
+                                        branchInfo.developPR = pullRequest;
+                                    }
+
+                                    if (
+                                        pullRequest.targetRefName.includes(
+                                            'heads/master'
+                                        ) ||
+                                        pullRequest.targetRefName.includes(
+                                            'heads/main'
+                                        )
+                                    ) {
+                                        branchInfo.masterMainPR = pullRequest;
+                                    }
+                                }
+                            }
 
                             existingReleaseBranches.push(branchInfo);
                         }
@@ -413,14 +470,16 @@ export default class SprintlyPostRelease extends React.Component<
                         >
                             <div style={{ color: 'white' }}>
                                 Ahead of develop{' '}
-                                {/* <i>
-                                    <Icon
-                                        ariaLabel="Pull Request"
-                                        iconName="BranchPullRequest"
-                                        size={IconSize.small}
-                                    />{' '}
-                                    #8542
-                                </i> */}
+                                {releaseBranch.developPR && (
+                                    <i>
+                                        <Icon
+                                            ariaLabel="Pull Request"
+                                            iconName="BranchPullRequest"
+                                            size={IconSize.small}
+                                        />{' '}
+                                        #{releaseBranch.developPR.pullRequestId}
+                                    </i>
+                                )}
                             </div>
                         </Pill>
                     )}
@@ -434,14 +493,20 @@ export default class SprintlyPostRelease extends React.Component<
                             <div style={{ color: 'white' }}>
                                 Ahead of{' '}
                                 {item.hasMainBranch ? 'main' : 'master'}{' '}
-                                {/* <i>
-                                    <Icon
-                                        ariaLabel="Pull Request"
-                                        iconName="BranchPullRequest"
-                                        size={IconSize.small}
-                                    />{' '}
-                                    #8542
-                                </i> */}
+                                {releaseBranch.masterMainPR && (
+                                    <i>
+                                        <Icon
+                                            ariaLabel="Pull Request"
+                                            iconName="BranchPullRequest"
+                                            size={IconSize.small}
+                                        />{' '}
+                                        #
+                                        {
+                                            releaseBranch.masterMainPR
+                                                .pullRequestId
+                                        }
+                                    </i>
+                                )}
                             </div>
                         </Pill>
                     )}

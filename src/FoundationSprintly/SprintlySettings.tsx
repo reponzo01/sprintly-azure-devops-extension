@@ -6,7 +6,6 @@ import {
     CommonServiceIds,
     getClient,
     IExtensionDataManager,
-    IExtensionDataService,
     IGlobalMessagesService,
 } from 'azure-devops-extension-api';
 
