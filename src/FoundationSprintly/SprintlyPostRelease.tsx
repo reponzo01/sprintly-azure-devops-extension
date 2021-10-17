@@ -20,7 +20,6 @@ import {
     GitTargetVersionDescriptor,
     PullRequestStatus,
 } from 'azure-devops-extension-api/Git';
-import { ReleaseRestClient } from 'azure-devops-extension-api/Release';
 
 import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
@@ -31,11 +30,13 @@ import { ITableColumn, SimpleTableCell } from 'azure-devops-ui/Table';
 import { Icon, IconSize } from 'azure-devops-ui/Icon';
 import { Link } from 'azure-devops-ui/Link';
 import { Button } from 'azure-devops-ui/Button';
+import { Card } from 'azure-devops-ui/Card';
 import {
     IListItemDetails,
     List,
     ListItem,
     ListSelection,
+    SimpleList,
 } from 'azure-devops-ui/List';
 import {
     Splitter,
@@ -52,6 +53,17 @@ import {
 } from './FoundationSprintly';
 import { Pill, PillSize, PillVariant } from 'azure-devops-ui/Pill';
 import axios, { AxiosResponse } from 'axios';
+import {
+    CustomHeader,
+    HeaderDescription,
+    HeaderIcon,
+    HeaderTitle,
+    HeaderTitleArea,
+    HeaderTitleRow,
+    TitleSize,
+} from 'azure-devops-ui/Header';
+import { HeaderCommandBar } from 'azure-devops-ui/HeaderCommandBar';
+import { Dialog } from 'azure-devops-ui/Dialog';
 
 export interface ISprintlyPostReleaseState {
     repositories: ArrayItemProvider<IGitRepositoryExtended>;
@@ -67,23 +79,6 @@ const tagsRepoName: ObservableValue<string> = new ObservableValue<string>('');
 const tags: ObservableValue<string[]> = new ObservableValue<string[]>([]);
 const totalRepositoriesToProcess: ObservableValue<number> =
     new ObservableValue<number>(0);
-
-const columns: any = [
-    {
-        id: 'name',
-        name: 'Repository',
-        onSize,
-        renderCell: renderName,
-        width: new ObservableValue(-30),
-    },
-    {
-        id: 'tags',
-        name: 'Tags',
-        onSize,
-        renderCell: renderTags,
-        width: new ObservableValue(-30),
-    },
-];
 
 const useFilteredRepos: boolean = true;
 const repositoriesToProcessKey: string = 'repositories-to-process';
@@ -115,7 +110,7 @@ export default class SprintlyPostRelease extends React.Component<
         };
 
         this.renderRepositoryList = this.renderRepositoryList.bind(this);
-        this.renderListItem = this.renderListItem.bind(this);
+        this.renderRepositoryListItem = this.renderRepositoryListItem.bind(this);
         this.renderDetailPage = this.renderDetailPage.bind(this);
 
         this.organizationName = props.organizationName;
@@ -260,7 +255,6 @@ export default class SprintlyPostRelease extends React.Component<
             //         console.error(error);
             //         throw error;
             //     });
-
             // axios
             //     .get(
             //         `https://vsrm.dev.azure.com/${this.organizationName}/${project.id}/_apis/release/deployments?api-version=6.0`,
@@ -277,7 +271,6 @@ export default class SprintlyPostRelease extends React.Component<
             //         console.error(error);
             //         throw error;
             //     });
-
             // axios
             //     .get(
             //         `https://vsrm.dev.azure.com/${this.organizationName}/${project.id}/_apis/release/definitions?$expand=environments,artifacts&api-version=6.0`,
@@ -294,7 +287,6 @@ export default class SprintlyPostRelease extends React.Component<
             //         console.error(error);
             //         throw error;
             //     });
-
             // axios
             //     .get(
             //         `https://dev.azure.com/${this.organizationName}/${project.id}/_apis/pipelines?api-version=6.0-preview.1`,
@@ -311,7 +303,6 @@ export default class SprintlyPostRelease extends React.Component<
             //         console.error(error);
             //         throw error;
             //     });
-
             //     axios
             //     .get(
             //         `https://dev.azure.com/${this.organizationName}/${project.id}/_apis/build/definitions?includeAllProperties=true&api-version=6.0`,
@@ -590,14 +581,14 @@ export default class SprintlyPostRelease extends React.Component<
                 ariaLabel={'Repositories'}
                 itemProvider={this.state.repositories}
                 selection={this.state.selection}
-                renderRow={this.renderListItem}
+                renderRow={this.renderRepositoryListItem}
                 width="100%"
                 singleClickActivation={true}
             />
         );
     }
 
-    private renderListItem(
+    private renderRepositoryListItem(
         index: number,
         item: IGitRepositoryExtended,
         details: IListItemDetails<IGitRepositoryExtended>,
@@ -730,15 +721,87 @@ export default class SprintlyPostRelease extends React.Component<
                         )}
                         {observerProps.selectedItem &&
                             this.state.selection.selectedCount > 0 && (
-                                <Tooltip
-                                    text={observerProps.selectedItem.name}
-                                    overflowOnly={true}
-                                >
-                                    <span className="single-layer-details-contents">
-                                        {observerProps.selectedItem.name} This
-                                        is the Detail Page
-                                    </span>
-                                </Tooltip>
+                                <Page>
+                                    <CustomHeader className="bolt-header-with-commandbar">
+                                        <HeaderIcon
+                                            className="bolt-table-status-icon-large"
+                                            iconProps={{
+                                                iconName: 'Repo',
+                                                size: IconSize.large,
+                                            }}
+                                            titleSize={TitleSize.Large}
+                                        />
+                                        <HeaderTitleArea>
+                                            <HeaderTitleRow>
+                                                <HeaderTitle
+                                                    ariaLevel={3}
+                                                    className="text-ellipsis"
+                                                    titleSize={TitleSize.Large}
+                                                >
+                                                    <Link
+                                                        excludeTabStop
+                                                        href={
+                                                            observerProps
+                                                                .selectedItem
+                                                                .webUrl +
+                                                            '/branches'
+                                                        }
+                                                        subtle={false}
+                                                        target="_blank"
+                                                    >
+                                                        {
+                                                            observerProps
+                                                                .selectedItem
+                                                                .name
+                                                        }
+                                                    </Link>
+                                                </HeaderTitle>
+                                            </HeaderTitleRow>
+                                            <HeaderDescription>
+                                                Select a release branch below to
+                                                perform actions on it.
+                                            </HeaderDescription>
+                                        </HeaderTitleArea>
+                                        <HeaderCommandBar
+                                            items={[
+                                                {
+                                                    iconProps: {
+                                                        iconName: 'Tag',
+                                                    },
+                                                    id: 'testSave',
+                                                    important: true,
+                                                    onActivate: () => {
+                                                        isTagsDialogOpen.value =
+                                                            true;
+                                                        tagsRepoName.value =
+                                                            observerProps
+                                                                .selectedItem
+                                                                .name + ' Tags';
+                                                        tags.value = [];
+                                                        observerProps.selectedItem.branchesAndTags.forEach(
+                                                            (branch) => {
+                                                                if (
+                                                                    branch.name.includes(
+                                                                        'refs/tags'
+                                                                    )
+                                                                ) {
+                                                                    tags.value.push(
+                                                                        branch.name
+                                                                    );
+                                                                }
+                                                            }
+                                                        );
+                                                    },
+                                                    text: 'View Tags',
+                                                },
+                                            ]}
+                                        />
+                                    </CustomHeader>
+
+                                    <div className="page-content page-content-top">
+                                        <Card>Page content</Card>
+                                    </div>
+                                </Page>
                             )}
                     </Page>
                 )}
@@ -747,6 +810,9 @@ export default class SprintlyPostRelease extends React.Component<
     }
 
     public render(): JSX.Element {
+        const onDismiss: () => void = () => {
+            isTagsDialogOpen.value = false;
+        };
         return (
             /* tslint:disable */
             <Observer totalRepositoriesToProcess={totalRepositoriesToProcess}>
@@ -774,6 +840,38 @@ export default class SprintlyPostRelease extends React.Component<
                                     }
                                     onRenderFarElement={this.renderDetailPage}
                                 />
+                                <Observer
+                                    isTagsDialogOpen={isTagsDialogOpen}
+                                    tagsRepoName={tagsRepoName}
+                                >
+                                    {(props: {
+                                        isTagsDialogOpen: boolean;
+                                        tagsRepoName: string;
+                                    }) => {
+                                        return props.isTagsDialogOpen ? (
+                                            <Dialog
+                                                titleProps={{
+                                                    text: props.tagsRepoName,
+                                                }}
+                                                footerButtonProps={[
+                                                    {
+                                                        text: 'Close',
+                                                        onClick: onDismiss,
+                                                    },
+                                                ]}
+                                                onDismiss={onDismiss}
+                                            >
+                                                <SimpleList
+                                                    itemProvider={
+                                                        new ArrayItemProvider<string>(
+                                                            tags.value
+                                                        )
+                                                    }
+                                                />
+                                            </Dialog>
+                                        ) : null;
+                                    }}
+                                </Observer>
                             </div>
                         );
                     }
@@ -862,10 +960,6 @@ function renderTags(
             }
         ></SimpleTableCell>
     );
-}
-
-function onSize(event: MouseEvent, index: number, width: number) {
-    (columns[index].width as ObservableValue<number>).value = width;
 }
 
 // The following code would go on the onclick of a merge button
