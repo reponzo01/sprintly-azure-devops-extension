@@ -22,20 +22,20 @@ import {
 
 import { GitRepository, GitRestClient } from 'azure-devops-extension-api/Git';
 
-import { AllowedEntity } from './FoundationSprintly';
+import { IAllowedEntity } from './FoundationSprintly';
 
 const allowedUserGroupsKey: string = 'allowed-user-groups';
 const allowedUsersKey: string = 'allowed-users';
 const repositoriesToProcessKey: string = 'repositories-to-process';
 
 export interface ISprintlySettingsState {
-    dataAllowedUserGroups?: AllowedEntity[];
-    dataAllowedUsers?: AllowedEntity[];
-    dataRepositoriesToProcess?: AllowedEntity[];
+    dataAllowedUserGroups?: IAllowedEntity[];
+    dataAllowedUsers?: IAllowedEntity[];
+    dataRepositoriesToProcess?: IAllowedEntity[];
 
-    persistedAllowedUserGroups?: AllowedEntity[];
-    persistedAllowedUsers?: AllowedEntity[];
-    persistedRepositoriesToProcess?: AllowedEntity[];
+    persistedAllowedUserGroups?: IAllowedEntity[];
+    persistedAllowedUsers?: IAllowedEntity[];
+    persistedRepositoriesToProcess?: IAllowedEntity[];
 
     ready?: boolean;
 }
@@ -58,9 +58,9 @@ export default class SprintlySettings extends React.Component<
     private repositoriesToProcessSelection: DropdownMultiSelection =
         new DropdownMultiSelection();
 
-    private allUserGroups: AllowedEntity[] = [];
-    private allUsers: AllowedEntity[] = [];
-    private allRepositories: AllowedEntity[] = [];
+    private allUserGroups: IAllowedEntity[] = [];
+    private allUsers: IAllowedEntity[] = [];
+    private allRepositories: IAllowedEntity[] = [];
 
     private dataManager: IExtensionDataManager;
     private accessToken: string = '';
@@ -187,13 +187,13 @@ export default class SprintlySettings extends React.Component<
     }
 
     private loadAllowedUserGroupsUsers(): void {
-        this.dataManager!.getValue<AllowedEntity[]>(allowedUserGroupsKey).then(
-            (userGroups: AllowedEntity[]) => {
+        this.dataManager!.getValue<IAllowedEntity[]>(allowedUserGroupsKey).then(
+            (userGroups: IAllowedEntity[]) => {
                 this.userGroupsSelection.clear();
                 if (userGroups) {
                     for (const selectedUserGroup of userGroups) {
                         const idx: number = this.allUserGroups.findIndex(
-                            (item: AllowedEntity) =>
+                            (item: IAllowedEntity) =>
                                 item.originId === selectedUserGroup.originId
                         );
                         if (idx >= 0) {
@@ -217,13 +217,13 @@ export default class SprintlySettings extends React.Component<
     }
 
     private loadAllowedUsers(): void {
-        this.dataManager!.getValue<AllowedEntity[]>(allowedUsersKey).then(
-            (users: AllowedEntity[]) => {
+        this.dataManager!.getValue<IAllowedEntity[]>(allowedUsersKey).then(
+            (users: IAllowedEntity[]) => {
                 this.usersSelection.clear();
                 if (users) {
                     for (const selectedUser of users) {
                         const idx: number = this.allUsers.findIndex(
-                            (user: AllowedEntity) =>
+                            (user: IAllowedEntity) =>
                                 user.originId === selectedUser.originId
                         );
                         if (idx >= 0) {
@@ -247,15 +247,15 @@ export default class SprintlySettings extends React.Component<
     }
 
     private loadRepositoriesToProcess(): void {
-        this.dataManager!.getValue<AllowedEntity[]>(repositoriesToProcessKey, {
+        this.dataManager!.getValue<IAllowedEntity[]>(repositoriesToProcessKey, {
             scopeType: 'User',
         }).then(
-            (repositories: AllowedEntity[]) => {
+            (repositories: IAllowedEntity[]) => {
                 this.repositoriesToProcessSelection.clear();
                 if (repositories) {
                     for (const selectedRepository of repositories) {
                         const idx: number = this.allRepositories.findIndex(
-                            (repository: AllowedEntity) =>
+                            (repository: IAllowedEntity) =>
                                 repository.originId ===
                                 selectedRepository.originId
                         );
@@ -282,29 +282,29 @@ export default class SprintlySettings extends React.Component<
     private onSaveData = (): void => {
         this.setState({ ready: false });
 
-        const userGroupsSelectedArray: AllowedEntity[] = this.setSelectionRange(
+        const userGroupsSelectedArray: IAllowedEntity[] = this.setSelectionRange(
             this.userGroupsSelection.value,
             this.allUserGroups
         );
-        const usersSelectedArray: AllowedEntity[] = this.setSelectionRange(
+        const usersSelectedArray: IAllowedEntity[] = this.setSelectionRange(
             this.usersSelection.value,
             this.allUsers
         );
-        const repositoriesSelectedArray: AllowedEntity[] =
+        const repositoriesSelectedArray: IAllowedEntity[] =
             this.setSelectionRange(
                 this.repositoriesToProcessSelection.value,
                 this.allRepositories
             );
 
-        this.dataManager!.setValue<AllowedEntity[]>(
+        this.dataManager!.setValue<IAllowedEntity[]>(
             allowedUserGroupsKey,
             userGroupsSelectedArray || []
         ).then(() => {
-            this.dataManager!.setValue<AllowedEntity[]>(
+            this.dataManager!.setValue<IAllowedEntity[]>(
                 allowedUsersKey,
                 usersSelectedArray || []
             ).then(() => {
-                this.dataManager!.setValue<AllowedEntity[]>(
+                this.dataManager!.setValue<IAllowedEntity[]>(
                     repositoriesToProcessKey,
                     repositoriesSelectedArray || [],
                     { scopeType: 'User' }
@@ -332,11 +332,11 @@ export default class SprintlySettings extends React.Component<
 
     private setSelectionRange(
         selectionRange: ISelectionRange[],
-        dataArray: AllowedEntity[]
-    ): AllowedEntity[] {
-        const selectedArray: AllowedEntity[] = [];
+        dataArray: IAllowedEntity[]
+    ): IAllowedEntity[] {
+        const selectedArray: IAllowedEntity[] = [];
         for (const rng of selectionRange) {
-            const sliced: AllowedEntity[] = dataArray.slice(
+            const sliced: IAllowedEntity[] = dataArray.slice(
                 rng.beginIndex,
                 rng.endIndex + 1
             );

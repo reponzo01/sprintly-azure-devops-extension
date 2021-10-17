@@ -41,13 +41,17 @@ import {
 import { Tooltip } from 'azure-devops-ui/TooltipEx';
 import { Page } from 'azure-devops-ui/Page';
 
-import { AllowedEntity, GitRepositoryExtended } from './FoundationSprintly';
+import {
+    IAllowedEntity,
+    IBranchAheadOf,
+    IGitRepositoryExtended,
+} from './FoundationSprintly';
 import { Pill, PillSize, PillVariant } from 'azure-devops-ui/Pill';
 
 export interface ISprintlyPostReleaseState {
-    repositories: ArrayItemProvider<GitRepositoryExtended>;
+    repositories: ArrayItemProvider<IGitRepositoryExtended>;
     selection: ListSelection;
-    selectedItemObservable: ObservableValue<GitRepositoryExtended>;
+    selectedItemObservable: ObservableValue<IGitRepositoryExtended>;
 }
 
 const isTagsDialogOpen: ObservableValue<boolean> = new ObservableValue<boolean>(
@@ -94,7 +98,7 @@ export default class SprintlyPostRelease extends React.Component<
         super(props);
 
         this.state = {
-            repositories: new ArrayItemProvider<GitRepositoryExtended>([]),
+            repositories: new ArrayItemProvider<IGitRepositoryExtended>([]),
             selection: new ListSelection({ selectOnFocus: false }),
             selectedItemObservable: new ObservableValue<any>({}),
         };
@@ -124,9 +128,9 @@ export default class SprintlyPostRelease extends React.Component<
 
     // TODO: This function is repeated in SprintlyPage. See about extracting.
     private async loadRepositoriesToProcess(): Promise<void> {
-        this.dataManager!.getValue<AllowedEntity[]>(repositoriesToProcessKey, {
+        this.dataManager!.getValue<IAllowedEntity[]>(repositoriesToProcessKey, {
             scopeType: 'User',
-        }).then(async (repositories: AllowedEntity[]) => {
+        }).then(async (repositories: IAllowedEntity[]) => {
             repositoriesToProcess = [];
             if (repositories) {
                 for (const repository of repositories) {
@@ -155,7 +159,7 @@ export default class SprintlyPostRelease extends React.Component<
     private async loadRepositoriesDisplayState(
         projects: TeamProjectReference[]
     ): Promise<void> {
-        let reposExtended: GitRepositoryExtended[] = [];
+        let reposExtended: IGitRepositoryExtended[] = [];
         projects.forEach(async (project: TeamProjectReference) => {
             const repos: GitRepository[] = await getClient(
                 GitRestClient
@@ -174,62 +178,100 @@ export default class SprintlyPostRelease extends React.Component<
                     repo.id
                 );
 
-                let hasDevelop: boolean = false;
-                let hasMaster: boolean = false;
-                let hasMain: boolean = false;
+                let hasDevelopBranch: boolean = false;
+                let hasMasterBranch: boolean = false;
+                let hasMainBranch: boolean = false;
 
                 for (const ref of branchesAndTags) {
                     if (ref.name.includes('heads/develop')) {
-                        hasDevelop = true;
+                        hasDevelopBranch = true;
                     } else if (ref.name.includes('heads/master')) {
-                        hasMaster = true;
+                        hasMasterBranch = true;
                     } else if (ref.name.includes('heads/main')) {
-                        hasMain = true;
+                        hasMainBranch = true;
                     }
                 }
 
                 const processRepo: boolean =
-                    hasDevelop && (hasMaster || hasMain);
+                    hasDevelopBranch && (hasMasterBranch || hasMainBranch);
                 if (processRepo === true) {
-                    const baseVersion: GitBaseVersionDescriptor = {
-                        baseVersion: hasMaster ? 'master' : 'main',
-                        baseVersionOptions: 0,
-                        baseVersionType: 0,
-                        version: hasMaster ? 'master' : 'main',
-                        versionOptions: 0,
-                        versionType: 0,
-                    };
-                    const targetVersion: GitTargetVersionDescriptor = {
-                        targetVersion: 'develop',
-                        targetVersionOptions: 0,
-                        targetVersionType: 0,
-                        version: 'develop',
-                        versionOptions: 0,
-                        versionType: 0,
-                    };
+                    //TODO: base = master/main, target = each release branch.
+                    // base = develop, target = each release branch.
+                    // if code changes, flag ahead of develop/main/master
 
-                    const commitsDiff: GitCommitDiffs =
-                        await this.getCommitDiffs(
-                            repo.id,
-                            baseVersion,
-                            targetVersion
-                        );
-
-                    let createRelease: boolean = true;
-                    if (!this.codeChangesInCommitDiffs(commitsDiff)) {
-                        createRelease = false;
-                    }
-
-                    const existingReleaseNames: string[] = [];
+                    const existingReleaseBranches: IBranchAheadOf[] = [];
                     let hasExistingRelease: boolean = false;
-                    branchesAndTags.forEach((ref: GitRef) => {
-                        if (ref.name.includes('heads/release')) {
+                    for (const branch of branchesAndTags) {
+                        if (branch.name.includes('heads/release')) {
                             hasExistingRelease = true;
-                            const refNameSplit: string[] =
-                                ref.name.split('heads/');
-                            existingReleaseNames.push(refNameSplit[1]);
+
+                            const branchName = branch.name.split('heads/')[1];
+
+                            // TODO: maybe extract this for readibility
+                            const masterMainBranchDescriptor: GitBaseVersionDescriptor =
+                                {
+                                    baseVersion: hasMasterBranch
+                                        ? 'master'
+                                        : 'main',
+                                    baseVersionOptions: 0,
+                                    baseVersionType: 0,
+                                    version: hasMasterBranch
+                                        ? 'master'
+                                        : 'main',
+                                    versionOptions: 0,
+                                    versionType: 0,
+                                };
+                            const developBranchDescriptor: GitBaseVersionDescriptor =
+                                {
+                                    baseVersion: 'develop',
+                                    baseVersionOptions: 0,
+                                    baseVersionType: 0,
+                                    version: 'develop',
+                                    versionOptions: 0,
+                                    versionType: 0,
+                                };
+                            const releaseBranchDescriptor: GitTargetVersionDescriptor =
+                                {
+                                    targetVersion: branchName,
+                                    targetVersionOptions: 0,
+                                    targetVersionType: 0,
+                                    version: branchName,
+                                    versionOptions: 0,
+                                    versionType: 0,
+                                };
+
+                            const masterMainCommitsDiff: GitCommitDiffs =
+                                await this.getCommitDiffs(
+                                    repo.id,
+                                    masterMainBranchDescriptor,
+                                    releaseBranchDescriptor
+                                );
+
+                            const developCommitsDiff: GitCommitDiffs =
+                                await this.getCommitDiffs(
+                                    repo.id,
+                                    developBranchDescriptor,
+                                    releaseBranchDescriptor
+                                );
+
+                            const aheadOfMasterMain =
+                                this.codeChangesInCommitDiffs(
+                                    masterMainCommitsDiff
+                                );
+                            const aheadOfDevelop =
+                                this.codeChangesInCommitDiffs(
+                                    developCommitsDiff
+                                );
+
+                            const branchInfo: IBranchAheadOf = {
+                                targetBranch: branch,
+                                aheadOfDevelop,
+                                aheadOfMasterMain,
+                            };
+
+                            existingReleaseBranches.push(branchInfo);
                         }
-                    });
+                    }
 
                     reposExtended.push({
                         _links: repo._links,
@@ -245,9 +287,10 @@ export default class SprintlyPostRelease extends React.Component<
                         url: repo.url,
                         validRemoteUrls: repo.validRemoteUrls,
                         webUrl: repo.webUrl,
-                        createRelease,
+                        createRelease: false,
                         hasExistingRelease,
-                        existingReleaseNames,
+                        hasMainBranch,
+                        existingReleaseBranches,
                         branchesAndTags,
                     });
                 }
@@ -255,7 +298,7 @@ export default class SprintlyPostRelease extends React.Component<
 
             if (reposExtended.length > 0) {
                 reposExtended = reposExtended.sort(
-                    (a: GitRepositoryExtended, b: GitRepositoryExtended) => {
+                    (a: IGitRepositoryExtended, b: IGitRepositoryExtended) => {
                         return a.name.localeCompare(b.name);
                     }
                 );
@@ -268,7 +311,7 @@ export default class SprintlyPostRelease extends React.Component<
                 this.state.selection,
                 this.state.repositories,
                 this.state
-                    .selectedItemObservable as ObservableValue<GitRepositoryExtended>
+                    .selectedItemObservable as ObservableValue<IGitRepositoryExtended>
             );
         });
     }
@@ -328,65 +371,85 @@ export default class SprintlyPostRelease extends React.Component<
 
     private renderListItem(
         index: number,
-        item: GitRepositoryExtended,
-        details: IListItemDetails<GitRepositoryExtended>,
+        item: IGitRepositoryExtended,
+        details: IListItemDetails<IGitRepositoryExtended>,
         key?: string
     ): JSX.Element {
         const primaryColor: IColor = {
             red: 0,
-            green: 90,
-            blue: 158,
+            green: 120,
+            blue: 114,
         };
         const primaryColorShade30: IColor = {
             red: 0,
             green: 69,
             blue: 120,
         };
-        const releaseLinks: JSX.Element[] =
-            item.existingReleaseNames.map<JSX.Element>((release, index) => (
-                <div className="flex-row padding-vertical-10" key={index}>
+        const releaseLinks: JSX.Element[] = [];
+        let counter: number = 0;
+        for (const releaseBranch of item.existingReleaseBranches) {
+            const releaseBranchName =
+                releaseBranch.targetBranch.name.split('heads/')[1];
+            releaseLinks.push(
+                <div className="flex-row padding-vertical-10" key={counter}>
                     <Link
                         excludeTabStop
-                        href={item.webUrl + '?version=GB' + encodeURI(release)}
+                        href={
+                            item.webUrl +
+                            '?version=GB' +
+                            encodeURI(releaseBranchName)
+                        }
                         subtle={false}
                         target="_blank"
                         className="padding-horizontal-6"
                     >
-                        {release}
+                        {releaseBranchName}
                     </Link>
-                    <Pill
-                        color={primaryColor}
-                        size={PillSize.regular}
-                        className="bolt-list-overlay margin-horizontal-3"
-                    >
-                        Ahead of develop{' '}
-                        <i>
-                            <Icon
-                                ariaLabel="Pull Request"
-                                iconName="BranchPullRequest"
-                                size={IconSize.small}
-                            />{' '}
-                            #8542
-                        </i>
-                    </Pill>
-                    <Pill
-                        color={primaryColorShade30}
-                        size={PillSize.regular}
-                        className="bolt-list-overlay margin-horizontal-3"
-                        variant={PillVariant.outlined}
-                    >
-                        Ahead of master{' '}
-                        <i>
-                            <Icon
-                                ariaLabel="Pull Request"
-                                iconName="BranchPullRequest"
-                                size={IconSize.small}
-                            />{' '}
-                            #8542
-                        </i>
-                    </Pill>
+                    {releaseBranch.aheadOfDevelop && (
+                        <Pill
+                            color={primaryColor}
+                            size={PillSize.regular}
+                            className="bolt-list-overlay margin-horizontal-3"
+                        >
+                            <div style={{ color: 'white' }}>
+                                Ahead of develop{' '}
+                                {/* <i>
+                                    <Icon
+                                        ariaLabel="Pull Request"
+                                        iconName="BranchPullRequest"
+                                        size={IconSize.small}
+                                    />{' '}
+                                    #8542
+                                </i> */}
+                            </div>
+                        </Pill>
+                    )}
+                    {releaseBranch.aheadOfMasterMain && (
+                        <Pill
+                            color={primaryColorShade30}
+                            size={PillSize.regular}
+                            className="bolt-list-overlay margin-horizontal-3"
+                            variant={PillVariant.outlined}
+                        >
+                            <div style={{ color: 'white' }}>
+                                Ahead of{' '}
+                                {item.hasMainBranch ? 'main' : 'master'}{' '}
+                                {/* <i>
+                                    <Icon
+                                        ariaLabel="Pull Request"
+                                        iconName="BranchPullRequest"
+                                        size={IconSize.small}
+                                    />{' '}
+                                    #8542
+                                </i> */}
+                            </div>
+                        </Pill>
+                    )}
                 </div>
-            ));
+            );
+            counter++;
+        }
+
         return (
             <ListItem
                 className="master-row border-bottom"
@@ -422,7 +485,7 @@ export default class SprintlyPostRelease extends React.Component<
     private renderDetailPage(): JSX.Element {
         return (
             <Observer selectedItem={this.state.selectedItemObservable}>
-                {(observerProps: { selectedItem: GitRepositoryExtended }) => (
+                {(observerProps: { selectedItem: IGitRepositoryExtended }) => (
                     <Page className="flex-grow single-layer-details">
                         {this.state.selection.selectedCount == 0 && (
                             <span className="single-layer-details-contents">
@@ -499,12 +562,13 @@ export default class SprintlyPostRelease extends React.Component<
     }
 }
 
+// TODO: May be able to remove this function here
 // TODO: This function is repeated in SprintlyPage. See about extracting.
 function renderName(
     rowIndex: number,
     columnIndex: number,
-    tableColumn: ITableColumn<GitRepositoryExtended>,
-    tableItem: GitRepositoryExtended
+    tableColumn: ITableColumn<IGitRepositoryExtended>,
+    tableItem: IGitRepositoryExtended
 ): JSX.Element {
     return (
         <SimpleTableCell
@@ -533,8 +597,8 @@ function renderName(
 function renderTags(
     rowIndex: number,
     columnIndex: number,
-    tableColumn: ITableColumn<GitRepositoryExtended>,
-    tableItem: GitRepositoryExtended
+    tableColumn: ITableColumn<IGitRepositoryExtended>,
+    tableItem: IGitRepositoryExtended
 ): JSX.Element {
     return (
         <SimpleTableCell

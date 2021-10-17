@@ -38,15 +38,30 @@ const loggedInUserDescriptorObservable: ObservableValue<string> =
 const organizationNameObservable: ObservableValue<string> =
     new ObservableValue<string>('');
 
-export interface AllowedEntity {
+export interface IAllowedEntity {
     displayName: string;
     originId: string;
     descriptor?: string;
 }
 
-export interface GitRepositoryExtended extends GitRepository {
+export interface IPullRequestInfo {
+    id: string;
+    number: string;
+    url: string;
+}
+
+export interface IBranchAheadOf {
+    targetBranch: GitRef;
+    aheadOfDevelop?: boolean;
+    aheadOfMasterMain?: boolean;
+    developPR?: IPullRequestInfo;
+    masterMainPR?: IPullRequestInfo;
+}
+
+export interface IGitRepositoryExtended extends GitRepository {
     hasExistingRelease: boolean;
-    existingReleaseNames: string[];
+    hasMainBranch: boolean;
+    existingReleaseBranches: IBranchAheadOf[];
     createRelease: boolean;
     branchesAndTags: GitRef[];
 }
@@ -123,8 +138,8 @@ export default class FoundationSprintly extends React.Component<
     }
 
     private loadAllowedUserGroupsUsers(): void {
-        this.dataManager!.getValue<AllowedEntity[]>(allowedUserGroupsKey).then(
-            (userGroups: AllowedEntity[]) => {
+        this.dataManager!.getValue<IAllowedEntity[]>(allowedUserGroupsKey).then(
+            (userGroups: IAllowedEntity[]) => {
                 if (!userGroups) {
                     userGroups = this.alwaysAllowedGroups;
                 } else {
@@ -174,11 +189,11 @@ export default class FoundationSprintly extends React.Component<
     }
 
     private loadAllowedUsers(): void {
-        this.dataManager!.getValue<AllowedEntity[]>(allowedUsersKey).then(
-            (users: AllowedEntity[]) => {
+        this.dataManager!.getValue<IAllowedEntity[]>(allowedUsersKey).then(
+            (users: IAllowedEntity[]) => {
                 if (users) {
                     const allAllowedUsersDescriptors: string[] = users.map(
-                        (user: AllowedEntity) => user.descriptor || ''
+                        (user: IAllowedEntity) => user.descriptor || ''
                     );
                     this.setState({
                         allAllowedUsersDescriptors:

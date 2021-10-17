@@ -43,11 +43,15 @@ import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
 import { Dialog } from 'azure-devops-ui/Dialog';
 import { SimpleList } from 'azure-devops-ui/List';
-import { AllowedEntity, GitRepositoryExtended } from './FoundationSprintly';
+import {
+    IAllowedEntity,
+    IBranchAheadOf,
+    IGitRepositoryExtended,
+} from './FoundationSprintly';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
 
 export interface ISprintlyPageState {
-    repositories?: ArrayItemProvider<GitRepositoryExtended>;
+    repositories?: ArrayItemProvider<IGitRepositoryExtended>;
 }
 
 const newReleaseBranchNamesObservable: Array<ObservableValue<string>> = [];
@@ -127,9 +131,9 @@ export default class SprintlyPage extends React.Component<
     }
 
     private async loadRepositoriesToProcess(): Promise<void> {
-        this.dataManager!.getValue<AllowedEntity[]>(repositoriesToProcessKey, {
+        this.dataManager!.getValue<IAllowedEntity[]>(repositoriesToProcessKey, {
             scopeType: 'User',
-        }).then(async (repositories: AllowedEntity[]) => {
+        }).then(async (repositories: IAllowedEntity[]) => {
             repositoriesToProcess = [];
             if (repositories) {
                 for (const repository of repositories) {
@@ -157,7 +161,7 @@ export default class SprintlyPage extends React.Component<
     private async loadRepositoriesDisplayState(
         projects: TeamProjectReference[]
     ): Promise<void> {
-        let reposExtended: GitRepositoryExtended[] = [];
+        let reposExtended: IGitRepositoryExtended[] = [];
         projects.forEach(async (project: TeamProjectReference) => {
             const repos: GitRepository[] = await getClient(
                 GitRestClient
@@ -176,28 +180,28 @@ export default class SprintlyPage extends React.Component<
                     repo.id
                 );
 
-                let hasDevelop: boolean = false;
-                let hasMaster: boolean = false;
-                let hasMain: boolean = false;
+                let hasDevelopBranch: boolean = false;
+                let hasMasterBranch: boolean = false;
+                let hasMainBranch: boolean = false;
 
                 for (const ref of branchesAndTags) {
                     if (ref.name.includes('heads/develop')) {
-                        hasDevelop = true;
+                        hasDevelopBranch = true;
                     } else if (ref.name.includes('heads/master')) {
-                        hasMaster = true;
+                        hasMasterBranch = true;
                     } else if (ref.name.includes('heads/main')) {
-                        hasMain = true;
+                        hasMainBranch = true;
                     }
                 }
 
                 const processRepo: boolean =
-                    hasDevelop && (hasMaster || hasMain);
+                    hasDevelopBranch && (hasMasterBranch || hasMainBranch);
                 if (processRepo === true) {
                     const baseVersion: GitBaseVersionDescriptor = {
-                        baseVersion: hasMaster ? 'master' : 'main',
+                        baseVersion: hasMasterBranch ? 'master' : 'main',
                         baseVersionOptions: 0,
                         baseVersionType: 0,
-                        version: hasMaster ? 'master' : 'main',
+                        version: hasMasterBranch ? 'master' : 'main',
                         versionOptions: 0,
                         versionType: 0,
                     };
@@ -217,21 +221,19 @@ export default class SprintlyPage extends React.Component<
                             targetVersion
                         );
 
-                    let createRelease: boolean = true;
-                    if (!this.codeChangesInCommitDiffs(commitsDiff)) {
-                        createRelease = false;
-                    }
+                    let createRelease: boolean =
+                        this.codeChangesInCommitDiffs(commitsDiff);
 
-                    const existingReleaseNames: string[] = [];
+                    const existingReleaseBranches: IBranchAheadOf[] = [];
                     let hasExistingRelease: boolean = false;
-                    branchesAndTags.forEach((ref: GitRef) => {
-                        if (ref.name.includes('heads/release')) {
+                    for (const branch of branchesAndTags) {
+                        if (branch.name.includes('heads/release')) {
                             hasExistingRelease = true;
-                            const refNameSplit: string[] =
-                                ref.name.split('heads/');
-                            existingReleaseNames.push(refNameSplit[1]);
+                            existingReleaseBranches.push({
+                                targetBranch: branch,
+                            });
                         }
-                    });
+                    }
 
                     reposExtended.push({
                         _links: repo._links,
@@ -249,14 +251,15 @@ export default class SprintlyPage extends React.Component<
                         webUrl: repo.webUrl,
                         createRelease,
                         hasExistingRelease,
-                        existingReleaseNames,
+                        hasMainBranch,
+                        existingReleaseBranches,
                         branchesAndTags,
                     });
                 }
             }
             if (reposExtended.length > 0) {
                 reposExtended = reposExtended.sort(
-                    (a: GitRepositoryExtended, b: GitRepositoryExtended) => {
+                    (a: IGitRepositoryExtended, b: IGitRepositoryExtended) => {
                         return a.name.localeCompare(b.name);
                     }
                 );
@@ -385,8 +388,8 @@ export default class SprintlyPage extends React.Component<
 function renderName(
     rowIndex: number,
     columnIndex: number,
-    tableColumn: ITableColumn<GitRepositoryExtended>,
-    tableItem: GitRepositoryExtended
+    tableColumn: ITableColumn<IGitRepositoryExtended>,
+    tableItem: IGitRepositoryExtended
 ): JSX.Element {
     return (
         <SimpleTableCell
@@ -399,8 +402,7 @@ function renderName(
                         ariaLabel="Repository"
                         iconName="Repo"
                         size={IconSize.large}
-                    />
-                    {' '}
+                    />{' '}
                     <Link
                         excludeTabStop
                         href={tableItem.webUrl + '/branches'}
@@ -418,8 +420,8 @@ function renderName(
 function renderReleaseNeeded(
     rowIndex: number,
     columnIndex: number,
-    tableColumn: ITableColumn<GitRepositoryExtended>,
-    tableItem: GitRepositoryExtended
+    tableColumn: ITableColumn<IGitRepositoryExtended>,
+    tableItem: IGitRepositoryExtended
 ): JSX.Element {
     const redColor: IColor = {
         red: 191,
@@ -447,23 +449,27 @@ function renderReleaseNeeded(
         text = 'Release Exists';
     }
     if (tableItem.hasExistingRelease) {
-        const releaseLinks: JSX.Element[] =
-            tableItem.existingReleaseNames.map<JSX.Element>(
-                (release, index) => (
-                    <Link
-                        key={index}
-                        excludeTabStop
-                        href={
-                            tableItem.webUrl +
-                            '?version=GB' +
-                            encodeURI(release)
-                        }
-                        target="_blank"
-                    >
-                        {release}
-                    </Link>
-                )
+        const releaseLinks: JSX.Element[] = [];
+        let counter: number = 0;
+        for (const releaseBranch of tableItem.existingReleaseBranches) {
+            const releaseBranchName =
+                releaseBranch.targetBranch.name.split('heads/')[1];
+            releaseLinks.push(
+                <Link
+                    key={counter}
+                    excludeTabStop
+                    href={
+                        tableItem.webUrl +
+                        '?version=GB' +
+                        encodeURI(releaseBranchName)
+                    }
+                    target="_blank"
+                >
+                    {releaseBranchName}
+                </Link>
             );
+            counter++;
+        }
 
         return (
             <TwoLineTableCell
@@ -512,8 +518,8 @@ function renderReleaseNeeded(
 function renderTags(
     rowIndex: number,
     columnIndex: number,
-    tableColumn: ITableColumn<GitRepositoryExtended>,
-    tableItem: GitRepositoryExtended
+    tableColumn: ITableColumn<IGitRepositoryExtended>,
+    tableItem: IGitRepositoryExtended
 ): JSX.Element {
     return (
         <SimpleTableCell
@@ -546,8 +552,8 @@ function renderTags(
 function renderCreateReleaseBranch(
     rowIndex: number,
     columnIndex: number,
-    tableColumn: ITableColumn<GitRepositoryExtended>,
-    tableItem: GitRepositoryExtended
+    tableColumn: ITableColumn<IGitRepositoryExtended>,
+    tableItem: IGitRepositoryExtended
 ): JSX.Element {
     newReleaseBranchNamesObservable[rowIndex] = new ObservableValue<string>('');
     return (
