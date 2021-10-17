@@ -60,6 +60,10 @@ tr.master-row.border-bottom > td.bolt-list-cell {
     border-bottom: 1px solid $neutral-alpha-10;
 }
 
+tr.selected > td.bolt-list-cell {
+    border-left: 5px solid #045B9E;
+}
+
 .padding-horizontal-6 {
     padding: 0px 6px;
 }

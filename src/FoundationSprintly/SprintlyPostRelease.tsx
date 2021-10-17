@@ -20,6 +20,7 @@ import {
     GitTargetVersionDescriptor,
     PullRequestStatus,
 } from 'azure-devops-extension-api/Git';
+import { ReleaseRestClient } from 'azure-devops-extension-api/Release';
 
 import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
@@ -50,6 +51,7 @@ import {
     IGitRepositoryExtended,
 } from './FoundationSprintly';
 import { Pill, PillSize, PillVariant } from 'azure-devops-ui/Pill';
+import axios, { AxiosResponse } from 'axios';
 
 export interface ISprintlyPostReleaseState {
     repositories: ArrayItemProvider<IGitRepositoryExtended>;
@@ -92,13 +94,17 @@ let repositoriesToProcess: string[] = [];
 // The solution is to bind those functions to `this` in the constructor.
 // See SprintlyPostRelease as an example.
 export default class SprintlyPostRelease extends React.Component<
-    { dataManager: IExtensionDataManager },
+    { organizationName: string; dataManager: IExtensionDataManager },
     ISprintlyPostReleaseState
 > {
     private dataManager: IExtensionDataManager;
     private accessToken: string = '';
+    private organizationName: string;
 
-    constructor(props: { dataManager: IExtensionDataManager }) {
+    constructor(props: {
+        organizationName: string;
+        dataManager: IExtensionDataManager;
+    }) {
         super(props);
 
         this.state = {
@@ -112,6 +118,7 @@ export default class SprintlyPostRelease extends React.Component<
         this.renderListItem = this.renderListItem.bind(this);
         this.renderDetailPage = this.renderDetailPage.bind(this);
 
+        this.organizationName = props.organizationName;
         this.dataManager = props.dataManager;
     }
 
@@ -156,9 +163,172 @@ export default class SprintlyPostRelease extends React.Component<
                         });
                     await this.loadPullRequests(filteredProjects);
                     await this.loadRepositoriesDisplayState(filteredProjects);
+                    await this.loadReleases(filteredProjects);
+
+                    /**
+                     * @param project - Project ID or project name
+                     * @param taskGroupId -
+                     * @param propertyFilters -
+                     */
+                    //getDefinitionEnvironments(project: string, taskGroupId?: string, propertyFilters?: string[]): Promise<Release.DefinitionEnvironmentReference[]>;
+                    /**
+                     * @param project - Project ID or project name
+                     * @param definitionId -
+                     * @param definitionEnvironmentId -
+                     * @param createdBy -
+                     * @param minModifiedTime -
+                     * @param maxModifiedTime -
+                     * @param deploymentStatus -
+                     * @param operationStatus -
+                     * @param latestAttemptsOnly -
+                     * @param queryOrder -
+                     * @param top -
+                     * @param continuationToken -
+                     * @param createdFor -
+                     * @param minStartedTime -
+                     * @param maxStartedTime -
+                     * @param sourceBranch -
+                     */
+                    //getDeployments(project: string, definitionId?: number, definitionEnvironmentId?: number, createdBy?: string, minModifiedTime?: Date, maxModifiedTime?: Date, deploymentStatus?: Release.DeploymentStatus, operationStatus?: Release.DeploymentOperationStatus, latestAttemptsOnly?: boolean, queryOrder?: Release.ReleaseQueryOrder, top?: number, continuationToken?: number, createdFor?: string, minStartedTime?: Date, maxStartedTime?: Date, sourceBranch?: string): Promise<Release.Deployment[]>;
+                    /**
+                     * @param queryParameters -
+                     * @param project - Project ID or project name
+                     */
+                    //getDeploymentsForMultipleEnvironments(queryParameters: Release.DeploymentQueryParameters, project: string): Promise<Release.Deployment[]>;
+                    /**
+                     * Get a release environment.
+                     *
+                     * @param project - Project ID or project name
+                     * @param releaseId - Id of the release.
+                     * @param environmentId - Id of the release environment.
+                     */
+                    //getReleaseEnvironment(project: string, releaseId: number, environmentId: number): Promise<Release.ReleaseEnvironment>;
+                    /**
+                     * @param project - Project ID or project name
+                     * @param releaseId -
+                     */
+                    //getReleaseHistory(project: string, releaseId: number): Promise<Release.ReleaseRevision[]>;
+                    /**
+                     * Get a list of releases
+                     *
+                     * @param project - Project ID or project name
+                     * @param definitionId - Releases from this release definition Id.
+                     * @param definitionEnvironmentId -
+                     * @param searchText - Releases with names containing searchText.
+                     * @param createdBy - Releases created by this user.
+                     * @param statusFilter - Releases that have this status.
+                     * @param environmentStatusFilter -
+                     * @param minCreatedTime - Releases that were created after this time.
+                     * @param maxCreatedTime - Releases that were created before this time.
+                     * @param queryOrder - Gets the results in the defined order of created date for releases. Default is descending.
+                     * @param top - Number of releases to get. Default is 50.
+                     * @param continuationToken - Gets the releases after the continuation token provided.
+                     * @param expand - The property that should be expanded in the list of releases.
+                     * @param artifactTypeId - Releases with given artifactTypeId will be returned. Values can be Build, Jenkins, GitHub, Nuget, Team Build (external), ExternalTFSBuild, Git, TFVC, ExternalTfsXamlBuild.
+                     * @param sourceId - Unique identifier of the artifact used. e.g. For build it would be \{projectGuid\}:\{BuildDefinitionId\}, for Jenkins it would be \{JenkinsConnectionId\}:\{JenkinsDefinitionId\}, for TfsOnPrem it would be \{TfsOnPremConnectionId\}:\{ProjectName\}:\{TfsOnPremDefinitionId\}. For third-party artifacts e.g. TeamCity, BitBucket you may refer 'uniqueSourceIdentifier' inside vss-extension.json https://github.com/Microsoft/vsts-rm-extensions/blob/master/Extensions.
+                     * @param artifactVersionId - Releases with given artifactVersionId will be returned. E.g. in case of Build artifactType, it is buildId.
+                     * @param sourceBranchFilter - Releases with given sourceBranchFilter will be returned.
+                     * @param isDeleted - Gets the soft deleted releases, if true.
+                     * @param tagFilter - A comma-delimited list of tags. Only releases with these tags will be returned.
+                     * @param propertyFilters - A comma-delimited list of extended properties to be retrieved. If set, the returned Releases will contain values for the specified property Ids (if they exist). If not set, properties will not be included. Note that this will not filter out any Release from results irrespective of whether it has property set or not.
+                     * @param releaseIdFilter - A comma-delimited list of releases Ids. Only releases with these Ids will be returned.
+                     * @param path - Releases under this folder path will be returned
+                     */
+                    //getReleases(project?: string, definitionId?: number, definitionEnvironmentId?: number, searchText?: string, createdBy?: string, statusFilter?: Release.ReleaseStatus, environmentStatusFilter?: number, minCreatedTime?: Date, maxCreatedTime?: Date, queryOrder?: Release.ReleaseQueryOrder, top?: number, continuationToken?: number, expand?: Release.ReleaseExpands, artifactTypeId?: string, sourceId?: string, artifactVersionId?: string, sourceBranchFilter?: string, isDeleted?: boolean, tagFilter?: string[], propertyFilters?: string[], releaseIdFilter?: number[], path?: string): Promise<Release.Release[]>;
                 }
             }
         });
+    }
+
+    private async loadReleases(
+        projects: TeamProjectReference[]
+    ): Promise<void> {
+        for (const project of projects) {
+            // axios
+            //     .get(
+            //         `https://vsrm.dev.azure.com/${this.organizationName}/${project.id}/_apis/release/releases?api-version=6.0`,
+            //         {
+            //             headers: {
+            //                 Authorization: `Bearer ${this.accessToken}`,
+            //             },
+            //         }
+            //     )
+            //     .then((res: AxiosResponse<never>) => {
+            //         console.log('releases: ', res.data);
+            //     })
+            //     .catch((error: any) => {
+            //         console.error(error);
+            //         throw error;
+            //     });
+
+            // axios
+            //     .get(
+            //         `https://vsrm.dev.azure.com/${this.organizationName}/${project.id}/_apis/release/deployments?api-version=6.0`,
+            //         {
+            //             headers: {
+            //                 Authorization: `Bearer ${this.accessToken}`,
+            //             },
+            //         }
+            //     )
+            //     .then((res: AxiosResponse<never>) => {
+            //         console.log('deployments: ', res.data);
+            //     })
+            //     .catch((error: any) => {
+            //         console.error(error);
+            //         throw error;
+            //     });
+
+            // axios
+            //     .get(
+            //         `https://vsrm.dev.azure.com/${this.organizationName}/${project.id}/_apis/release/definitions?$expand=environments,artifacts&api-version=6.0`,
+            //         {
+            //             headers: {
+            //                 Authorization: `Bearer ${this.accessToken}`,
+            //             },
+            //         }
+            //     )
+            //     .then((res: AxiosResponse<never>) => {
+            //         console.log('definitions: ', res.data);
+            //     })
+            //     .catch((error: any) => {
+            //         console.error(error);
+            //         throw error;
+            //     });
+
+            // axios
+            //     .get(
+            //         `https://dev.azure.com/${this.organizationName}/${project.id}/_apis/pipelines?api-version=6.0-preview.1`,
+            //         {
+            //             headers: {
+            //                 Authorization: `Bearer ${this.accessToken}`,
+            //             },
+            //         }
+            //     )
+            //     .then((res: AxiosResponse<never>) => {
+            //         console.log('pipelines: ', res.data);
+            //     })
+            //     .catch((error: any) => {
+            //         console.error(error);
+            //         throw error;
+            //     });
+
+            //     axios
+            //     .get(
+            //         `https://dev.azure.com/${this.organizationName}/${project.id}/_apis/build/definitions?includeAllProperties=true&api-version=6.0`,
+            //         {
+            //             headers: {
+            //                 Authorization: `Bearer ${this.accessToken}`,
+            //             },
+            //         }
+            //     )
+            //     .then((res: AxiosResponse<never>) => {
+            //         console.log('builds: ', res.data);
+            //     })
+            //     .catch((error: any) => {
+            //         console.error(error);
+            //         throw error;
+            //     });
+        }
     }
 
     private async loadPullRequests(
@@ -195,6 +365,7 @@ export default class SprintlyPostRelease extends React.Component<
             const repos: GitRepository[] = await getClient(
                 GitRestClient
             ).getRepositories(project.id);
+            console.log('repos: ', repos);
             let filteredRepos: GitRepository[] = repos;
             if (useFilteredRepos) {
                 filteredRepos = repos.filter((repo: GitRepository) =>

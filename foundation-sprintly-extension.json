@@ -9,7 +9,9 @@
         "vso.graph",
         "vso.identity",
         "vso.tokens",
-        "vso.project"
+        "vso.project",
+        "vso.release",
+        "vso.build"
     ],
     "categories": [
         "Azure Repos"

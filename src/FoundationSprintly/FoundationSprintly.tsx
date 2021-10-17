@@ -20,7 +20,11 @@ import SprintlyPostRelease from './SprintlyPostRelease';
 import SprintlySettings from './SprintlySettings';
 import { showRootComponent } from '../Common';
 import { IHeaderCommandBarItem } from 'azure-devops-ui/HeaderCommandBar';
-import { GitPullRequest, GitRef, GitRepository } from 'azure-devops-extension-api/Git';
+import {
+    GitPullRequest,
+    GitRef,
+    GitRepository,
+} from 'azure-devops-extension-api/Git';
 
 const selectedTabKey: string = 'selected-tab';
 const allowedUserGroupsKey: string = 'allowed-user-groups';
@@ -290,6 +294,9 @@ export default class FoundationSprintly extends React.Component<
                                 case sprintlyPostReleaseTab:
                                     return (
                                         <SprintlyPostRelease
+                                            organizationName={
+                                                organizationNameObservable.value
+                                            }
                                             dataManager={this.dataManager}
                                         />
                                     );
