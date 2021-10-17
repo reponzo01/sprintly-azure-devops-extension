@@ -25,6 +25,7 @@ import {
     GitRef,
     GitRepository,
 } from 'azure-devops-extension-api/Git';
+import { Release } from 'azure-devops-extension-api/Release';
 
 const selectedTabKey: string = 'selected-tab';
 const allowedUserGroupsKey: string = 'allowed-user-groups';
@@ -48,7 +49,7 @@ export interface IAllowedEntity {
     descriptor?: string;
 }
 
-export interface IBranchAheadOf {
+export interface IReleaseBranchInfo {
     targetBranch: GitRef;
     aheadOfDevelop?: boolean;
     aheadOfMasterMain?: boolean;
@@ -56,10 +57,16 @@ export interface IBranchAheadOf {
     masterMainPR?: GitPullRequest;
 }
 
+export interface IReleaseInfo {
+    repositoryId: string;
+    releaseBranch: IReleaseBranchInfo;
+    releases: Release[]
+}
+
 export interface IGitRepositoryExtended extends GitRepository {
     hasExistingRelease: boolean;
     hasMainBranch: boolean;
-    existingReleaseBranches: IBranchAheadOf[];
+    existingReleaseBranches: IReleaseBranchInfo[];
     createRelease: boolean;
     branchesAndTags: GitRef[];
 }

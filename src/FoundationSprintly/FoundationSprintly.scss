@@ -17,7 +17,6 @@
 }
 
 .master-scroll-container {
-    /*max-height: 200px;*/
     height: 100%;
     width: 100%;
 }
@@ -74,4 +73,18 @@ tr.selected > td.bolt-list-cell {
 
 .margin-horizontal-3 {
     margin: 0px 3px;
+}
+
+.margin-horizontal-10 {
+    margin: 0px 10px;
+}
+
+.font-size-1 {
+    font-size: 1rem;
+}
+
+.sprintly-environment-status {
+    margin: 0px 10px;
+    //font-weight: bold;
+    width: 96px;
 }

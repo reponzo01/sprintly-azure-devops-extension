@@ -20,8 +20,12 @@ import {
     GitTargetVersionDescriptor,
     PullRequestStatus,
 } from 'azure-devops-extension-api/Git';
+import { Deployment, Release } from 'azure-devops-extension-api/Release';
 
-import { ObservableValue } from 'azure-devops-ui/Core/Observable';
+import {
+    ObservableArray,
+    ObservableValue,
+} from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
 import { bindSelectionToObservable } from 'azure-devops-ui/MasterDetailsContext';
@@ -48,8 +52,9 @@ import { Page } from 'azure-devops-ui/Page';
 
 import {
     IAllowedEntity,
-    IBranchAheadOf,
+    IReleaseBranchInfo,
     IGitRepositoryExtended,
+    IReleaseInfo,
 } from './FoundationSprintly';
 import { Pill, PillSize, PillVariant } from 'azure-devops-ui/Pill';
 import axios, { AxiosResponse } from 'axios';
@@ -65,20 +70,25 @@ import {
 import { HeaderCommandBar } from 'azure-devops-ui/HeaderCommandBar';
 import { Dialog } from 'azure-devops-ui/Dialog';
 
+// TODO: Instead of a state, consider just global observables
 export interface ISprintlyPostReleaseState {
     repositories: ArrayItemProvider<IGitRepositoryExtended>;
     pullRequests: GitPullRequest[];
-    selection: ListSelection;
-    selectedItemObservable: ObservableValue<IGitRepositoryExtended>;
+    repositoryListSelection: ListSelection;
+    releaseBranchListSelection: ListSelection;
+    repositoryListSelectedItemObservable: ObservableValue<IGitRepositoryExtended>;
+    releaseBranchListSelectedItemObservable: ObservableValue<IReleaseBranchInfo>;
 }
 
-const isTagsDialogOpen: ObservableValue<boolean> = new ObservableValue<boolean>(
+const isTagsDialogOpenObservable: ObservableValue<boolean> = new ObservableValue<boolean>(
     false
 );
-const tagsRepoName: ObservableValue<string> = new ObservableValue<string>('');
-const tags: ObservableValue<string[]> = new ObservableValue<string[]>([]);
-const totalRepositoriesToProcess: ObservableValue<number> =
+const tagsRepoNameObservable: ObservableValue<string> = new ObservableValue<string>('');
+const tagsObservable: ObservableValue<string[]> = new ObservableValue<string[]>([]);
+const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
+const releaseInfoObservable: ObservableArray<IReleaseInfo> =
+    new ObservableArray<IReleaseInfo>();
 
 const useFilteredRepos: boolean = true;
 const repositoriesToProcessKey: string = 'repositories-to-process';
@@ -105,12 +115,24 @@ export default class SprintlyPostRelease extends React.Component<
         this.state = {
             repositories: new ArrayItemProvider<IGitRepositoryExtended>([]),
             pullRequests: [],
-            selection: new ListSelection({ selectOnFocus: false }),
-            selectedItemObservable: new ObservableValue<any>({}),
+            repositoryListSelection: new ListSelection({
+                selectOnFocus: false,
+            }),
+            repositoryListSelectedItemObservable: new ObservableValue<any>({}),
+            releaseBranchListSelection: new ListSelection({
+                selectOnFocus: false,
+            }),
+            releaseBranchListSelectedItemObservable: new ObservableValue<any>(
+                {}
+            ),
         };
 
         this.renderRepositoryList = this.renderRepositoryList.bind(this);
-        this.renderRepositoryListItem = this.renderRepositoryListItem.bind(this);
+        this.renderRepositoryListItem =
+            this.renderRepositoryListItem.bind(this);
+        this.renderReleaseBranchList = this.renderReleaseBranchList.bind(this);
+        this.renderReleaseBranchListItem =
+            this.renderReleaseBranchListItem.bind(this);
         this.renderDetailPage = this.renderDetailPage.bind(this);
 
         this.organizationName = props.organizationName;
@@ -158,7 +180,7 @@ export default class SprintlyPostRelease extends React.Component<
                         });
                     await this.loadPullRequests(filteredProjects);
                     await this.loadRepositoriesDisplayState(filteredProjects);
-                    await this.loadReleases(filteredProjects);
+                    await this.loadReleasesInfo(filteredProjects);
 
                     /**
                      * @param project - Project ID or project name
@@ -235,13 +257,14 @@ export default class SprintlyPostRelease extends React.Component<
         });
     }
 
-    private async loadReleases(
+    private async loadReleasesInfo(
         projects: TeamProjectReference[]
     ): Promise<void> {
         for (const project of projects) {
+            // Match up to each release. List will be big unless narrowed down by branch (sourceBranchFilter=refs/heads/release/2.0.0) and definition id
             // axios
             //     .get(
-            //         `https://vsrm.dev.azure.com/${this.organizationName}/${project.id}/_apis/release/releases?api-version=6.0`,
+            //         `https://vsrm.dev.azure.com/${this.organizationName}/${project.id}/_apis/release/releases?$expand=environments,artifacts&api-version=6.0`,
             //         {
             //             headers: {
             //                 Authorization: `Bearer ${this.accessToken}`,
@@ -249,15 +272,18 @@ export default class SprintlyPostRelease extends React.Component<
             //         }
             //     )
             //     .then((res: AxiosResponse<never>) => {
+            //         const data: Release[] = res.data;
             //         console.log('releases: ', res.data);
+            //         console.log('releases dto: ', data);
             //     })
             //     .catch((error: any) => {
             //         console.error(error);
             //         throw error;
             //     });
+            // // Match up to all deployments. Large list unless narrowed. ($top), definition id
             // axios
             //     .get(
-            //         `https://vsrm.dev.azure.com/${this.organizationName}/${project.id}/_apis/release/deployments?api-version=6.0`,
+            //         `https://vsrm.dev.azure.com/${this.organizationName}/${project.id}/_apis/release/deployments?maxStartedTime=2021-10-17&api-version=6.0`,
             //         {
             //             headers: {
             //                 Authorization: `Bearer ${this.accessToken}`,
@@ -265,7 +291,9 @@ export default class SprintlyPostRelease extends React.Component<
             //         }
             //     )
             //     .then((res: AxiosResponse<never>) => {
+            //         const data: Deployment[] = res.data;
             //         console.log('deployments: ', res.data);
+            //         console.log('deployments dto: ', data);
             //     })
             //     .catch((error: any) => {
             //         console.error(error);
@@ -364,12 +392,13 @@ export default class SprintlyPostRelease extends React.Component<
                 );
             }
 
-            totalRepositoriesToProcess.value = filteredRepos.length;
+            totalRepositoriesToProcessObservable.value = filteredRepos.length;
 
             for (const repo of filteredRepos) {
                 const branchesAndTags: GitRef[] = await this.getRepositoryInfo(
                     repo.id
                 );
+                console.log('branches: ', branchesAndTags);
 
                 let hasDevelopBranch: boolean = false;
                 let hasMasterBranch: boolean = false;
@@ -392,7 +421,7 @@ export default class SprintlyPostRelease extends React.Component<
                     // base = develop, target = each release branch.
                     // if code changes, flag ahead of develop/main/master
 
-                    const existingReleaseBranches: IBranchAheadOf[] = [];
+                    const existingReleaseBranches: IReleaseBranchInfo[] = [];
                     let hasExistingRelease: boolean = false;
                     for (const branch of branchesAndTags) {
                         if (branch.name.includes('heads/release')) {
@@ -456,7 +485,7 @@ export default class SprintlyPostRelease extends React.Component<
                                     developCommitsDiff
                                 );
 
-                            const branchInfo: IBranchAheadOf = {
+                            const branchInfo: IReleaseBranchInfo = {
                                 targetBranch: branch,
                                 aheadOfDevelop,
                                 aheadOfMasterMain,
@@ -515,6 +544,10 @@ export default class SprintlyPostRelease extends React.Component<
                 }
             }
 
+            // for (var x = 0; x < 3; x++) {
+            //     reposExtended = reposExtended.concat(reposExtended);
+            // }
+
             if (reposExtended.length > 0) {
                 reposExtended = reposExtended.sort(
                     (a: IGitRepositoryExtended, b: IGitRepositoryExtended) => {
@@ -527,10 +560,10 @@ export default class SprintlyPostRelease extends React.Component<
             });
 
             bindSelectionToObservable(
-                this.state.selection,
+                this.state.repositoryListSelection,
                 this.state.repositories,
                 this.state
-                    .selectedItemObservable as ObservableValue<IGitRepositoryExtended>
+                    .repositoryListSelectedItemObservable as ObservableValue<IGitRepositoryExtended>
             );
         });
     }
@@ -575,15 +608,84 @@ export default class SprintlyPostRelease extends React.Component<
         );
     }
 
+    private selectRepository(): void {
+        this.state.releaseBranchListSelection.clear();
+        if (
+            this.state.repositoryListSelectedItemObservable.value
+                .existingReleaseBranches.length == 1
+        ) {
+            this.state.releaseBranchListSelection.select(0);
+        }
+        // TODO: For each release branch in this selection, use axios to
+        // get the release, and save it into the IReleaseInfo observable
+        // but make sure you overwrite the existing entry, not add a new one
+        for (const releaseBranch of this.state
+            .repositoryListSelectedItemObservable.value
+            .existingReleaseBranches) {
+                // *TODO*: Need to filter this by definition id
+            axios
+                .get(
+                    `https://vsrm.dev.azure.com/${this.organizationName}/${this.state.repositoryListSelectedItemObservable.value.project.id}/_apis/release/releases?$expand=environments,artifacts&sourceBranchFilter=${releaseBranch.targetBranch.name}&api-version=6.0`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${this.accessToken}`,
+                        },
+                    }
+                )
+                .then((res: AxiosResponse<never>) => {
+                    const data: { count: number; value: Release[] } = res.data;
+                    console.log('this is data ', data);
+                    console.log('this is data length ', data.count);
+                    if (data && data.count > 0) {
+                        console.log('inside if');
+                        const existingIndex: number =
+                            releaseInfoObservable.value.findIndex(
+                                (item) =>
+                                    item.releaseBranch.targetBranch.objectId ===
+                                    releaseBranch.targetBranch.objectId
+                            );
+                        const releaseInfo: IReleaseInfo = {
+                            repositoryId:
+                                this.state.repositoryListSelectedItemObservable
+                                    .value.id,
+                            releaseBranch: releaseBranch,
+                            releases: data.value,
+                        };
+                        if (existingIndex < 0) {
+                            releaseInfoObservable.push(releaseInfo);
+                        } else {
+                            releaseInfoObservable.change(
+                                existingIndex,
+                                releaseInfo
+                            );
+                        }
+                        console.log('releases: ', res.data);
+                        console.log('releases dto: ', data);
+                        console.log(
+                            'observable release info: ',
+                            releaseInfoObservable.value
+                        );
+                    }
+                })
+                .catch((error: any) => {
+                    console.error(error);
+                    throw error;
+                });
+        }
+    }
+
     private renderRepositoryList(): JSX.Element {
         return (
             <List
                 ariaLabel={'Repositories'}
                 itemProvider={this.state.repositories}
-                selection={this.state.selection}
+                selection={this.state.repositoryListSelection}
                 renderRow={this.renderRepositoryListItem}
                 width="100%"
                 singleClickActivation={true}
+                onSelect={() => {
+                    this.selectRepository();
+                }}
             />
         );
     }
@@ -594,6 +696,7 @@ export default class SprintlyPostRelease extends React.Component<
         details: IListItemDetails<IGitRepositoryExtended>,
         key?: string
     ): JSX.Element {
+        // TODO: Extract these colors into somewhere common
         const primaryColor: IColor = {
             red: 0,
             green: 120,
@@ -693,6 +796,7 @@ export default class SprintlyPostRelease extends React.Component<
                                     href={item.webUrl + '/branches'}
                                     subtle={true}
                                     target="_blank"
+                                    className="font-size-1"
                                 >
                                     <u>{item.name}</u>
                                 </Link>
@@ -711,16 +815,20 @@ export default class SprintlyPostRelease extends React.Component<
 
     private renderDetailPage(): JSX.Element {
         return (
-            <Observer selectedItem={this.state.selectedItemObservable}>
+            <Observer
+                selectedItem={this.state.repositoryListSelectedItemObservable}
+            >
                 {(observerProps: { selectedItem: IGitRepositoryExtended }) => (
                     <Page className="flex-grow single-layer-details">
-                        {this.state.selection.selectedCount == 0 && (
+                        {this.state.repositoryListSelection.selectedCount ==
+                            0 && (
                             <span className="single-layer-details-contents">
                                 Select a repository on the right to get started.
                             </span>
                         )}
                         {observerProps.selectedItem &&
-                            this.state.selection.selectedCount > 0 && (
+                            this.state.repositoryListSelection.selectedCount >
+                                0 && (
                                 <Page>
                                     <CustomHeader className="bolt-header-with-commandbar">
                                         <HeaderIcon
@@ -771,13 +879,13 @@ export default class SprintlyPostRelease extends React.Component<
                                                     id: 'testSave',
                                                     important: true,
                                                     onActivate: () => {
-                                                        isTagsDialogOpen.value =
+                                                        isTagsDialogOpenObservable.value =
                                                             true;
-                                                        tagsRepoName.value =
+                                                        tagsRepoNameObservable.value =
                                                             observerProps
                                                                 .selectedItem
                                                                 .name + ' Tags';
-                                                        tags.value = [];
+                                                        tagsObservable.value = [];
                                                         observerProps.selectedItem.branchesAndTags.forEach(
                                                             (branch) => {
                                                                 if (
@@ -785,7 +893,7 @@ export default class SprintlyPostRelease extends React.Component<
                                                                         'refs/tags'
                                                                     )
                                                                 ) {
-                                                                    tags.value.push(
+                                                                    tagsObservable.value.push(
                                                                         branch.name
                                                                     );
                                                                 }
@@ -799,7 +907,13 @@ export default class SprintlyPostRelease extends React.Component<
                                     </CustomHeader>
 
                                     <div className="page-content page-content-top">
-                                        <Card>Page content</Card>
+                                        <Card>
+                                            {this.renderReleaseBranchList(
+                                                new ArrayItemProvider(
+                                                    observerProps.selectedItem.existingReleaseBranches
+                                                )
+                                            )}
+                                        </Card>
                                     </div>
                                 </Page>
                             )}
@@ -809,21 +923,130 @@ export default class SprintlyPostRelease extends React.Component<
         );
     }
 
+    private renderReleaseBranchList(
+        items: ArrayItemProvider<IReleaseBranchInfo>
+    ): JSX.Element {
+        return (
+            <List
+                ariaLabel={'Release Branches'}
+                itemProvider={items}
+                selection={this.state.releaseBranchListSelection}
+                renderRow={this.renderReleaseBranchListItem}
+                width="100%"
+                singleClickActivation={true}
+            />
+        );
+    }
+
+    private renderReleaseBranchListItem(
+        index: number,
+        item: IReleaseBranchInfo,
+        details: IListItemDetails<IReleaseBranchInfo>,
+        key?: string
+    ): JSX.Element {
+        // TODO: Extract these colors into somewhere common
+        const successColor: IColor = {
+            red: 47,
+            green: 92,
+            blue: 55,
+        };
+        const failedColor: IColor = {
+            red: 205,
+            green: 74,
+            blue: 69,
+        };
+        const style: any = { color: 'white' };
+        return (
+            <ListItem
+                className="master-row border-bottom"
+                key={key || 'list-item' + index}
+                index={index}
+                details={details}
+            >
+                <div className="master-row-content flex-row flex-center h-scroll-hidden">
+                    <div className="flex-row">
+                        <div className="margin-horizontal-10">
+                            {item.targetBranch.name.split('refs/heads/')[1]}
+                        </div>
+                        {/** TODO: Extract theses pills into a method */}
+                        <Observer releaseInfo={releaseInfoObservable}>
+                            {(observerProps: {releaseInfo: IReleaseInfo[]}) => {
+                                const environmentStatuses: JSX.Element[] = [];
+                                const releases: Release[] = [];
+                                const releaseInfoForBranch: IReleaseInfo | undefined = observerProps.releaseInfo.find((ri) => ri.releaseBranch.targetBranch.objectId === item.targetBranch.objectId);
+                                if (releaseInfoForBranch) {
+                                    releases.concat(releaseInfoForBranch.releases);
+                                }
+                                // TODO: Sort the releases and get the latest release
+                                return <div>thing length: {observerProps.releaseInfo.length}</div>;
+                            }}
+                        </Observer>
+                        <Pill
+                            color={successColor}
+                            size={PillSize.regular}
+                            variant={PillVariant.outlined}
+                            className="bolt-list-overlay sprintly-environment-status"
+                        >
+                            <div style={style}>
+                                <Icon
+                                    ariaLabel="Deployed"
+                                    iconName="Accept"
+                                    size={IconSize.small}
+                                />{' '}
+                                dev
+                            </div>
+                        </Pill>
+                        <Pill
+                            color={failedColor}
+                            size={PillSize.regular}
+                            variant={PillVariant.outlined}
+                            className="bolt-list-overlay sprintly-environment-status"
+                        >
+                            <div style={style}>
+                                <Icon
+                                    ariaLabel="Failed"
+                                    iconName="Cancel"
+                                    size={IconSize.small}
+                                />{' '}
+                                dev
+                            </div>
+                        </Pill>
+                        <Pill
+                            color={undefined}
+                            size={PillSize.regular}
+                            variant={undefined}
+                            className="bolt-list-overlay sprintly-environment-status"
+                        >
+                            <div style={undefined}>
+                                <Icon
+                                    ariaLabel="Queued"
+                                    iconName="CircleRing"
+                                    size={IconSize.small}
+                                />{' '}
+                                qa
+                            </div>
+                        </Pill>
+                    </div>
+                </div>
+            </ListItem>
+        );
+    }
+
     public render(): JSX.Element {
         const onDismiss: () => void = () => {
-            isTagsDialogOpen.value = false;
+            isTagsDialogOpenObservable.value = false;
         };
         return (
             /* tslint:disable */
-            <Observer totalRepositoriesToProcess={totalRepositoriesToProcess}>
+            <Observer totalRepositoriesToProcess={totalRepositoriesToProcessObservable}>
                 {(props: { totalRepositoriesToProcess: number }) => {
-                    if (totalRepositoriesToProcess.value > 0) {
+                    if (totalRepositoriesToProcessObservable.value > 0) {
                         return (
                             <div
+                                className="flex-grow"
                                 style={{
-                                    height: '85%',
-                                    width: '100%',
                                     display: 'flex',
+                                    height: '0%',
                                 }}
                             >
                                 <Splitter
@@ -841,8 +1064,8 @@ export default class SprintlyPostRelease extends React.Component<
                                     onRenderFarElement={this.renderDetailPage}
                                 />
                                 <Observer
-                                    isTagsDialogOpen={isTagsDialogOpen}
-                                    tagsRepoName={tagsRepoName}
+                                    isTagsDialogOpen={isTagsDialogOpenObservable}
+                                    tagsRepoName={tagsRepoNameObservable}
                                 >
                                     {(props: {
                                         isTagsDialogOpen: boolean;
@@ -864,7 +1087,7 @@ export default class SprintlyPostRelease extends React.Component<
                                                 <SimpleList
                                                     itemProvider={
                                                         new ArrayItemProvider<string>(
-                                                            tags.value
+                                                            tagsObservable.value
                                                         )
                                                     }
                                                 />
@@ -946,12 +1169,12 @@ function renderTags(
                         subtle={true}
                         iconProps={{ iconName: 'Tag' }}
                         onClick={() => {
-                            isTagsDialogOpen.value = true;
-                            tagsRepoName.value = tableItem.name + ' Tags';
-                            tags.value = [];
+                            isTagsDialogOpenObservable.value = true;
+                            tagsRepoNameObservable.value = tableItem.name + ' Tags';
+                            tagsObservable.value = [];
                             tableItem.branchesAndTags.forEach((branch) => {
                                 if (branch.name.includes('refs/tags')) {
-                                    tags.value.push(branch.name);
+                                    tagsObservable.value.push(branch.name);
                                 }
                             });
                         }}

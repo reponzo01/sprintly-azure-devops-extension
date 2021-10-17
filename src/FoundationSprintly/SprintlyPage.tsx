@@ -44,7 +44,7 @@ import { Dialog } from 'azure-devops-ui/Dialog';
 import { SimpleList } from 'azure-devops-ui/List';
 import {
     IAllowedEntity,
-    IBranchAheadOf,
+    IReleaseBranchInfo,
     IGitRepositoryExtended,
 } from './FoundationSprintly';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
@@ -54,12 +54,12 @@ export interface ISprintlyPageState {
 }
 
 const newReleaseBranchNamesObservable: Array<ObservableValue<string>> = [];
-const isTagsDialogOpen: ObservableValue<boolean> = new ObservableValue<boolean>(
+const isTagsDialogOpenObservable: ObservableValue<boolean> = new ObservableValue<boolean>(
     false
 );
-const tagsRepoName: ObservableValue<string> = new ObservableValue<string>('');
-const tags: ObservableValue<string[]> = new ObservableValue<string[]>([]);
-const totalRepositoriesToProcess: ObservableValue<number> =
+const tagsRepoNameObservable: ObservableValue<string> = new ObservableValue<string>('');
+const tagsObservable: ObservableValue<string[]> = new ObservableValue<string[]>([]);
+const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
 
 const columns: any = [
@@ -172,7 +172,7 @@ export default class SprintlyPage extends React.Component<
                 );
             }
 
-            totalRepositoriesToProcess.value = filteredRepos.length;
+            totalRepositoriesToProcessObservable.value = filteredRepos.length;
 
             for (const repo of filteredRepos) {
                 const branchesAndTags: GitRef[] = await this.getRepositoryInfo(
@@ -223,7 +223,7 @@ export default class SprintlyPage extends React.Component<
                     let createRelease: boolean =
                         this.codeChangesInCommitDiffs(commitsDiff);
 
-                    const existingReleaseBranches: IBranchAheadOf[] = [];
+                    const existingReleaseBranches: IReleaseBranchInfo[] = [];
                     let hasExistingRelease: boolean = false;
                     for (const branch of branchesAndTags) {
                         if (branch.name.includes('heads/release')) {
@@ -308,13 +308,13 @@ export default class SprintlyPage extends React.Component<
 
     public render(): JSX.Element {
         const onDismiss: () => void = () => {
-            isTagsDialogOpen.value = false;
+            isTagsDialogOpenObservable.value = false;
         };
         return (
             /* tslint:disable */
-            <Observer totalRepositoriesToProcess={totalRepositoriesToProcess}>
+            <Observer totalRepositoriesToProcess={totalRepositoriesToProcessObservable}>
                 {(props: { totalRepositoriesToProcess: number }) => {
-                    if (totalRepositoriesToProcess.value > 0) {
+                    if (props.totalRepositoriesToProcess > 0) {
                         return (
                             <div className="page-content page-content-top flex-column rhythm-vertical-16">
                                 {!this.state.repositories && (
@@ -329,8 +329,8 @@ export default class SprintlyPage extends React.Component<
                                     />
                                 )}
                                 <Observer
-                                    isTagsDialogOpen={isTagsDialogOpen}
-                                    tagsRepoName={tagsRepoName}
+                                    isTagsDialogOpen={isTagsDialogOpenObservable}
+                                    tagsRepoName={tagsRepoNameObservable}
                                 >
                                     {(props: {
                                         isTagsDialogOpen: boolean;
@@ -352,7 +352,7 @@ export default class SprintlyPage extends React.Component<
                                                 <SimpleList
                                                     itemProvider={
                                                         new ArrayItemProvider<string>(
-                                                            tags.value
+                                                            tagsObservable.value
                                                         )
                                                     }
                                                 />
@@ -422,6 +422,7 @@ function renderReleaseNeeded(
     tableColumn: ITableColumn<IGitRepositoryExtended>,
     tableItem: IGitRepositoryExtended
 ): JSX.Element {
+    // TODO: Extract these colors into somewhere common
     const redColor: IColor = {
         red: 191,
         green: 65,
@@ -532,12 +533,12 @@ function renderTags(
                         subtle={true}
                         iconProps={{ iconName: 'Tag' }}
                         onClick={() => {
-                            isTagsDialogOpen.value = true;
-                            tagsRepoName.value = tableItem.name + ' Tags';
-                            tags.value = [];
+                            isTagsDialogOpenObservable.value = true;
+                            tagsRepoNameObservable.value = tableItem.name + ' Tags';
+                            tagsObservable.value = [];
                             tableItem.branchesAndTags.forEach((branch) => {
                                 if (branch.name.includes('refs/tags')) {
-                                    tags.value.push(branch.name);
+                                    tagsObservable.value.push(branch.name);
                                 }
                             });
                         }}
