@@ -63,6 +63,11 @@ tr.selected > td.bolt-list-cell {
     border-left: 5px solid #045B9E;
 }
 
+tr.selected > td.bolt-list-box-text,
+tr.selected > td.bolt-table-cell-select {
+    border-left: 0px;
+}
+
 .padding-horizontal-6 {
     padding: 0px 6px;
 }
@@ -85,7 +90,6 @@ tr.selected > td.bolt-list-cell {
 
 .sprintly-environment-status {
     margin: 0px 10px;
-    //font-weight: bold;
     width: 96px;
 }
 
