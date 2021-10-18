@@ -20,7 +20,16 @@ import {
     GitTargetVersionDescriptor,
     PullRequestStatus,
 } from 'azure-devops-extension-api/Git';
-import { Deployment, Release } from 'azure-devops-extension-api/Release';
+import {
+    Deployment,
+    EnvironmentStatus,
+    Release,
+    ReleaseDefinition,
+} from 'azure-devops-extension-api/Release';
+import {
+    BuildDefinition,
+    BuildDefinitionReference,
+} from 'azure-devops-extension-api/Build';
 
 import {
     ObservableArray,
@@ -35,6 +44,7 @@ import { Icon, IconSize } from 'azure-devops-ui/Icon';
 import { Link } from 'azure-devops-ui/Link';
 import { Button } from 'azure-devops-ui/Button';
 import { Card } from 'azure-devops-ui/Card';
+import { Status, Statuses, StatusSize } from 'azure-devops-ui/Status';
 import {
     IListItemDetails,
     List,
@@ -55,6 +65,7 @@ import {
     IReleaseBranchInfo,
     IGitRepositoryExtended,
     IReleaseInfo,
+    getOrRefreshToken,
 } from './FoundationSprintly';
 import { Pill, PillSize, PillVariant } from 'azure-devops-ui/Pill';
 import axios, { AxiosResponse } from 'axios';
@@ -69,6 +80,7 @@ import {
 } from 'azure-devops-ui/Header';
 import { HeaderCommandBar } from 'azure-devops-ui/HeaderCommandBar';
 import { Dialog } from 'azure-devops-ui/Dialog';
+import { EnumMember } from 'typescript';
 
 // TODO: Instead of a state, consider just global observables
 export interface ISprintlyPostReleaseState {
@@ -80,11 +92,13 @@ export interface ISprintlyPostReleaseState {
     releaseBranchListSelectedItemObservable: ObservableValue<IReleaseBranchInfo>;
 }
 
-const isTagsDialogOpenObservable: ObservableValue<boolean> = new ObservableValue<boolean>(
-    false
+const isTagsDialogOpenObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(false);
+const tagsRepoNameObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
+const tagsObservable: ObservableValue<string[]> = new ObservableValue<string[]>(
+    []
 );
-const tagsRepoNameObservable: ObservableValue<string> = new ObservableValue<string>('');
-const tagsObservable: ObservableValue<string[]> = new ObservableValue<string[]>([]);
 const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
 const releaseInfoObservable: ObservableArray<IReleaseInfo> =
@@ -105,6 +119,9 @@ export default class SprintlyPostRelease extends React.Component<
     private dataManager: IExtensionDataManager;
     private accessToken: string = '';
     private organizationName: string;
+
+    private releaseDefinitions: ReleaseDefinition[] = [];
+    private buildDefinitions: BuildDefinition[] = [];
 
     constructor(props: {
         organizationName: string;
@@ -261,6 +278,7 @@ export default class SprintlyPostRelease extends React.Component<
         projects: TeamProjectReference[]
     ): Promise<void> {
         for (const project of projects) {
+            this.accessToken = await getOrRefreshToken(this.accessToken);
             // Match up to each release. List will be big unless narrowed down by branch (sourceBranchFilter=refs/heads/release/2.0.0) and definition id
             // axios
             //     .get(
@@ -281,40 +299,48 @@ export default class SprintlyPostRelease extends React.Component<
             //         throw error;
             //     });
             // // Match up to all deployments. Large list unless narrowed. ($top), definition id
-            // axios
-            //     .get(
-            //         `https://vsrm.dev.azure.com/${this.organizationName}/${project.id}/_apis/release/deployments?maxStartedTime=2021-10-17&api-version=6.0`,
-            //         {
-            //             headers: {
-            //                 Authorization: `Bearer ${this.accessToken}`,
-            //             },
-            //         }
-            //     )
-            //     .then((res: AxiosResponse<never>) => {
-            //         const data: Deployment[] = res.data;
-            //         console.log('deployments: ', res.data);
-            //         console.log('deployments dto: ', data);
-            //     })
-            //     .catch((error: any) => {
-            //         console.error(error);
-            //         throw error;
-            //     });
-            // axios
-            //     .get(
-            //         `https://vsrm.dev.azure.com/${this.organizationName}/${project.id}/_apis/release/definitions?$expand=environments,artifacts&api-version=6.0`,
-            //         {
-            //             headers: {
-            //                 Authorization: `Bearer ${this.accessToken}`,
-            //             },
-            //         }
-            //     )
-            //     .then((res: AxiosResponse<never>) => {
-            //         console.log('definitions: ', res.data);
-            //     })
-            //     .catch((error: any) => {
-            //         console.error(error);
-            //         throw error;
-            //     });
+            axios
+                .get(
+                    `https://vsrm.dev.azure.com/${this.organizationName}/${project.id}/_apis/release/deployments?maxStartedTime=2021-10-17&api-version=6.0`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${this.accessToken}`,
+                        },
+                    }
+                )
+                .then((res: AxiosResponse<never>) => {
+                    const data: Deployment[] = res.data;
+                    console.log('deployments: ', res.data);
+                    console.log('deployments dto: ', data);
+                })
+                .catch((error: any) => {
+                    console.error(error);
+                    throw error;
+                });
+            axios
+                .get(
+                    `https://vsrm.dev.azure.com/${this.organizationName}/${project.id}/_apis/release/definitions?$expand=artifacts&api-version=6.0`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${this.accessToken}`,
+                        },
+                    }
+                )
+                .then((res: AxiosResponse<never>) => {
+                    const data: { count: number; value: ReleaseDefinition[] } =
+                        res.data;
+                    if (data && data.count > 0) {
+                        this.releaseDefinitions = data.value;
+                    }
+                    console.log(
+                        'release definitions: ',
+                        this.releaseDefinitions
+                    );
+                })
+                .catch((error: any) => {
+                    console.error(error);
+                    throw error;
+                });
             // axios
             //     .get(
             //         `https://dev.azure.com/${this.organizationName}/${project.id}/_apis/pipelines?api-version=6.0-preview.1`,
@@ -331,22 +357,27 @@ export default class SprintlyPostRelease extends React.Component<
             //         console.error(error);
             //         throw error;
             //     });
-            //     axios
-            //     .get(
-            //         `https://dev.azure.com/${this.organizationName}/${project.id}/_apis/build/definitions?includeAllProperties=true&api-version=6.0`,
-            //         {
-            //             headers: {
-            //                 Authorization: `Bearer ${this.accessToken}`,
-            //             },
-            //         }
-            //     )
-            //     .then((res: AxiosResponse<never>) => {
-            //         console.log('builds: ', res.data);
-            //     })
-            //     .catch((error: any) => {
-            //         console.error(error);
-            //         throw error;
-            //     });
+            axios
+                .get(
+                    `https://dev.azure.com/${this.organizationName}/${project.id}/_apis/build/definitions?includeAllProperties=true&api-version=6.0`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${this.accessToken}`,
+                        },
+                    }
+                )
+                .then((res: AxiosResponse<never>) => {
+                    const data: { count: number; value: BuildDefinition[] } =
+                        res.data;
+                    if (data && data.count > 0) {
+                        this.buildDefinitions = data.value;
+                    }
+                    console.log('build definitions: ', this.buildDefinitions);
+                })
+                .catch((error: any) => {
+                    console.error(error);
+                    throw error;
+                });
         }
     }
 
@@ -384,7 +415,6 @@ export default class SprintlyPostRelease extends React.Component<
             const repos: GitRepository[] = await getClient(
                 GitRestClient
             ).getRepositories(project.id);
-            console.log('repos: ', repos);
             let filteredRepos: GitRepository[] = repos;
             if (useFilteredRepos) {
                 filteredRepos = repos.filter((repo: GitRepository) =>
@@ -398,7 +428,6 @@ export default class SprintlyPostRelease extends React.Component<
                 const branchesAndTags: GitRef[] = await this.getRepositoryInfo(
                     repo.id
                 );
-                console.log('branches: ', branchesAndTags);
 
                 let hasDevelopBranch: boolean = false;
                 let hasMasterBranch: boolean = false;
@@ -608,7 +637,7 @@ export default class SprintlyPostRelease extends React.Component<
         );
     }
 
-    private selectRepository(): void {
+    private async selectRepository(): Promise<void> {
         this.state.releaseBranchListSelection.clear();
         if (
             this.state.repositoryListSelectedItemObservable.value
@@ -622,56 +651,90 @@ export default class SprintlyPostRelease extends React.Component<
         for (const releaseBranch of this.state
             .repositoryListSelectedItemObservable.value
             .existingReleaseBranches) {
-                // *TODO*: Need to filter this by definition id
-            axios
-                .get(
-                    `https://vsrm.dev.azure.com/${this.organizationName}/${this.state.repositoryListSelectedItemObservable.value.project.id}/_apis/release/releases?$expand=environments,artifacts&sourceBranchFilter=${releaseBranch.targetBranch.name}&api-version=6.0`,
-                    {
-                        headers: {
-                            Authorization: `Bearer ${this.accessToken}`,
-                        },
-                    }
-                )
-                .then((res: AxiosResponse<never>) => {
-                    const data: { count: number; value: Release[] } = res.data;
-                    console.log('this is data ', data);
-                    console.log('this is data length ', data.count);
-                    if (data && data.count > 0) {
-                        console.log('inside if');
-                        const existingIndex: number =
-                            releaseInfoObservable.value.findIndex(
-                                (item) =>
-                                    item.releaseBranch.targetBranch.objectId ===
-                                    releaseBranch.targetBranch.objectId
-                            );
-                        const releaseInfo: IReleaseInfo = {
-                            repositoryId:
-                                this.state.repositoryListSelectedItemObservable
-                                    .value.id,
-                            releaseBranch: releaseBranch,
-                            releases: data.value,
-                        };
-                        if (existingIndex < 0) {
-                            releaseInfoObservable.push(releaseInfo);
-                        } else {
-                            releaseInfoObservable.change(
-                                existingIndex,
-                                releaseInfo
-                            );
+            // TODO: Before every axios call, use the getOrRefreshToke() method.
+            // *TODO*: Need to filter this by definition id
+            const buildDefinitionForRepo: BuildDefinition | undefined =
+                this.buildDefinitions.find(
+                    (buildDef) =>
+                        buildDef.repository.id ===
+                        this.state.repositoryListSelectedItemObservable.value.id
+                );
+            if (buildDefinitionForRepo) {
+                const buildDefinitionId: number = buildDefinitionForRepo.id;
+                let releaseDefinitionId: number = -1;
+                for (const releaseDefinition of this.releaseDefinitions) {
+                    for (const artifact of releaseDefinition.artifacts) {
+                        if (artifact.isPrimary) {
+                            const releaseDefBuildDef =
+                                artifact.definitionReference['definition'];
+                            if (releaseDefBuildDef) {
+                                if (
+                                    releaseDefBuildDef.id ===
+                                    buildDefinitionId.toString()
+                                ) {
+                                    releaseDefinitionId = releaseDefinition.id;
+                                    break;
+                                }
+                            }
                         }
-                        console.log('releases: ', res.data);
-                        console.log('releases dto: ', data);
-                        console.log(
-                            'observable release info: ',
-                            releaseInfoObservable.value
+                    }
+                    if (releaseDefinitionId > -1) break;
+                }
+                if (releaseDefinitionId > -1) {
+                    this.loadReleasesForBranch(
+                        releaseBranch,
+                        releaseDefinitionId
+                    );
+                }
+            }
+        }
+    }
+
+    private async loadReleasesForBranch(
+        releaseBranch: IReleaseBranchInfo,
+        releaseDefinitionId: number
+    ): Promise<void> {
+        this.accessToken = await getOrRefreshToken(this.accessToken);
+        // TODO: Consider using https://vsrm.dev.azure.com/{organization}/{project}/_apis/release/deployments?api-version=6.0
+        axios
+            .get(
+                `https://vsrm.dev.azure.com/${this.organizationName}/${this.state.repositoryListSelectedItemObservable.value.project.id}/_apis/release/releases?$expand=environments&sourceBranchFilter=${releaseBranch.targetBranch.name}&definitionId=${releaseDefinitionId}&api-version=6.0`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${this.accessToken}`,
+                    },
+                }
+            )
+            .then((res: AxiosResponse<never>) => {
+                const data: { count: number; value: Release[] } = res.data;
+                if (data && data.count > 0) {
+                    const existingIndex: number =
+                        releaseInfoObservable.value.findIndex(
+                            (item) =>
+                                item.releaseBranch.targetBranch.objectId ===
+                                releaseBranch.targetBranch.objectId
+                        );
+                    const releaseInfo: IReleaseInfo = {
+                        repositoryId:
+                            this.state.repositoryListSelectedItemObservable
+                                .value.id,
+                        releaseBranch: releaseBranch,
+                        releases: data.value,
+                    };
+                    if (existingIndex < 0) {
+                        releaseInfoObservable.push(releaseInfo);
+                    } else {
+                        releaseInfoObservable.change(
+                            existingIndex,
+                            releaseInfo
                         );
                     }
-                })
-                .catch((error: any) => {
-                    console.error(error);
-                    throw error;
-                });
-        }
+                }
+            })
+            .catch((error: any) => {
+                console.error(error);
+                throw error;
+            });
     }
 
     private renderRepositoryList(): JSX.Element {
@@ -683,8 +746,8 @@ export default class SprintlyPostRelease extends React.Component<
                 renderRow={this.renderRepositoryListItem}
                 width="100%"
                 singleClickActivation={true}
-                onSelect={() => {
-                    this.selectRepository();
+                onSelect={async () => {
+                    await this.selectRepository();
                 }}
             />
         );
@@ -885,7 +948,8 @@ export default class SprintlyPostRelease extends React.Component<
                                                             observerProps
                                                                 .selectedItem
                                                                 .name + ' Tags';
-                                                        tagsObservable.value = [];
+                                                        tagsObservable.value =
+                                                            [];
                                                         observerProps.selectedItem.branchesAndTags.forEach(
                                                             (branch) => {
                                                                 if (
@@ -955,6 +1019,11 @@ export default class SprintlyPostRelease extends React.Component<
             green: 74,
             blue: 69,
         };
+        const warningColor: IColor = {
+            red: 118,
+            green: 90,
+            blue: 37,
+        };
         const style: any = { color: 'white' };
         return (
             <ListItem
@@ -970,15 +1039,169 @@ export default class SprintlyPostRelease extends React.Component<
                         </div>
                         {/** TODO: Extract theses pills into a method */}
                         <Observer releaseInfo={releaseInfoObservable}>
-                            {(observerProps: {releaseInfo: IReleaseInfo[]}) => {
+                            {(observerProps: {
+                                releaseInfo: IReleaseInfo[];
+                            }) => {
                                 const environmentStatuses: JSX.Element[] = [];
-                                const releases: Release[] = [];
-                                const releaseInfoForBranch: IReleaseInfo | undefined = observerProps.releaseInfo.find((ri) => ri.releaseBranch.targetBranch.objectId === item.targetBranch.objectId);
+                                let releases: Release[] = [];
+                                console.log(
+                                    'observable props release info:',
+                                    observerProps.releaseInfo
+                                );
+                                const releaseInfoForBranch:
+                                    | IReleaseInfo
+                                    | undefined = observerProps.releaseInfo.find(
+                                    (ri) =>
+                                        ri.releaseBranch.targetBranch
+                                            .objectId ===
+                                        item.targetBranch.objectId
+                                );
+                                console.log(
+                                    'releaseInfoForBranch',
+                                    releaseInfoForBranch
+                                );
                                 if (releaseInfoForBranch) {
-                                    releases.concat(releaseInfoForBranch.releases);
+                                    console.log(
+                                        'releaseInfoForBranch.releases',
+                                        releaseInfoForBranch.releases
+                                    );
+                                    releases = releases.concat(
+                                        releaseInfoForBranch.releases
+                                    );
                                 }
+                                console.log('releases: ', releases);
                                 // TODO: Sort the releases and get the latest release
-                                return <div>thing length: {observerProps.releaseInfo.length}</div>;
+                                let sortedReleases: Release[] = [];
+                                if (observerProps.releaseInfo.length > 0) {
+                                    const releaseInfo:
+                                        | IReleaseInfo
+                                        | undefined = observerProps.releaseInfo.find(
+                                        (ri) =>
+                                            ri.releaseBranch.targetBranch
+                                                .objectId ===
+                                            item.targetBranch.objectId
+                                    );
+
+                                    console.log('release info: ', releaseInfo);
+
+                                    if (
+                                        releaseInfo &&
+                                        releaseInfo.releases.length > 0
+                                    ) {
+                                        sortedReleases = sortedReleases.concat(
+                                            releaseInfo.releases.sort(
+                                                (a: Release, b: Release) => {
+                                                    return (
+                                                        new Date(
+                                                            b.createdOn.toString()
+                                                        ).getTime() -
+                                                        new Date(
+                                                            a.createdOn.toString()
+                                                        ).getTime()
+                                                    );
+                                                }
+                                            )
+                                        );
+                                    }
+                                }
+                                if (sortedReleases.length == 0) {
+                                    return (
+                                        <Pill
+                                            color={warningColor}
+                                            size={PillSize.regular}
+                                            variant={PillVariant.outlined}
+                                            className="bolt-list-overlay sprintly-environment-status"
+                                        >
+                                            <div style={style}>
+                                                <Icon
+                                                    ariaLabel="No Release Exists"
+                                                    iconName="Warning"
+                                                    size={IconSize.small}
+                                                />{' '}
+                                                No Release
+                                            </div>
+                                        </Pill>
+                                    );
+                                }
+                                console.log('sortedReleases: ', sortedReleases);
+                                for (const environment of sortedReleases[0]
+                                    .environments) {
+                                    console.log(
+                                        environment.name,
+                                        environment.status
+                                    );
+                                    let envStatusEnum: string = '';
+                                    let envIconName: string = '';
+                                    for (const idx in EnvironmentStatus) {
+                                        if (
+                                            idx.toLowerCase() ===
+                                            environment.status
+                                                .toString()
+                                                .toLowerCase()
+                                        ) {
+                                            console.log(
+                                                'thing here ',
+                                                EnvironmentStatus[idx],
+                                                idx
+                                            );
+                                            envStatusEnum =
+                                                EnvironmentStatus[idx];
+                                        }
+                                    }
+                                    console.log(
+                                        envStatusEnum,
+                                        EnvironmentStatus.NotStarted
+                                    );
+                                    switch (parseInt(envStatusEnum)) {
+                                        case parseInt(
+                                            EnvironmentStatus.NotStarted.toString()
+                                        ):
+                                            envIconName = 'CircleRing';
+                                            break;
+                                        case parseInt(
+                                            EnvironmentStatus.InProgress.toString()
+                                        ):
+                                            envIconName = 'UseRunningStatus';
+                                            break;
+                                        case parseInt(
+                                            EnvironmentStatus.Succeeded.toString()
+                                        ):
+                                            envIconName = 'Accept';
+                                            break;
+                                    }
+                                    environmentStatuses.push(
+                                        <Pill
+                                            key={environment.id}
+                                            color={
+                                                parseInt(envStatusEnum) ===
+                                                parseInt(EnvironmentStatus.Succeeded.toString())
+                                                    ? successColor
+                                                    : undefined
+                                            }
+                                            size={PillSize.regular}
+                                            variant={PillVariant.outlined}
+                                            className="bolt-list-overlay sprintly-environment-status"
+                                        >
+                                            <div style={style}>
+                                                {envIconName ===
+                                                'UseRunningStatus' ? (
+                                                    <Status
+                                                        {...Statuses.Running}
+                                                        key="running"
+                                                        size={StatusSize.m}
+                                                    />
+                                                ) : (
+                                                    <Icon
+                                                        iconName={envIconName}
+                                                        size={IconSize.small}
+                                                    />
+                                                )}{' '}
+                                                {environment.name}
+                                            </div>
+                                        </Pill>
+                                    );
+                                }
+                                return <div>{environmentStatuses}</div>;
                             }}
                         </Observer>
                         <Pill
@@ -988,11 +1211,7 @@ export default class SprintlyPostRelease extends React.Component<
                             className="bolt-list-overlay sprintly-environment-status"
                         >
                             <div style={style}>
-                                <Icon
-                                    ariaLabel="Deployed"
-                                    iconName="Accept"
-                                    size={IconSize.small}
-                                />{' '}
+                                <Icon iconName="Accept" size={IconSize.small} />{' '}
                                 dev
                             </div>
                         </Pill>
@@ -1003,11 +1222,7 @@ export default class SprintlyPostRelease extends React.Component<
                             className="bolt-list-overlay sprintly-environment-status"
                         >
                             <div style={style}>
-                                <Icon
-                                    ariaLabel="Failed"
-                                    iconName="Cancel"
-                                    size={IconSize.small}
-                                />{' '}
+                                <Icon iconName="Cancel" size={IconSize.small} />{' '}
                                 dev
                             </div>
                         </Pill>
@@ -1019,7 +1234,6 @@ export default class SprintlyPostRelease extends React.Component<
                         >
                             <div style={undefined}>
                                 <Icon
-                                    ariaLabel="Queued"
                                     iconName="CircleRing"
                                     size={IconSize.small}
                                 />{' '}
@@ -1038,7 +1252,11 @@ export default class SprintlyPostRelease extends React.Component<
         };
         return (
             /* tslint:disable */
-            <Observer totalRepositoriesToProcess={totalRepositoriesToProcessObservable}>
+            <Observer
+                totalRepositoriesToProcess={
+                    totalRepositoriesToProcessObservable
+                }
+            >
                 {(props: { totalRepositoriesToProcess: number }) => {
                     if (totalRepositoriesToProcessObservable.value > 0) {
                         return (
@@ -1064,7 +1282,9 @@ export default class SprintlyPostRelease extends React.Component<
                                     onRenderFarElement={this.renderDetailPage}
                                 />
                                 <Observer
-                                    isTagsDialogOpen={isTagsDialogOpenObservable}
+                                    isTagsDialogOpen={
+                                        isTagsDialogOpenObservable
+                                    }
                                     tagsRepoName={tagsRepoNameObservable}
                                 >
                                     {(props: {
@@ -1170,7 +1390,8 @@ function renderTags(
                         iconProps={{ iconName: 'Tag' }}
                         onClick={() => {
                             isTagsDialogOpenObservable.value = true;
-                            tagsRepoNameObservable.value = tableItem.name + ' Tags';
+                            tagsRepoNameObservable.value =
+                                tableItem.name + ' Tags';
                             tagsObservable.value = [];
                             tableItem.branchesAndTags.forEach((branch) => {
                                 if (branch.name.includes('refs/tags')) {

@@ -60,7 +60,7 @@ export interface IReleaseBranchInfo {
 export interface IReleaseInfo {
     repositoryId: string;
     releaseBranch: IReleaseBranchInfo;
-    releases: Release[]
+    releases: Release[];
 }
 
 export interface IGitRepositoryExtended extends GitRepository {
@@ -73,6 +73,27 @@ export interface IGitRepositoryExtended extends GitRepository {
 
 export interface IFoundationSprintlyState {
     allAllowedUsersDescriptors: string[];
+}
+
+export async function getOrRefreshToken(token: string): Promise<string> {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+        atob(base64)
+            .split('')
+            .map((c) => {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            })
+            .join('')
+    );
+
+    const decodedToken = JSON.parse(jsonPayload);
+    const tokenDate = new Date(parseInt(decodedToken.exp) * 1000);
+    const now = new Date();
+    if (tokenDate <= now) {
+        return await SDK.getAccessToken();
+    }
+    return token;
 }
 
 // TODO: Clean up arrow functions for the cases in which I thought I
