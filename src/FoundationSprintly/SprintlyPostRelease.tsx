@@ -1064,13 +1064,14 @@ export default class SprintlyPostRelease extends React.Component<
                             console.log('releases: ', releases);
                             let sortedReleases: Release[] = [];
                             if (observerProps.releaseInfo.length > 0) {
-                                const releaseInfo: IReleaseInfo | undefined =
-                                    observerProps.releaseInfo.find(
-                                        (ri) =>
-                                            ri.releaseBranch.targetBranch
-                                                .name ===
-                                            item.targetBranch.name
-                                    );
+                                const releaseInfo:
+                                    | Common.IReleaseInfo
+                                    | undefined = observerProps.releaseInfo.find(
+                                    (ri) =>
+                                        ri.releaseBranch.targetBranch.name ===
+                                            item.targetBranch.name &&
+                                        ri.repositoryId === item.repositoryId
+                                );
 
                                 console.log('release info: ', releaseInfo);
 
