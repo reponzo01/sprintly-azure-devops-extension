@@ -796,7 +796,7 @@ export default class SprintlyPostRelease extends React.Component<
                             size={PillSize.regular}
                             className="bolt-list-overlay margin-horizontal-3"
                         >
-                            <div style={{ color: 'white' }}>
+                            <div className="sprintly-text-white">
                                 Ahead of develop{' '}
                                 {releaseBranch.developPR && (
                                     <i>
@@ -818,7 +818,7 @@ export default class SprintlyPostRelease extends React.Component<
                             className="bolt-list-overlay margin-horizontal-3"
                             variant={PillVariant.outlined}
                         >
-                            <div style={{ color: 'white' }}>
+                            <div className="sprintly-text-white">
                                 Ahead of{' '}
                                 {item.hasMainBranch ? 'main' : 'master'}{' '}
                                 {releaseBranch.masterMainPR && (
@@ -1024,7 +1024,7 @@ export default class SprintlyPostRelease extends React.Component<
             green: 90,
             blue: 37,
         };
-        const style: any = { color: 'white' };
+
         return (
             <ListItem
                 className="master-row border-bottom"
@@ -1033,86 +1033,85 @@ export default class SprintlyPostRelease extends React.Component<
                 details={details}
             >
                 <div className="master-row-content flex-row flex-center h-scroll-hidden">
-                    <div className="flex-row">
-                        <div className="margin-horizontal-10">
-                            {item.targetBranch.name.split('refs/heads/')[1]}
-                        </div>
-                        {/** TODO: Extract theses pills into a method */}
-                        <Observer releaseInfo={releaseInfoObservable}>
-                            {(observerProps: {
-                                releaseInfo: IReleaseInfo[];
-                            }) => {
-                                const environmentStatuses: JSX.Element[] = [];
-                                let releases: Release[] = [];
+                    <Observer releaseInfo={releaseInfoObservable}>
+                        {(observerProps: { releaseInfo: IReleaseInfo[] }) => {
+                            const environmentStatuses: JSX.Element[] = [];
+                            let releases: Release[] = [];
+                            console.log(
+                                'observable props release info:',
+                                observerProps.releaseInfo
+                            );
+                            const releaseInfoForBranch:
+                                | IReleaseInfo
+                                | undefined = observerProps.releaseInfo.find(
+                                (ri) =>
+                                    ri.releaseBranch.targetBranch.objectId ===
+                                    item.targetBranch.objectId
+                            );
+                            console.log(
+                                'releaseInfoForBranch',
+                                releaseInfoForBranch
+                            );
+                            if (releaseInfoForBranch) {
                                 console.log(
-                                    'observable props release info:',
-                                    observerProps.releaseInfo
+                                    'releaseInfoForBranch.releases',
+                                    releaseInfoForBranch.releases
                                 );
-                                const releaseInfoForBranch:
-                                    | IReleaseInfo
-                                    | undefined = observerProps.releaseInfo.find(
-                                    (ri) =>
-                                        ri.releaseBranch.targetBranch
-                                            .objectId ===
-                                        item.targetBranch.objectId
+                                releases = releases.concat(
+                                    releaseInfoForBranch.releases
                                 );
-                                console.log(
-                                    'releaseInfoForBranch',
-                                    releaseInfoForBranch
-                                );
-                                if (releaseInfoForBranch) {
-                                    console.log(
-                                        'releaseInfoForBranch.releases',
-                                        releaseInfoForBranch.releases
-                                    );
-                                    releases = releases.concat(
-                                        releaseInfoForBranch.releases
-                                    );
-                                }
-                                console.log('releases: ', releases);
-                                // TODO: Sort the releases and get the latest release
-                                let sortedReleases: Release[] = [];
-                                if (observerProps.releaseInfo.length > 0) {
-                                    const releaseInfo:
-                                        | IReleaseInfo
-                                        | undefined = observerProps.releaseInfo.find(
+                            }
+                            console.log('releases: ', releases);
+                            // TODO: Sort the releases and get the latest release
+                            let sortedReleases: Release[] = [];
+                            if (observerProps.releaseInfo.length > 0) {
+                                const releaseInfo: IReleaseInfo | undefined =
+                                    observerProps.releaseInfo.find(
                                         (ri) =>
                                             ri.releaseBranch.targetBranch
                                                 .objectId ===
                                             item.targetBranch.objectId
                                     );
 
-                                    console.log('release info: ', releaseInfo);
+                                console.log('release info: ', releaseInfo);
 
-                                    if (
-                                        releaseInfo &&
-                                        releaseInfo.releases.length > 0
-                                    ) {
-                                        sortedReleases = sortedReleases.concat(
-                                            releaseInfo.releases.sort(
-                                                (a: Release, b: Release) => {
-                                                    return (
-                                                        new Date(
-                                                            b.createdOn.toString()
-                                                        ).getTime() -
-                                                        new Date(
-                                                            a.createdOn.toString()
-                                                        ).getTime()
-                                                    );
-                                                }
-                                            )
-                                        );
-                                    }
+                                if (
+                                    releaseInfo &&
+                                    releaseInfo.releases.length > 0
+                                ) {
+                                    sortedReleases = sortedReleases.concat(
+                                        releaseInfo.releases.sort(
+                                            (a: Release, b: Release) => {
+                                                return (
+                                                    new Date(
+                                                        b.createdOn.toString()
+                                                    ).getTime() -
+                                                    new Date(
+                                                        a.createdOn.toString()
+                                                    ).getTime()
+                                                );
+                                            }
+                                        )
+                                    );
                                 }
-                                if (sortedReleases.length == 0) {
-                                    return (
+                            }
+                            if (sortedReleases.length == 0) {
+                                return (
+                                    <div className="flex-row">
+                                        <div className="margin-horizontal-10">
+                                            {
+                                                item.targetBranch.name.split(
+                                                    'refs/heads/'
+                                                )[1]
+                                            }
+                                        </div>
                                         <Pill
                                             color={warningColor}
                                             size={PillSize.regular}
                                             variant={PillVariant.outlined}
                                             className="bolt-list-overlay sprintly-environment-status"
                                         >
-                                            <div style={style}>
+                                            <div className="sprintly-text-white">
                                                 <Icon
                                                     ariaLabel="No Release Exists"
                                                     iconName="Warning"
@@ -1121,126 +1120,134 @@ export default class SprintlyPostRelease extends React.Component<
                                                 No Release
                                             </div>
                                         </Pill>
-                                    );
-                                }
-                                console.log('sortedReleases: ', sortedReleases);
-                                for (const environment of sortedReleases[0]
-                                    .environments) {
-                                    console.log(
-                                        environment.name,
+                                    </div>
+                                );
+                            }
+                            console.log('sortedReleases: ', sortedReleases);
+                            for (const environment of sortedReleases[0]
+                                .environments) {
+                                console.log(
+                                    environment.name,
+                                    environment.status
+                                );
+                                let envStatusEnum: string = '';
+                                let envIconName: string = 'Cancel';
+                                let divClassName = 'sprintly-text-white';
+                                for (const idx in EnvironmentStatus) {
+                                    if (
+                                        idx.toLowerCase() ===
                                         environment.status
-                                    );
-                                    let envStatusEnum: string = '';
-                                    let envIconName: string = '';
-                                    for (const idx in EnvironmentStatus) {
-                                        if (
-                                            idx.toLowerCase() ===
-                                            environment.status
-                                                .toString()
-                                                .toLowerCase()
-                                        ) {
-                                            console.log(
-                                                'thing here ',
-                                                EnvironmentStatus[idx],
-                                                idx
-                                            );
-                                            envStatusEnum =
-                                                EnvironmentStatus[idx];
-                                        }
+                                            .toString()
+                                            .toLowerCase()
+                                    ) {
+                                        console.log(
+                                            'thing here ',
+                                            EnvironmentStatus[idx],
+                                            idx
+                                        );
+                                        envStatusEnum = EnvironmentStatus[idx];
                                     }
-                                    console.log(
-                                        envStatusEnum,
-                                        EnvironmentStatus.NotStarted
-                                    );
-                                    switch (parseInt(envStatusEnum)) {
-                                        case parseInt(
-                                            EnvironmentStatus.NotStarted.toString()
-                                        ):
-                                            envIconName = 'CircleRing';
-                                            break;
-                                        case parseInt(
-                                            EnvironmentStatus.InProgress.toString()
-                                        ):
-                                            envIconName = 'UseRunningStatus';
-                                            break;
-                                        case parseInt(
-                                            EnvironmentStatus.Succeeded.toString()
-                                        ):
-                                            envIconName = 'Accept';
-                                            break;
-                                    }
-                                    environmentStatuses.push(
-                                        <Pill
-                                            key={environment.id}
-                                            color={
-                                                parseInt(envStatusEnum) ===
-                                                parseInt(EnvironmentStatus.Succeeded.toString())
-                                                    ? successColor
-                                                    : undefined
-                                            }
-                                            size={PillSize.regular}
-                                            variant={PillVariant.outlined}
-                                            className="bolt-list-overlay sprintly-environment-status"
-                                        >
-                                            <div style={style}>
-                                                {envIconName ===
-                                                'UseRunningStatus' ? (
-                                                    <Status
-                                                        {...Statuses.Running}
-                                                        key="running"
-                                                        size={StatusSize.m}
-                                                    />
-                                                ) : (
-                                                    <Icon
-                                                        iconName={envIconName}
-                                                        size={IconSize.small}
-                                                    />
-                                                )}{' '}
-                                                {environment.name}
-                                            </div>
-                                        </Pill>
-                                    );
                                 }
-                                return <div>{environmentStatuses}</div>;
-                            }}
-                        </Observer>
-                        <Pill
-                            color={successColor}
-                            size={PillSize.regular}
-                            variant={PillVariant.outlined}
-                            className="bolt-list-overlay sprintly-environment-status"
-                        >
-                            <div style={style}>
-                                <Icon iconName="Accept" size={IconSize.small} />{' '}
-                                dev
-                            </div>
-                        </Pill>
-                        <Pill
-                            color={failedColor}
-                            size={PillSize.regular}
-                            variant={PillVariant.outlined}
-                            className="bolt-list-overlay sprintly-environment-status"
-                        >
-                            <div style={style}>
-                                <Icon iconName="Cancel" size={IconSize.small} />{' '}
-                                dev
-                            </div>
-                        </Pill>
-                        <Pill
-                            color={undefined}
-                            size={PillSize.regular}
-                            variant={undefined}
-                            className="bolt-list-overlay sprintly-environment-status"
-                        >
-                            <div style={undefined}>
-                                <Icon
-                                    iconName="CircleRing"
-                                    size={IconSize.small}
-                                />{' '}
-                                qa
-                            </div>
-                        </Pill>
-                    </div>
+                                console.log(
+                                    envStatusEnum,
+                                    EnvironmentStatus.NotStarted
+                                );
+                                switch (parseInt(envStatusEnum)) {
+                                    case parseInt(
+                                        EnvironmentStatus.NotStarted.toString()
+                                    ):
+                                        envIconName = 'CircleRing';
+                                        divClassName = '';
+                                        break;
+                                    case parseInt(
+                                        EnvironmentStatus.InProgress.toString()
+                                    ):
+                                        envIconName = 'UseRunningStatus';
+                                        divClassName = '';
+                                        break;
+                                    case parseInt(
+                                        EnvironmentStatus.Queued.toString()
+                                    ):
+                                        envIconName = 'UseRunningStatus';
+                                        divClassName = '';
+                                        break;
+                                    case parseInt(
+                                        EnvironmentStatus.Scheduled.toString()
+                                    ):
+                                        envIconName = 'UseRunningStatus';
+                                        divClassName = '';
+                                        break;
+                                    case parseInt(
+                                        EnvironmentStatus.Succeeded.toString()
+                                    ):
+                                        envIconName = 'Accept';
+                                        break;
+                                }
+                                environmentStatuses.push(
+                                    <Pill
+                                        key={environment.id}
+                                        color={
+                                            parseInt(envStatusEnum) ===
+                                            parseInt(
+                                                EnvironmentStatus.Succeeded.toString()
+                                            )
+                                                ? successColor
+                                                : parseInt(envStatusEnum) ===
+                                                      parseInt(
+                                                          EnvironmentStatus.Undefined.toString()
+                                                      ) ||
+                                                  parseInt(envStatusEnum) ===
+                                                      parseInt(
+                                                          EnvironmentStatus.Canceled.toString()
+                                                      ) ||
+                                                  parseInt(envStatusEnum) ===
+                                                      parseInt(
+                                                          EnvironmentStatus.Rejected.toString()
+                                                      ) ||
+                                                  parseInt(envStatusEnum) ===
+                                                      parseInt(
+                                                          EnvironmentStatus.PartiallySucceeded.toString()
+                                                      )
+                                                ? failedColor
+                                                : undefined
+                                        }
+                                        size={PillSize.regular}
+                                        variant={PillVariant.outlined}
+                                        className="bolt-list-overlay sprintly-environment-status"
+                                    >
+                                        <div className={divClassName}>
+                                            {envIconName ===
+                                            'UseRunningStatus' ? (
+                                                <Status
+                                                    {...Statuses.Running}
+                                                    key="running"
+                                                    size={StatusSize.m}
+                                                />
+                                            ) : (
+                                                <Icon
+                                                    iconName={envIconName}
+                                                    size={IconSize.small}
+                                                />
+                                            )}{' '}
+                                            {environment.name}
+                                        </div>
+                                    </Pill>
+                                );
+                            }
+                            return (
+                                <div className="flex-row">
+                                    <div className="margin-horizontal-10">
+                                        {
+                                            item.targetBranch.name.split(
+                                                'refs/heads/'
+                                            )[1]
+                                        }
+                                    </div>
+                                    {environmentStatuses}
+                                </div>
+                            );
+                        }}
+                    </Observer>
                 </div>
             </ListItem>
         );
