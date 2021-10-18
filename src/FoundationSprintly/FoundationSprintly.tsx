@@ -7,6 +7,12 @@ import {
     IExtensionDataManager,
     IExtensionDataService,
 } from 'azure-devops-extension-api';
+import {
+    GitPullRequest,
+    GitRef,
+    GitRepository,
+} from 'azure-devops-extension-api/Git';
+import { Release } from 'azure-devops-extension-api/Release';
 
 import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
@@ -16,23 +22,23 @@ import { Header, TitleSize } from 'azure-devops-ui/Header';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
 
 import SprintlyPage from './SprintlyPage';
+import SprintlyInRelease from './SprintlyInRelease';
 import SprintlyPostRelease from './SprintlyPostRelease';
 import SprintlySettings from './SprintlySettings';
 import { showRootComponent } from '../Common';
 import { IHeaderCommandBarItem } from 'azure-devops-ui/HeaderCommandBar';
-import {
-    GitPullRequest,
-    GitRef,
-    GitRepository,
-} from 'azure-devops-extension-api/Git';
-import { Release } from 'azure-devops-extension-api/Release';
 
 const selectedTabKey: string = 'selected-tab';
 const allowedUserGroupsKey: string = 'allowed-user-groups';
 const allowedUsersKey: string = 'allowed-users';
-const sprintlyPageTab: string = 'sprintly-page';
-const sprintlyPostReleaseTab: string = 'sprintly-post-release';
-const sprintlySettingsTab: string = 'sprintly-settings';
+const sprintlyPageTabKey: string = 'sprintly-page';
+const sprintlyPageTabName: string = 'Sprintly';
+const sprintlyInReleaseTabKey: string = 'sprintly-in-release';
+const sprintlyInReleaseTabName: string = 'In-Release (QA)';
+const sprintlyPostReleaseTabKey: string = 'sprintly-post-release';
+const sprintlyPostReleaseTabName: string = 'Post Release';
+const sprintlySettingsTabKey: string = 'sprintly-settings';
+const sprintlySettingsTabName: string = 'Settings';
 
 const selectedTabId: ObservableValue<string> = new ObservableValue<string>('');
 const userIsAllowed: ObservableValue<boolean> = new ObservableValue<boolean>(
@@ -107,8 +113,8 @@ export default class FoundationSprintly extends React.Component<
     private dataManager!: IExtensionDataManager;
     private accessToken: string = '';
 
-    private alwaysAllowedGroups: AllowedEntity[] = [
-        {
+    private alwaysAllowedGroups: IAllowedEntity[] = [
+        /*{
             displayName: 'Dev Team Leads',
             originId: '841aee2f-860d-45a1-91a5-779aa4dca78c',
             descriptor:
@@ -119,6 +125,12 @@ export default class FoundationSprintly extends React.Component<
             originId: 'b2620fb7-f672-4162-a15f-940b1ec78efe',
             descriptor:
                 'vssgp.Uy0xLTktMTU1MTM3NDI0NS0xODk1NzMzMjY1LTQ3ODY0Mzg0LTMwMjU3MjkyMzQtOTM5ODg1NzU0LTEtMzA1NDcxNjM4Mi0zNjc1OTA4OTI5LTI3MjY5NzI4MTctMzczODgxNDI4NQ',
+        },*/
+        {
+            displayName: 'ample Project Team',
+            originId: 'fccefee4-a7a9-432a-a7a2-fc6d3d8bc45d',
+            descriptor:
+                'vssgp.Uy0xLTktMTU1MTM3NDI0NS0zMTEzMzAyODctMzI5MTIzMzA5NC0zMTI4MjY0MTg3LTQwMTUzMTUzOTYtMS0xNTY5MTY5Mjc5LTIzODYzODU5OTQtMjU1MDU2OTgzMi02NDQyOTAwODc',
         },
     ];
 
@@ -277,14 +289,18 @@ export default class FoundationSprintly extends React.Component<
                                     selectedTabId={selectedTabId}
                                     tabSize={TabSize.Tall}
                                 >
-                                    <Tab name="Sprintly" id={sprintlyPageTab} />
+                                    <Tab name={sprintlyPageTabName} id={sprintlyPageTabKey} />
                                     <Tab
-                                        name="Post Release"
-                                        id={sprintlyPostReleaseTab}
+                                        name={sprintlyInReleaseTabName}
+                                        id={sprintlyInReleaseTabKey}
                                     />
                                     <Tab
-                                        name="Settings"
-                                        id={sprintlySettingsTab}
+                                        name={sprintlyPostReleaseTabName}
+                                        id={sprintlyPostReleaseTabKey}
+                                    />
+                                    <Tab
+                                        name={sprintlySettingsTabName}
+                                        id={sprintlySettingsTabKey}
                                     />
                                 </TabBar>
                             );
@@ -303,14 +319,14 @@ export default class FoundationSprintly extends React.Component<
                     }) => {
                         if (userIsAllowed.value) {
                             switch (selectedTabId.value) {
-                                case sprintlyPageTab:
+                                case sprintlyPageTabKey:
                                 case '':
                                     return (
                                         <SprintlyPage
                                             dataManager={this.dataManager}
                                         />
                                     );
-                                case sprintlySettingsTab:
+                                case sprintlySettingsTabKey:
                                     return (
                                         <SprintlySettings
                                             organizationName={
@@ -319,7 +335,16 @@ export default class FoundationSprintly extends React.Component<
                                             dataManager={this.dataManager}
                                         />
                                     );
-                                case sprintlyPostReleaseTab:
+                                case sprintlyInReleaseTabKey:
+                                        return (
+                                            <SprintlyInRelease
+                                                organizationName={
+                                                    organizationNameObservable.value
+                                                }
+                                                dataManager={this.dataManager}
+                                            />
+                                        );
+                                case sprintlyPostReleaseTabKey:
                                     return (
                                         <SprintlyPostRelease
                                             organizationName={
