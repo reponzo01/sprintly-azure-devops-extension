@@ -277,58 +277,52 @@ export default class SprintlyPostRelease extends React.Component<
                 if (processRepo === true) {
                     const existingReleaseBranches: Common.IReleaseBranchInfo[] =
                         [];
-                    let hasExistingRelease: boolean = false;
-                    for (const branch of repositoryBranchInfo.branchesAndTags) {
-                        if (branch.name.includes('heads/release')) {
-                            hasExistingRelease = true;
+                    for (const releaseBranch of repositoryBranchInfo.releaseBranches) {
+                        const releaseBranchName =
+                            releaseBranch.name.split('heads/')[1];
 
-                            const releaseBranchName =
-                                branch.name.split('heads/')[1];
+                        const branchInfo: Common.IReleaseBranchInfo = {
+                            targetBranch: releaseBranch,
+                            repositoryId: repo.id,
+                            aheadOfDevelop: await this.isBranchAheadOfDevelop(
+                                releaseBranchName,
+                                repo.id
+                            ),
+                            aheadOfMasterMain:
+                                await this.isBranchAheadOMasterMain(
+                                    repositoryBranchInfo,
+                                    releaseBranchName,
+                                    repo.id
+                                ),
+                        };
 
-                            const branchInfo: Common.IReleaseBranchInfo = {
-                                targetBranch: branch,
-                                repositoryId: repo.id,
-                                aheadOfDevelop:
-                                    await this.isBranchAheadOfDevelop(
-                                        releaseBranchName,
-                                        repo.id
-                                    ),
-                                aheadOfMasterMain:
-                                    await this.isBranchAheadOMasterMain(
-                                        repositoryBranchInfo,
-                                        releaseBranchName,
-                                        repo.id
-                                    ),
-                            };
-
-                            for (const pullRequest of this.state.pullRequests) {
+                        for (const pullRequest of this.state.pullRequests) {
+                            if (
+                                pullRequest.repository.id === repo.id &&
+                                pullRequest.sourceRefName === releaseBranch.name
+                            ) {
                                 if (
-                                    pullRequest.repository.id === repo.id &&
-                                    pullRequest.sourceRefName === branch.name
+                                    pullRequest.targetRefName.includes(
+                                        'heads/develop'
+                                    )
                                 ) {
-                                    if (
-                                        pullRequest.targetRefName.includes(
-                                            'heads/develop'
-                                        )
-                                    ) {
-                                        branchInfo.developPR = pullRequest;
-                                    }
+                                    branchInfo.developPR = pullRequest;
+                                }
 
-                                    if (
-                                        pullRequest.targetRefName.includes(
-                                            'heads/master'
-                                        ) ||
-                                        pullRequest.targetRefName.includes(
-                                            'heads/main'
-                                        )
-                                    ) {
-                                        branchInfo.masterMainPR = pullRequest;
-                                    }
+                                if (
+                                    pullRequest.targetRefName.includes(
+                                        'heads/master'
+                                    ) ||
+                                    pullRequest.targetRefName.includes(
+                                        'heads/main'
+                                    )
+                                ) {
+                                    branchInfo.masterMainPR = pullRequest;
                                 }
                             }
-
-                            existingReleaseBranches.push(branchInfo);
                         }
+
+                        existingReleaseBranches.push(branchInfo);
                     }
 
                     reposExtended.push({
@@ -346,10 +340,12 @@ export default class SprintlyPostRelease extends React.Component<
                         validRemoteUrls: repo.validRemoteUrls,
                         webUrl: repo.webUrl,
                         createRelease: false,
-                        hasExistingRelease,
+                        hasExistingRelease:
+                            repositoryBranchInfo.releaseBranches.length > 0,
                         hasMainBranch: repositoryBranchInfo.hasMainBranch,
                         existingReleaseBranches,
-                        branchesAndTags: repositoryBranchInfo.branchesAndTags,
+                        branchesAndTags:
+                            repositoryBranchInfo.allBranchesAndTags,
                     });
                 }
             }

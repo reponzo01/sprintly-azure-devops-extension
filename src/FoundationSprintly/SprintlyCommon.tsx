@@ -69,7 +69,8 @@ export interface IReleaseBranchInfo {
 
 export interface IRepositoryBranchInfo {
     repositoryId: string;
-    branchesAndTags: GitRef[];
+    allBranchesAndTags: GitRef[];
+    releaseBranches: GitRef[];
     hasDevelopBranch: boolean;
     hasMasterBranch: boolean;
     hasMainBranch: boolean;
@@ -213,21 +214,25 @@ export async function getRepositoryBranchInfo(
     let hasMasterBranch: boolean = false;
     let hasMainBranch: boolean = false;
 
-    const branchesAndTags: GitRef[] = await getRepositoryInfo(repositoryId);
+    const allBranchesAndTags: GitRef[] = await getRepositoryInfo(repositoryId);
+    const releaseBranches: GitRef[] = [];
 
-    for (const ref of branchesAndTags) {
-        if (ref.name.includes('heads/develop')) {
+    for (const branch of allBranchesAndTags) {
+        if (branch.name.includes('heads/develop')) {
             hasDevelopBranch = true;
-        } else if (ref.name.includes('heads/master')) {
+        } else if (branch.name.includes('heads/master')) {
             hasMasterBranch = true;
-        } else if (ref.name.includes('heads/main')) {
+        } else if (branch.name.includes('heads/main')) {
             hasMainBranch = true;
+        } else if (branch.name.includes('heads/release')) {
+            releaseBranches.push(branch);
         }
     }
 
     return {
         repositoryId,
-        branchesAndTags,
+        allBranchesAndTags,
+        releaseBranches,
         hasDevelopBranch,
         hasMasterBranch,
         hasMainBranch

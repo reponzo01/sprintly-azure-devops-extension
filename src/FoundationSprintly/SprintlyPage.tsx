@@ -158,15 +158,11 @@ export default class SprintlyPage extends React.Component<
 
                     const existingReleaseBranches: Common.IReleaseBranchInfo[] =
                         [];
-                    let hasExistingRelease: boolean = false;
-                    for (const branch of repositoryBranchInfo.branchesAndTags) {
-                        if (branch.name.includes('heads/release')) {
-                            hasExistingRelease = true;
-                            existingReleaseBranches.push({
-                                targetBranch: branch,
-                                repositoryId: repo.id,
-                            });
-                        }
+                    for (const releaseBranch of repositoryBranchInfo.releaseBranches) {
+                        existingReleaseBranches.push({
+                            targetBranch: releaseBranch,
+                            repositoryId: repo.id,
+                        });
                     }
 
                     reposExtended.push({
@@ -184,10 +180,12 @@ export default class SprintlyPage extends React.Component<
                         validRemoteUrls: repo.validRemoteUrls,
                         webUrl: repo.webUrl,
                         createRelease,
-                        hasExistingRelease,
+                        hasExistingRelease:
+                            repositoryBranchInfo.releaseBranches.length > 0,
                         hasMainBranch: repositoryBranchInfo.hasMainBranch,
                         existingReleaseBranches,
-                        branchesAndTags: repositoryBranchInfo.branchesAndTags,
+                        branchesAndTags:
+                            repositoryBranchInfo.allBranchesAndTags,
                     });
                 }
             }
