@@ -9,37 +9,23 @@ export interface ITagsModalContent {
     modalValues: string[];
 }
 
-export interface ITagsModalState {
+export class TagsModal extends React.Component<{
     isTagsDialogOpen: boolean;
-}
-
-export class TagsModal extends React.Component<
-    {
-        isTagsDialogOpen: boolean;
-        tagsRepoName: string;
-        tags: string[];
-    },
-    ITagsModalState
-> {
+    tagsRepoName: string;
+    tags: string[];
+    closeMe: () => void;
+}> {
     constructor(props: {
         isTagsDialogOpen: boolean;
         tagsRepoName: string;
         tags: string[];
+        closeMe: () => void;
     }) {
         super(props);
-
-        this.state = {
-            isTagsDialogOpen: props.isTagsDialogOpen,
-        };
     }
 
     public render() {
-        const onDismiss: () => void = () => {
-            this.setState({
-                isTagsDialogOpen: false,
-            });
-        };
-        return this.state.isTagsDialogOpen ? (
+        return this.props.isTagsDialogOpen ? (
             <Dialog
                 titleProps={{
                     text: this.props.tagsRepoName,
@@ -47,10 +33,10 @@ export class TagsModal extends React.Component<
                 footerButtonProps={[
                     {
                         text: 'Close',
-                        onClick: onDismiss,
+                        onClick: this.props.closeMe,
                     },
                 ]}
-                onDismiss={onDismiss}
+                onDismiss={this.props.closeMe}
             >
                 <SimpleList
                     itemProvider={

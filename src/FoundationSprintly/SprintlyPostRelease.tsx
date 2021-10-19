@@ -129,12 +129,14 @@ export default class SprintlyPostRelease extends React.Component<
             ),
         };
 
-        this.renderRepositoryList = this.renderRepositoryList.bind(this);
+        this.renderRepositoryMasterPageList =
+            this.renderRepositoryMasterPageList.bind(this);
         this.renderRepositoryListItem =
             this.renderRepositoryListItem.bind(this);
-        this.renderReleaseBranchList = this.renderReleaseBranchList.bind(this);
-        this.renderReleaseBranchListItem =
-            this.renderReleaseBranchListItem.bind(this);
+        this.renderReleaseBranchDetailList =
+            this.renderReleaseBranchDetailList.bind(this);
+        this.renderReleaseBranchDetailListItem =
+            this.renderReleaseBranchDetailListItem.bind(this);
         this.renderDetailPage = this.renderDetailPage.bind(this);
 
         this.organizationName = props.organizationName;
@@ -388,7 +390,7 @@ export default class SprintlyPostRelease extends React.Component<
         }
     }
 
-    private renderRepositoryList(): JSX.Element {
+    private renderRepositoryMasterPageList(): JSX.Element {
         return (
             <List
                 ariaLabel={'Repositories'}
@@ -410,12 +412,12 @@ export default class SprintlyPostRelease extends React.Component<
         details: IListItemDetails<Common.IGitRepositoryExtended>,
         key?: string
     ): JSX.Element {
-        const releaseLinks: JSX.Element[] = [];
+        const releaseBranchLinks: JSX.Element[] = [];
         let counter: number = 0;
         for (const releaseBranch of item.existingReleaseBranches) {
             const releaseBranchName =
                 releaseBranch.targetBranch.name.split('heads/')[1];
-            releaseLinks.push(
+            releaseBranchLinks.push(
                 <div className="flex-row padding-vertical-10" key={counter}>
                     <Link
                         excludeTabStop
@@ -507,7 +509,7 @@ export default class SprintlyPostRelease extends React.Component<
                         </Tooltip>
                         <Tooltip overflowOnly={true}>
                             <div className="flex-column primary-text text-ellipsis">
-                                {<>{releaseLinks}</>}
+                                {<>{releaseBranchLinks}</>}
                             </div>
                         </Tooltip>
                     </div>
@@ -612,7 +614,7 @@ export default class SprintlyPostRelease extends React.Component<
 
                                     <div className="page-content page-content-top">
                                         <Card>
-                                            {this.renderReleaseBranchList(
+                                            {this.renderReleaseBranchDetailList(
                                                 new ArrayItemProvider(
                                                     observerProps.selectedItem.existingReleaseBranches
                                                 )
@@ -627,7 +629,7 @@ export default class SprintlyPostRelease extends React.Component<
         );
     }
 
-    private renderReleaseBranchList(
+    private renderReleaseBranchDetailList(
         items: ArrayItemProvider<Common.IReleaseBranchInfo>
     ): JSX.Element {
         return (
@@ -635,14 +637,14 @@ export default class SprintlyPostRelease extends React.Component<
                 ariaLabel={'Release Branches'}
                 itemProvider={items}
                 selection={this.state.releaseBranchListSelection}
-                renderRow={this.renderReleaseBranchListItem}
+                renderRow={this.renderReleaseBranchDetailListItem}
                 width="100%"
                 singleClickActivation={true}
             />
         );
     }
 
-    private renderReleaseBranchListItem(
+    private renderReleaseBranchDetailListItem(
         index: number,
         item: Common.IReleaseBranchInfo,
         details: IListItemDetails<Common.IReleaseBranchInfo>,
@@ -895,6 +897,34 @@ export default class SprintlyPostRelease extends React.Component<
         );
     }
 
+    private renderTagsModalActionButton(): JSX.Element {
+        return (
+            <Observer
+                isTagsDialogOpen={isTagsDialogOpenObservable}
+                tagsRepoName={tagsRepoNameObservable}
+                tagsModalKey={tagsModalKeyObservable}
+            >
+                {(props: {
+                    isTagsDialogOpen: boolean;
+                    tagsRepoName: string;
+                    tagsModalKey: string;
+                }) => {
+                    return (
+                        <TagsModal
+                            key={props.tagsModalKey}
+                            isTagsDialogOpen={props.isTagsDialogOpen}
+                            tagsRepoName={props.tagsRepoName}
+                            tags={tagsObservable.value}
+                            closeMe={() => {
+                                isTagsDialogOpenObservable.value = false;
+                            }}
+                        ></TagsModal>
+                    );
+                }}
+            </Observer>
+        );
+    }
+
     public render(): JSX.Element {
         return (
             /* tslint:disable */
@@ -904,7 +934,7 @@ export default class SprintlyPostRelease extends React.Component<
                 }
             >
                 {(props: { totalRepositoriesToProcess: number }) => {
-                    if (totalRepositoriesToProcessObservable.value > 0) {
+                    if (props.totalRepositoriesToProcess > 0) {
                         return (
                             <div
                                 className="flex-grow"
@@ -923,36 +953,11 @@ export default class SprintlyPostRelease extends React.Component<
                                     nearElementClassName="v-scroll-auto custom-scrollbar light-grey"
                                     farElementClassName="v-scroll-auto custom-scrollbar"
                                     onRenderNearElement={
-                                        this.renderRepositoryList
+                                        this.renderRepositoryMasterPageList
                                     }
                                     onRenderFarElement={this.renderDetailPage}
                                 />
-                                <Observer
-                                    isTagsDialogOpen={
-                                        isTagsDialogOpenObservable
-                                    }
-                                    tagsRepoName={tagsRepoNameObservable}
-                                    tagsModalKey={tagsModalKeyObservable}
-                                >
-                                    {(props: {
-                                        isTagsDialogOpen: boolean;
-                                        tagsRepoName: string;
-                                        tagsModalKey: string;
-                                    }) => {
-                                        return (
-                                            <TagsModal
-                                                key={props.tagsModalKey}
-                                                isTagsDialogOpen={
-                                                    props.isTagsDialogOpen
-                                                }
-                                                tagsRepoName={
-                                                    props.tagsRepoName
-                                                }
-                                                tags={tagsObservable.value}
-                                            ></TagsModal>
-                                        );
-                                    }}
-                                </Observer>
+                                {this.renderTagsModalActionButton()}
                             </div>
                         );
                     }
@@ -971,7 +976,6 @@ export default class SprintlyPostRelease extends React.Component<
                     );
                 }}
             </Observer>
-
             /* tslint:disable */
         );
     }

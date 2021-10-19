@@ -276,6 +276,9 @@ export default class SprintlyPage extends React.Component<
                                                     props.tagsRepoName
                                                 }
                                                 tags={tagsObservable.value}
+                                                closeMe={() => {
+                                                    isTagsDialogOpenObservable.value = false;
+                                                }}
                                             ></TagsModal>
                                         );
                                     }}
