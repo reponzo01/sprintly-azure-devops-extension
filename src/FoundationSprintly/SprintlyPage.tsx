@@ -10,10 +10,7 @@ import {
     IGlobalMessagesService,
 } from 'azure-devops-extension-api';
 
-import {
-    CoreRestClient,
-    TeamProjectReference,
-} from 'azure-devops-extension-api/Core';
+import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
     GitRestClient,
     GitBaseVersionDescriptor,
@@ -40,11 +37,10 @@ import { Icon, IconSize } from 'azure-devops-ui/Icon';
 import { ArrayItemProvider } from 'azure-devops-ui/Utilities/Provider';
 import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
-import { Dialog } from 'azure-devops-ui/Dialog';
-import { SimpleList } from 'azure-devops-ui/List';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
 
 import * as Common from './SprintlyCommon';
+import { TagsModal, ITagsModalContent, getTagsModalContent } from './TagsModal';
 
 export interface ISprintlyPageState {
     repositories?: ArrayItemProvider<Common.IGitRepositoryExtended>;
@@ -237,9 +233,6 @@ export default class SprintlyPage extends React.Component<
     }
 
     public render(): JSX.Element {
-        const onDismiss: () => void = () => {
-            isTagsDialogOpenObservable.value = false;
-        };
         return (
             /* tslint:disable */
             <Observer
@@ -272,28 +265,18 @@ export default class SprintlyPage extends React.Component<
                                         isTagsDialogOpen: boolean;
                                         tagsRepoName: string;
                                     }) => {
-                                        return props.isTagsDialogOpen ? (
-                                            <Dialog
-                                                titleProps={{
-                                                    text: props.tagsRepoName,
-                                                }}
-                                                footerButtonProps={[
-                                                    {
-                                                        text: 'Close',
-                                                        onClick: onDismiss,
-                                                    },
-                                                ]}
-                                                onDismiss={onDismiss}
-                                            >
-                                                <SimpleList
-                                                    itemProvider={
-                                                        new ArrayItemProvider<string>(
-                                                            tagsObservable.value
-                                                        )
-                                                    }
-                                                />
-                                            </Dialog>
-                                        ) : null;
+                                        return (
+                                            <TagsModal
+                                                key={props.tagsRepoName}
+                                                isTagsDialogOpen={
+                                                    props.isTagsDialogOpen
+                                                }
+                                                tagsRepoName={
+                                                    props.tagsRepoName
+                                                }
+                                                tags={tagsObservable.value}
+                                            ></TagsModal>
+                                        );
                                     }}
                                 </Observer>
                             </div>
@@ -454,14 +437,14 @@ function renderTagsCell(
                         iconProps={{ iconName: 'Tag' }}
                         onClick={() => {
                             isTagsDialogOpenObservable.value = true;
+                            const modalContent: ITagsModalContent =
+                                getTagsModalContent(
+                                    tableItem.name,
+                                    tableItem.branchesAndTags
+                                );
                             tagsRepoNameObservable.value =
-                                tableItem.name + ' Tags';
-                            tagsObservable.value = [];
-                            tableItem.branchesAndTags.forEach((branch) => {
-                                if (branch.name.includes('refs/tags')) {
-                                    tagsObservable.value.push(branch.name);
-                                }
-                            });
+                                modalContent.modalName;
+                            tagsObservable.value = modalContent.modalValues;
                         }}
                     />
                 </>
