@@ -47,6 +47,7 @@ export interface ISprintlyPageState {
 }
 
 const newReleaseBranchNamesObservable: Array<ObservableValue<string>> = [];
+const tagsModalKeyObservable: ObservableValue<string> = new ObservableValue<string>('');
 const isTagsDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const tagsRepoNameObservable: ObservableValue<string> =
@@ -258,14 +259,16 @@ export default class SprintlyPage extends React.Component<
                                         isTagsDialogOpenObservable
                                     }
                                     tagsRepoName={tagsRepoNameObservable}
+                                    tagsModalKey={tagsModalKeyObservable}
                                 >
                                     {(props: {
                                         isTagsDialogOpen: boolean;
                                         tagsRepoName: string;
+                                        tagsModalKey: string;
                                     }) => {
                                         return (
                                             <TagsModal
-                                                key={props.tagsRepoName}
+                                                key={props.tagsModalKey}
                                                 isTagsDialogOpen={
                                                     props.isTagsDialogOpen
                                                 }
@@ -434,6 +437,7 @@ function renderTagsCell(
                         subtle={true}
                         iconProps={{ iconName: 'Tag' }}
                         onClick={() => {
+                            tagsModalKeyObservable.value = new Date().getTime().toString();
                             isTagsDialogOpenObservable.value = true;
                             const modalContent: ITagsModalContent =
                                 getTagsModalContent(

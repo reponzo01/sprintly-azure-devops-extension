@@ -12,14 +12,12 @@ import {
     GitCommitDiffs,
     GitPullRequest,
     GitPullRequestSearchCriteria,
-    GitRef,
     GitRepository,
     GitRestClient,
     GitTargetVersionDescriptor,
     PullRequestStatus,
 } from 'azure-devops-extension-api/Git';
 import {
-    Deployment,
     EnvironmentStatus,
     Release,
     ReleaseDefinition,
@@ -43,7 +41,6 @@ import {
     List,
     ListItem,
     ListSelection,
-    SimpleList,
 } from 'azure-devops-ui/List';
 import {
     Splitter,
@@ -63,7 +60,6 @@ import {
     TitleSize,
 } from 'azure-devops-ui/Header';
 import { HeaderCommandBar } from 'azure-devops-ui/HeaderCommandBar';
-import { Dialog } from 'azure-devops-ui/Dialog';
 
 import * as Common from './SprintlyCommon';
 import { TagsModal, ITagsModalContent, getTagsModalContent } from './TagsModal';
@@ -78,6 +74,7 @@ export interface ISprintlyPostReleaseState {
     releaseBranchListSelectedItemObservable: ObservableValue<Common.IReleaseBranchInfo>;
 }
 
+const tagsModalKeyObservable: ObservableValue<string> = new ObservableValue<string>('');
 const isTagsDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const tagsRepoNameObservable: ObservableValue<string> =
@@ -721,6 +718,7 @@ export default class SprintlyPostRelease extends React.Component<
                                                     important: true,
                                                     text: 'View Tags',
                                                     onActivate: () => {
+                                                        tagsModalKeyObservable.value = new Date().getTime().toString();
                                                         isTagsDialogOpenObservable.value =
                                                             true;
                                                         const modalContent: ITagsModalContent =
@@ -1064,14 +1062,16 @@ export default class SprintlyPostRelease extends React.Component<
                                         isTagsDialogOpenObservable
                                     }
                                     tagsRepoName={tagsRepoNameObservable}
+                                    tagsModalKey={tagsModalKeyObservable}
                                 >
                                     {(props: {
                                         isTagsDialogOpen: boolean;
                                         tagsRepoName: string;
+                                        tagsModalKey: string;
                                     }) => {
                                         return (
                                             <TagsModal
-                                                key={props.tagsRepoName}
+                                                key={props.tagsModalKey}
                                                 isTagsDialogOpen={
                                                     props.isTagsDialogOpen
                                                 }
