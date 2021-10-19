@@ -94,7 +94,6 @@ const totalRepositoriesToProcessObservable: ObservableValue<number> =
 const releaseInfoObservable: ObservableArray<Common.IReleaseInfo> =
     new ObservableArray<Common.IReleaseInfo>();
 
-const useFilteredRepos: boolean = true;
 const repositoriesToProcessKey: string = 'repositories-to-process';
 let repositoriesToProcess: string[] = [];
 
@@ -155,61 +154,26 @@ export default class SprintlyPostRelease extends React.Component<
     private async initializeComponent(): Promise<void> {
         this.accessToken = await SDK.getAccessToken();
 
-        repositoriesToProcess = await Common.getSavedRepositoriesToProcess(
-            this.dataManager,
-            repositoriesToProcessKey
-        );
+        repositoriesToProcess = (
+            await Common.getSavedRepositoriesToProcess(
+                this.dataManager,
+                repositoriesToProcessKey
+            )
+        ).map((item) => item.originId);
         if (repositoriesToProcess.length > 0) {
             const filteredProjects = await Common.getFilteredProjects();
-            await this.loadRepositoriesDisplayState(filteredProjects);
+            this.loadRepositoriesDisplayState(filteredProjects);
             await this.loadPullRequests(filteredProjects);
-            await this.loadReleasesInfo(filteredProjects);
+            await this.loadReleaseDefinitions(filteredProjects);
+            await this.loadBuildDefinitions(filteredProjects);
         }
     }
 
-    private async loadReleasesInfo(
+    private async loadReleaseDefinitions(
         projects: TeamProjectReference[]
     ): Promise<void> {
         for (const project of projects) {
             this.accessToken = await Common.getOrRefreshToken(this.accessToken);
-            // Match up to each release. List will be big unless narrowed down by branch (sourceBranchFilter=refs/heads/release/2.0.0) and definition id
-            // axios
-            //     .get(
-            //         `https://vsrm.dev.azure.com/${this.organizationName}/${project.id}/_apis/release/releases?$expand=environments,artifacts&api-version=6.0`,
-            //         {
-            //             headers: {
-            //                 Authorization: `Bearer ${this.accessToken}`,
-            //             },
-            //         }
-            //     )
-            //     .then((res: AxiosResponse<never>) => {
-            //         const data: Release[] = res.data;
-            //         console.log('releases: ', res.data);
-            //         console.log('releases dto: ', data);
-            //     })
-            //     .catch((error: any) => {
-            //         console.error(error);
-            //         throw error;
-            //     });
-            // // Match up to all deployments. Large list unless narrowed. ($top), definition id
-            axios
-                .get(
-                    `https://vsrm.dev.azure.com/${this.organizationName}/${project.id}/_apis/release/deployments?maxStartedTime=2021-10-17&api-version=6.0`,
-                    {
-                        headers: {
-                            Authorization: `Bearer ${this.accessToken}`,
-                        },
-                    }
-                )
-                .then((res: AxiosResponse<never>) => {
-                    const data: Deployment[] = res.data;
-                    console.log('deployments: ', res.data);
-                    console.log('deployments dto: ', data);
-                })
-                .catch((error: any) => {
-                    console.error(error);
-                    throw error;
-                });
             axios
                 .get(
                     `https://vsrm.dev.azure.com/${this.organizationName}/${project.id}/_apis/release/definitions?$expand=artifacts&api-version=6.0`,
@@ -234,22 +198,14 @@ export default class SprintlyPostRelease extends React.Component<
                     console.error(error);
                     throw error;
                 });
-            // axios
-            //     .get(
-            //         `https://dev.azure.com/${this.organizationName}/${project.id}/_apis/pipelines?api-version=6.0-preview.1`,
-            //         {
-            //             headers: {
-            //                 Authorization: `Bearer ${this.accessToken}`,
-            //             },
-            //         }
-            //     )
-            //     .then((res: AxiosResponse<never>) => {
-            //         console.log('pipelines: ', res.data);
-            //     })
-            //     .catch((error: any) => {
-            //         console.error(error);
-            //         throw error;
-            //     });
+        }
+    }
+
+    private async loadBuildDefinitions(
+        projects: TeamProjectReference[]
+    ): Promise<void> {
+        for (const project of projects) {
+            this.accessToken = await Common.getOrRefreshToken(this.accessToken);
             axios
                 .get(
                     `https://dev.azure.com/${this.organizationName}/${project.id}/_apis/build/definitions?includeAllProperties=true&api-version=6.0`,
@@ -300,119 +256,53 @@ export default class SprintlyPostRelease extends React.Component<
     }
 
     // TODO: This function is repeated in SprintlyPage. See about extracting.
-    private async loadRepositoriesDisplayState(
+    private loadRepositoriesDisplayState(
         projects: TeamProjectReference[]
-    ): Promise<void> {
+    ): void {
         let reposExtended: Common.IGitRepositoryExtended[] = [];
         projects.forEach(async (project: TeamProjectReference) => {
-            const repos: GitRepository[] = await getClient(
-                GitRestClient
-            ).getRepositories(project.id);
-            let filteredRepos: GitRepository[] = repos;
-            if (useFilteredRepos) {
-                filteredRepos = repos.filter((repo: GitRepository) =>
-                    repositoriesToProcess.includes(repo.id)
+            const filteredRepos: GitRepository[] =
+                await Common.getFilteredProjectRepositories(
+                    project.id,
+                    repositoriesToProcess
                 );
-            }
 
             totalRepositoriesToProcessObservable.value = filteredRepos.length;
 
             for (const repo of filteredRepos) {
-                const branchesAndTags: GitRef[] = await this.getRepositoryInfo(
-                    repo.id
-                );
-
-                let hasDevelopBranch: boolean = false;
-                let hasMasterBranch: boolean = false;
-                let hasMainBranch: boolean = false;
-
-                for (const ref of branchesAndTags) {
-                    if (ref.name.includes('heads/develop')) {
-                        hasDevelopBranch = true;
-                    } else if (ref.name.includes('heads/master')) {
-                        hasMasterBranch = true;
-                    } else if (ref.name.includes('heads/main')) {
-                        hasMainBranch = true;
-                    }
-                }
+                const repositoryBranchInfo =
+                    await Common.getRepositoryBranchInfo(repo.id);
 
                 const processRepo: boolean =
-                    hasDevelopBranch && (hasMasterBranch || hasMainBranch);
-                if (processRepo === true) {
-                    //TODO: base = master/main, target = each release branch.
-                    // base = develop, target = each release branch.
-                    // if code changes, flag ahead of develop/main/master
+                    repositoryBranchInfo.hasDevelopBranch &&
+                    (repositoryBranchInfo.hasMasterBranch ||
+                        repositoryBranchInfo.hasMainBranch);
 
+                if (processRepo === true) {
                     const existingReleaseBranches: Common.IReleaseBranchInfo[] =
                         [];
                     let hasExistingRelease: boolean = false;
-                    for (const branch of branchesAndTags) {
+                    for (const branch of repositoryBranchInfo.branchesAndTags) {
                         if (branch.name.includes('heads/release')) {
                             hasExistingRelease = true;
 
-                            const branchName = branch.name.split('heads/')[1];
-
-                            // TODO: maybe extract this for readibility
-                            const masterMainBranchDescriptor: GitBaseVersionDescriptor =
-                                {
-                                    baseVersion: hasMasterBranch
-                                        ? 'master'
-                                        : 'main',
-                                    baseVersionOptions: 0,
-                                    baseVersionType: 0,
-                                    version: hasMasterBranch
-                                        ? 'master'
-                                        : 'main',
-                                    versionOptions: 0,
-                                    versionType: 0,
-                                };
-                            const developBranchDescriptor: GitBaseVersionDescriptor =
-                                {
-                                    baseVersion: 'develop',
-                                    baseVersionOptions: 0,
-                                    baseVersionType: 0,
-                                    version: 'develop',
-                                    versionOptions: 0,
-                                    versionType: 0,
-                                };
-                            const releaseBranchDescriptor: GitTargetVersionDescriptor =
-                                {
-                                    targetVersion: branchName,
-                                    targetVersionOptions: 0,
-                                    targetVersionType: 0,
-                                    version: branchName,
-                                    versionOptions: 0,
-                                    versionType: 0,
-                                };
-
-                            const masterMainCommitsDiff: GitCommitDiffs =
-                                await this.getCommitDiffs(
-                                    repo.id,
-                                    masterMainBranchDescriptor,
-                                    releaseBranchDescriptor
-                                );
-
-                            const developCommitsDiff: GitCommitDiffs =
-                                await this.getCommitDiffs(
-                                    repo.id,
-                                    developBranchDescriptor,
-                                    releaseBranchDescriptor
-                                );
-
-                            const aheadOfMasterMain =
-                                this.codeChangesInCommitDiffs(
-                                    masterMainCommitsDiff
-                                );
-                            const aheadOfDevelop =
-                                this.codeChangesInCommitDiffs(
-                                    developCommitsDiff
-                                );
+                            const releaseBranchName =
+                                branch.name.split('heads/')[1];
 
                             const branchInfo: Common.IReleaseBranchInfo = {
                                 targetBranch: branch,
                                 repositoryId: repo.id,
-                                aheadOfDevelop,
-                                aheadOfMasterMain,
+                                aheadOfDevelop:
+                                    await this.isBranchAheadOfDevelop(
+                                        releaseBranchName,
+                                        repo.id
+                                    ),
+                                aheadOfMasterMain:
+                                    await this.isBranchAheadOMasterMain(
+                                        repositoryBranchInfo,
+                                        releaseBranchName,
+                                        repo.id
+                                    ),
                             };
 
                             for (const pullRequest of this.state.pullRequests) {
@@ -461,29 +351,17 @@ export default class SprintlyPostRelease extends React.Component<
                         webUrl: repo.webUrl,
                         createRelease: false,
                         hasExistingRelease,
-                        hasMainBranch,
+                        hasMainBranch: repositoryBranchInfo.hasMainBranch,
                         existingReleaseBranches,
-                        branchesAndTags,
+                        branchesAndTags: repositoryBranchInfo.branchesAndTags,
                     });
                 }
             }
 
-            // for (var x = 0; x < 3; x++) {
-            //     reposExtended = reposExtended.concat(reposExtended);
-            // }
-
-            if (reposExtended.length > 0) {
-                reposExtended = reposExtended.sort(
-                    (
-                        a: Common.IGitRepositoryExtended,
-                        b: Common.IGitRepositoryExtended
-                    ) => {
-                        return a.name.localeCompare(b.name);
-                    }
-                );
-            }
             this.setState({
-                repositories: new ArrayItemProvider(reposExtended),
+                repositories: new ArrayItemProvider(
+                    Common.sortRepositoryList(reposExtended)
+                ),
             });
 
             bindSelectionToObservable(
@@ -495,44 +373,68 @@ export default class SprintlyPostRelease extends React.Component<
         });
     }
 
-    // TODO: This function is repeated in SprintlyPage. See about extracting.
-    private async getRepositoryInfo(repoId: string): Promise<GitRef[]> {
-        return await getClient(GitRestClient).getRefs(
-            repoId,
-            undefined,
-            undefined,
-            false,
-            true,
-            undefined,
-            true,
-            true,
-            undefined
+    private async isBranchAheadOfDevelop(
+        branchName: string,
+        repositoryId: string
+    ): Promise<boolean> {
+        const developBranchDescriptor: GitBaseVersionDescriptor = {
+            baseVersion: 'develop',
+            baseVersionOptions: 0,
+            baseVersionType: 0,
+            version: 'develop',
+            versionOptions: 0,
+            versionType: 0,
+        };
+        const releaseBranchDescriptor: GitTargetVersionDescriptor = {
+            targetVersion: branchName,
+            targetVersionOptions: 0,
+            targetVersionType: 0,
+            version: branchName,
+            versionOptions: 0,
+            versionType: 0,
+        };
+
+        const developCommitsDiff: GitCommitDiffs = await Common.getCommitDiffs(
+            repositoryId,
+            developBranchDescriptor,
+            releaseBranchDescriptor
         );
+
+        return Common.codeChangesInCommitDiffs(developCommitsDiff);
     }
 
-    // TODO: This function is repeated in SprintlyPage. See about extracting.
-    private async getCommitDiffs(
-        repoId: string,
-        baseVersion: GitBaseVersionDescriptor,
-        targetVersion: GitTargetVersionDescriptor
-    ): Promise<GitCommitDiffs> {
-        return await getClient(GitRestClient).getCommitDiffs(
-            repoId,
-            undefined,
-            undefined,
-            1000,
-            0,
-            baseVersion,
-            targetVersion
-        );
-    }
+    private async isBranchAheadOMasterMain(
+        repositoryBranchInfo: Common.IRepositoryBranchInfo,
+        branchName: string,
+        repositoryId: string
+    ): Promise<boolean> {
+        const masterMainBranchDescriptor: GitBaseVersionDescriptor = {
+            baseVersion: repositoryBranchInfo.hasMasterBranch
+                ? 'master'
+                : 'main',
+            baseVersionOptions: 0,
+            baseVersionType: 0,
+            version: repositoryBranchInfo.hasMasterBranch ? 'master' : 'main',
+            versionOptions: 0,
+            versionType: 0,
+        };
+        const releaseBranchDescriptor: GitTargetVersionDescriptor = {
+            targetVersion: branchName,
+            targetVersionOptions: 0,
+            targetVersionType: 0,
+            version: branchName,
+            versionOptions: 0,
+            versionType: 0,
+        };
 
-    // TODO: This function is repeated in SprintlyPage. See about extracting.
-    private codeChangesInCommitDiffs(commitsDiff: GitCommitDiffs): boolean {
-        return (
-            Object.keys(commitsDiff.changeCounts).length > 0 ||
-            commitsDiff.changes.length > 0
-        );
+        const masterMainCommitsDiff: GitCommitDiffs =
+            await Common.getCommitDiffs(
+                repositoryId,
+                masterMainBranchDescriptor,
+                releaseBranchDescriptor
+            );
+
+        return Common.codeChangesInCommitDiffs(masterMainCommitsDiff);
     }
 
     private async selectRepository(): Promise<void> {

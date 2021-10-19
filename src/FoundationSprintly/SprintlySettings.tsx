@@ -21,20 +21,20 @@ import { Observer } from 'azure-devops-ui/Observer';
 import { DropdownMultiSelection } from 'azure-devops-ui/Utilities/DropdownSelection';
 import { ISelectionRange } from 'azure-devops-ui/Utilities/Selection';
 
-import { IAllowedEntity, getOrRefreshToken } from './SprintlyCommon';
+import * as Common from './SprintlyCommon';
 
 const allowedUserGroupsKey: string = 'allowed-user-groups';
 const allowedUsersKey: string = 'allowed-users';
 const repositoriesToProcessKey: string = 'repositories-to-process';
 
 export interface ISprintlySettingsState {
-    dataAllowedUserGroups?: IAllowedEntity[];
-    dataAllowedUsers?: IAllowedEntity[];
-    dataRepositoriesToProcess?: IAllowedEntity[];
+    dataAllowedUserGroups?: Common.IAllowedEntity[];
+    dataAllowedUsers?: Common.IAllowedEntity[];
+    dataRepositoriesToProcess?: Common.IAllowedEntity[];
 
-    persistedAllowedUserGroups?: IAllowedEntity[];
-    persistedAllowedUsers?: IAllowedEntity[];
-    persistedRepositoriesToProcess?: IAllowedEntity[];
+    persistedAllowedUserGroups?: Common.IAllowedEntity[];
+    persistedAllowedUsers?: Common.IAllowedEntity[];
+    persistedRepositoriesToProcess?: Common.IAllowedEntity[];
 
     ready?: boolean;
 }
@@ -57,9 +57,9 @@ export default class SprintlySettings extends React.Component<
     private repositoriesToProcessSelection: DropdownMultiSelection =
         new DropdownMultiSelection();
 
-    private allUserGroups: IAllowedEntity[] = [];
-    private allUsers: IAllowedEntity[] = [];
-    private allRepositories: IAllowedEntity[] = [];
+    private allUserGroups: Common.IAllowedEntity[] = [];
+    private allUsers: Common.IAllowedEntity[] = [];
+    private allRepositories: Common.IAllowedEntity[] = [];
 
     private dataManager: IExtensionDataManager;
     private accessToken: string = '';
@@ -83,9 +83,9 @@ export default class SprintlySettings extends React.Component<
     private async initializeComponent(): Promise<void> {
         this.accessToken = await SDK.getAccessToken();
 
-        await this.getGroups();
-        await this.getUsers();
-        await this.getRepositories();
+        await this.loadGroups();
+        await this.loadUsers();
+        await this.loadRepositories();
 
         this.setState({ ready: true });
 
@@ -94,12 +94,9 @@ export default class SprintlySettings extends React.Component<
         this.loadRepositoriesToProcess();
     }
 
-    private async getGraphResource(
-        resouce: string,
-        callback: (data: any) => void
-    ): Promise<void> {
-        this.accessToken = await getOrRefreshToken(this.accessToken);
-        axios
+    private async getGraphResource(resouce: string): Promise<any> {
+        this.accessToken = await Common.getOrRefreshToken(this.accessToken);
+        const response = await axios
             .get(
                 `https://vssps.dev.azure.com/${this.organizationName}/_apis/graph/${resouce}`,
                 {
@@ -108,89 +105,64 @@ export default class SprintlySettings extends React.Component<
                     },
                 }
             )
-            .then((res: AxiosResponse<never>) => {
-                callback(res.data);
-            })
             .catch((error: any) => {
                 console.error(error);
                 throw error;
             });
+        return response.data;
     }
 
-    private async getGroups(): Promise<void> {
-        return new Promise(
-            (resolve: (value: void | PromiseLike<void>) => void) => {
-                this.getGraphResource('groups', (data: any) => {
-                    this.allUserGroups = [];
-                    for (const group of data.value) {
-                        this.allUserGroups.push({
-                            displayName: group.displayName,
-                            originId: group.originId,
-                            descriptor: group.descriptor,
-                        });
-                    }
-                    resolve();
+    private async loadGroups(): Promise<void> {
+        this.allUserGroups = [];
+        const data = await this.getGraphResource('groups');
+        for (const group of data.value) {
+            this.allUserGroups.push({
+                displayName: group.displayName,
+                originId: group.originId,
+                descriptor: group.descriptor,
+            });
+        }
+    }
+
+    private async loadUsers(): Promise<void> {
+        this.allUsers = [];
+        const data = await this.getGraphResource('users');
+        for (const user of data.value) {
+            this.allUsers.push({
+                displayName: user.displayName,
+                originId: user.originId,
+                descriptor: user.descriptor,
+            });
+        }
+    }
+
+    private async loadRepositories(): Promise<void> {
+        this.allRepositories = [];
+        const filteredProjects: TeamProjectReference[] =
+            await Common.getFilteredProjects();
+        for (const project of filteredProjects) {
+            const repos: GitRepository[] = await getClient(
+                GitRestClient
+            ).getRepositories(project.id);
+            for (const repo of repos) {
+                this.allRepositories.push({
+                    originId: repo.id,
+                    displayName: repo.name,
                 });
             }
-        );
-    }
-
-    private async getUsers(): Promise<void> {
-        return new Promise(
-            (resolve: (value: void | PromiseLike<void>) => void) => {
-                this.getGraphResource('users', (data: any) => {
-                    this.allUsers = [];
-                    for (const user of data.value) {
-                        this.allUsers.push({
-                            displayName: user.displayName,
-                            originId: user.originId,
-                            descriptor: user.descriptor,
-                        });
-                    }
-                    resolve();
-                });
-            }
-        );
-    }
-
-    private async getRepositories(): Promise<void> {
-        return new Promise(
-            async (resolve: (value: void | PromiseLike<void>) => void) => {
-                this.allRepositories = [];
-                const projects: TeamProjectReference[] = await getClient(
-                    CoreRestClient
-                ).getProjects();
-                const filteredProjects: TeamProjectReference[] =
-                    projects.filter((project: TeamProjectReference) => {
-                        return (
-                            project.name === 'Portfolio' ||
-                            project.name === 'Sample Project'
-                        );
-                    });
-                for (const project of filteredProjects) {
-                    const repos: GitRepository[] = await getClient(
-                        GitRestClient
-                    ).getRepositories(project.id);
-                    repos.forEach((repo: GitRepository) => {
-                        this.allRepositories.push({
-                            originId: repo.id,
-                            displayName: repo.name,
-                        });
-                    });
-                }
-                resolve();
-            }
-        );
+        }
     }
 
     private loadAllowedUserGroupsUsers(): void {
-        this.dataManager!.getValue<IAllowedEntity[]>(allowedUserGroupsKey).then(
-            (userGroups: IAllowedEntity[]) => {
+        this.dataManager!.getValue<Common.IAllowedEntity[]>(
+            allowedUserGroupsKey
+        ).then(
+            (userGroups: Common.IAllowedEntity[]) => {
                 this.userGroupsSelection.clear();
                 if (userGroups) {
                     for (const selectedUserGroup of userGroups) {
                         const idx: number = this.allUserGroups.findIndex(
-                            (item: IAllowedEntity) =>
+                            (item: Common.IAllowedEntity) =>
                                 item.originId === selectedUserGroup.originId
                         );
                         if (idx >= 0) {
@@ -214,13 +186,15 @@ export default class SprintlySettings extends React.Component<
     }
 
     private loadAllowedUsers(): void {
-        this.dataManager!.getValue<IAllowedEntity[]>(allowedUsersKey).then(
-            (users: IAllowedEntity[]) => {
+        this.dataManager!.getValue<Common.IAllowedEntity[]>(
+            allowedUsersKey
+        ).then(
+            (users: Common.IAllowedEntity[]) => {
                 this.usersSelection.clear();
                 if (users) {
                     for (const selectedUser of users) {
                         const idx: number = this.allUsers.findIndex(
-                            (user: IAllowedEntity) =>
+                            (user: Common.IAllowedEntity) =>
                                 user.originId === selectedUser.originId
                         );
                         if (idx >= 0) {
@@ -243,66 +217,61 @@ export default class SprintlySettings extends React.Component<
         );
     }
 
-    private loadRepositoriesToProcess(): void {
-        this.dataManager!.getValue<IAllowedEntity[]>(repositoriesToProcessKey, {
-            scopeType: 'User',
-        }).then(
-            (repositories: IAllowedEntity[]) => {
-                this.repositoriesToProcessSelection.clear();
-                if (repositories) {
-                    for (const selectedRepository of repositories) {
-                        const idx: number = this.allRepositories.findIndex(
-                            (repository: IAllowedEntity) =>
-                                repository.originId ===
-                                selectedRepository.originId
-                        );
-                        if (idx >= 0) {
-                            this.repositoriesToProcessSelection.select(idx);
-                        }
-                    }
-                    this.setState({
-                        dataRepositoriesToProcess: repositories,
-                        persistedRepositoriesToProcess: repositories,
-                        ready: true,
-                    });
+    private async loadRepositoriesToProcess(): Promise<void> {
+        const repositories: Common.IAllowedEntity[] =
+            await Common.getSavedRepositoriesToProcess(
+                this.dataManager,
+                repositoriesToProcessKey
+            );
+        this.repositoriesToProcessSelection.clear();
+        if (repositories) {
+            for (const selectedRepository of repositories) {
+                const idx: number = this.allRepositories.findIndex(
+                    (repository: Common.IAllowedEntity) =>
+                        repository.originId === selectedRepository.originId
+                );
+                if (idx >= 0) {
+                    this.repositoriesToProcessSelection.select(idx);
                 }
-            },
-            () => {
-                this.setState({
-                    dataRepositoriesToProcess: [],
-                    ready: true,
-                });
             }
-        );
+            this.setState({
+                dataRepositoriesToProcess: repositories,
+                persistedRepositoriesToProcess: repositories,
+                ready: true,
+            });
+        } else {
+            this.setState({
+                dataRepositoriesToProcess: [],
+                ready: true,
+            });
+        }
     }
 
     private onSaveData = (): void => {
         this.setState({ ready: false });
 
-        const userGroupsSelectedArray: IAllowedEntity[] =
+        const userGroupsSelectedArray: Common.IAllowedEntity[] =
             this.setSelectionRange(
                 this.userGroupsSelection.value,
                 this.allUserGroups
             );
-        const usersSelectedArray: IAllowedEntity[] = this.setSelectionRange(
-            this.usersSelection.value,
-            this.allUsers
-        );
-        const repositoriesSelectedArray: IAllowedEntity[] =
+        const usersSelectedArray: Common.IAllowedEntity[] =
+            this.setSelectionRange(this.usersSelection.value, this.allUsers);
+        const repositoriesSelectedArray: Common.IAllowedEntity[] =
             this.setSelectionRange(
                 this.repositoriesToProcessSelection.value,
                 this.allRepositories
             );
 
-        this.dataManager!.setValue<IAllowedEntity[]>(
+        this.dataManager!.setValue<Common.IAllowedEntity[]>(
             allowedUserGroupsKey,
             userGroupsSelectedArray || []
         ).then(() => {
-            this.dataManager!.setValue<IAllowedEntity[]>(
+            this.dataManager!.setValue<Common.IAllowedEntity[]>(
                 allowedUsersKey,
                 usersSelectedArray || []
             ).then(() => {
-                this.dataManager!.setValue<IAllowedEntity[]>(
+                this.dataManager!.setValue<Common.IAllowedEntity[]>(
                     repositoriesToProcessKey,
                     repositoriesSelectedArray || [],
                     { scopeType: 'User' }
@@ -330,11 +299,11 @@ export default class SprintlySettings extends React.Component<
 
     private setSelectionRange(
         selectionRange: ISelectionRange[],
-        dataArray: IAllowedEntity[]
-    ): IAllowedEntity[] {
-        const selectedArray: IAllowedEntity[] = [];
+        dataArray: Common.IAllowedEntity[]
+    ): Common.IAllowedEntity[] {
+        const selectedArray: Common.IAllowedEntity[] = [];
         for (const rng of selectionRange) {
-            const sliced: IAllowedEntity[] = dataArray.slice(
+            const sliced: Common.IAllowedEntity[] = dataArray.slice(
                 rng.beginIndex,
                 rng.endIndex + 1
             );

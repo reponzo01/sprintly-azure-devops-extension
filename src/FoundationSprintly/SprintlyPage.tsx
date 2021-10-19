@@ -91,7 +91,6 @@ const columns: any = [
     },
 ];
 
-const useFilteredRepos: boolean = true;
 const repositoriesToProcessKey: string = 'repositories-to-process';
 let repositoriesToProcess: string[] = [];
 
@@ -119,92 +118,57 @@ export default class SprintlyPage extends React.Component<
     }
 
     private async initializeComponent(): Promise<void> {
-        repositoriesToProcess = await Common.getSavedRepositoriesToProcess(
-            this.dataManager,
-            repositoriesToProcessKey
-        );
+        repositoriesToProcess = (
+            await Common.getSavedRepositoriesToProcess(
+                this.dataManager,
+                repositoriesToProcessKey
+            )
+        ).map((item) => item.originId);
         if (repositoriesToProcess.length > 0) {
-            await this.loadRepositoriesDisplayState(
+            this.loadRepositoriesDisplayState(
                 await Common.getFilteredProjects()
             );
         }
     }
 
-    private async loadRepositoriesDisplayState(
+    private loadRepositoriesDisplayState(
         projects: TeamProjectReference[]
-    ): Promise<void> {
+    ): void {
         let reposExtended: Common.IGitRepositoryExtended[] = [];
         projects.forEach(async (project: TeamProjectReference) => {
-            const repos: GitRepository[] = await getClient(
-                GitRestClient
-            ).getRepositories(project.id);
-            let filteredRepos: GitRepository[] = repos;
-            if (useFilteredRepos) {
-                filteredRepos = repos.filter((repo: GitRepository) =>
-                    repositoriesToProcess.includes(repo.id)
+            const filteredRepos: GitRepository[] =
+                await Common.getFilteredProjectRepositories(
+                    project.id,
+                    repositoriesToProcess
                 );
-            }
 
             totalRepositoriesToProcessObservable.value = filteredRepos.length;
 
             for (const repo of filteredRepos) {
-                const branchesAndTags: GitRef[] = await this.getRepositoryInfo(
-                    repo.id
-                );
-
-                let hasDevelopBranch: boolean = false;
-                let hasMasterBranch: boolean = false;
-                let hasMainBranch: boolean = false;
-
-                for (const ref of branchesAndTags) {
-                    if (ref.name.includes('heads/develop')) {
-                        hasDevelopBranch = true;
-                    } else if (ref.name.includes('heads/master')) {
-                        hasMasterBranch = true;
-                    } else if (ref.name.includes('heads/main')) {
-                        hasMainBranch = true;
-                    }
-                }
+                const repositoryBranchInfo =
+                    await Common.getRepositoryBranchInfo(repo.id);
 
                 const processRepo: boolean =
-                    hasDevelopBranch && (hasMasterBranch || hasMainBranch);
+                    repositoryBranchInfo.hasDevelopBranch &&
+                    (repositoryBranchInfo.hasMasterBranch ||
+                        repositoryBranchInfo.hasMainBranch);
+
                 if (processRepo === true) {
-                    const baseVersion: GitBaseVersionDescriptor = {
-                        baseVersion: hasMasterBranch ? 'master' : 'main',
-                        baseVersionOptions: 0,
-                        baseVersionType: 0,
-                        version: hasMasterBranch ? 'master' : 'main',
-                        versionOptions: 0,
-                        versionType: 0,
-                    };
-                    const targetVersion: GitTargetVersionDescriptor = {
-                        targetVersion: 'develop',
-                        targetVersionOptions: 0,
-                        targetVersionType: 0,
-                        version: 'develop',
-                        versionOptions: 0,
-                        versionType: 0,
-                    };
-
-                    const commitsDiff: GitCommitDiffs =
-                        await this.getCommitDiffs(
-                            repo.id,
-                            baseVersion,
-                            targetVersion
-                        );
-
                     let createRelease: boolean =
-                        this.codeChangesInCommitDiffs(commitsDiff);
+                        await this.isDevelopAheadOfMasterMain(
+                            repositoryBranchInfo,
+                            repo.id
+                        );
 
                     const existingReleaseBranches: Common.IReleaseBranchInfo[] =
                         [];
                     let hasExistingRelease: boolean = false;
-                    for (const branch of branchesAndTags) {
+                    for (const branch of repositoryBranchInfo.branchesAndTags) {
                         if (branch.name.includes('heads/release')) {
                             hasExistingRelease = true;
                             existingReleaseBranches.push({
                                 targetBranch: branch,
-                                repositoryId: repo.id
+                                repositoryId: repo.id,
                             });
                         }
                     }
@@ -225,63 +189,51 @@ export default class SprintlyPage extends React.Component<
                         webUrl: repo.webUrl,
                         createRelease,
                         hasExistingRelease,
-                        hasMainBranch,
+                        hasMainBranch: repositoryBranchInfo.hasMainBranch,
                         existingReleaseBranches,
-                        branchesAndTags,
+                        branchesAndTags: repositoryBranchInfo.branchesAndTags,
                     });
                 }
             }
-            if (reposExtended.length > 0) {
-                reposExtended = reposExtended.sort(
-                    (
-                        a: Common.IGitRepositoryExtended,
-                        b: Common.IGitRepositoryExtended
-                    ) => {
-                        return a.name.localeCompare(b.name);
-                    }
-                );
-            }
+
             this.setState({
-                repositories: new ArrayItemProvider(reposExtended),
+                repositories: new ArrayItemProvider(
+                    Common.sortRepositoryList(reposExtended)
+                ),
             });
         });
     }
 
-    private async getRepositoryInfo(repoId: string): Promise<GitRef[]> {
-        return await getClient(GitRestClient).getRefs(
-            repoId,
-            undefined,
-            undefined,
-            false,
-            false,
-            undefined,
-            true,
-            false,
-            undefined
-        );
-    }
+    private async isDevelopAheadOfMasterMain(
+        repositoryBranchInfo: Common.IRepositoryBranchInfo,
+        repositoryId: string
+    ): Promise<boolean> {
+        const baseVersion: GitBaseVersionDescriptor = {
+            baseVersion: repositoryBranchInfo.hasMasterBranch
+                ? 'master'
+                : 'main',
+            baseVersionOptions: 0,
+            baseVersionType: 0,
+            version: repositoryBranchInfo.hasMasterBranch ? 'master' : 'main',
+            versionOptions: 0,
+            versionType: 0,
+        };
+        const targetVersion: GitTargetVersionDescriptor = {
+            targetVersion: 'develop',
+            targetVersionOptions: 0,
+            targetVersionType: 0,
+            version: 'develop',
+            versionOptions: 0,
+            versionType: 0,
+        };
 
-    private async getCommitDiffs(
-        repoId: string,
-        baseVersion: GitBaseVersionDescriptor,
-        targetVersion: GitTargetVersionDescriptor
-    ): Promise<GitCommitDiffs> {
-        return await getClient(GitRestClient).getCommitDiffs(
-            repoId,
-            undefined,
-            undefined,
-            1000,
-            0,
+        const commitsDiff: GitCommitDiffs = await Common.getCommitDiffs(
+            repositoryId,
             baseVersion,
             targetVersion
         );
-    }
 
-    private codeChangesInCommitDiffs(commitsDiff: GitCommitDiffs): boolean {
-        return (
-            Object.keys(commitsDiff.changeCounts).length > 0 ||
-            commitsDiff.changes.length > 0
-        );
+        return Common.codeChangesInCommitDiffs(commitsDiff);
     }
 
     public render(): JSX.Element {
