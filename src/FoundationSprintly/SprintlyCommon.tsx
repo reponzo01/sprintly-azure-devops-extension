@@ -4,12 +4,14 @@ import {
     GitBaseVersionDescriptor,
     GitCommitDiffs,
     GitPullRequest,
+    GitPullRequestSearchCriteria,
     GitRef,
     GitRepository,
     GitRestClient,
     GitTargetVersionDescriptor,
+    PullRequestStatus,
 } from 'azure-devops-extension-api/Git';
-import { Release } from 'azure-devops-extension-api/Release';
+import { Release, ReleaseDefinition } from 'azure-devops-extension-api/Release';
 import {
     CommonServiceIds,
     getClient,
@@ -21,36 +23,39 @@ import {
     CoreRestClient,
     TeamProjectReference,
 } from 'azure-devops-extension-api/Core';
+import axios, { AxiosResponse } from 'axios';
+import { BuildDefinition } from 'azure-devops-extension-api/Build';
+import { ObservableArray } from 'azure-devops-ui/Core/Observable';
 
 export const primaryColor: IColor = {
     red: 0,
     green: 120,
     blue: 114,
-}
+};
 
 export const primaryColorShade30: IColor = {
     red: 0,
     green: 69,
     blue: 120,
-}
+};
 
 export const redColor: IColor = {
     red: 191,
     green: 65,
     blue: 65,
-}
+};
 
 export const greenColor: IColor = {
     red: 109,
     green: 210,
     blue: 109,
-}
+};
 
 export const orangeColor: IColor = {
     red: 225,
     green: 172,
     blue: 74,
-}
+};
 
 export interface IAllowedEntity {
     displayName: string;
@@ -235,20 +240,194 @@ export async function getRepositoryBranchInfo(
         releaseBranches,
         hasDevelopBranch,
         hasMasterBranch,
-        hasMainBranch
-    }
+        hasMainBranch,
+    };
 }
 
-export function sortRepositoryList(repositoryList: IGitRepositoryExtended[]): IGitRepositoryExtended[] {
+export function sortRepositoryList(
+    repositoryList: IGitRepositoryExtended[]
+): IGitRepositoryExtended[] {
     if (repositoryList.length > 0) {
         return repositoryList.sort(
-            (
-                a: IGitRepositoryExtended,
-                b: IGitRepositoryExtended
-            ) => {
+            (a: IGitRepositoryExtended, b: IGitRepositoryExtended) => {
                 return a.name.localeCompare(b.name);
             }
         );
     }
     return repositoryList;
+}
+
+export async function getBranchReleaseInfo(
+    releaseInfoObservable: ObservableArray<IReleaseInfo>,
+    buildDefinitionForRepo: BuildDefinition,
+    releaseDefinitions: ReleaseDefinition[],
+    releaseBranch: IReleaseBranchInfo,
+    projectId: string,
+    repositoryId: string,
+    organizationName: string,
+    accessToken: string
+): Promise<void> {
+    const buildDefinitionId: number = buildDefinitionForRepo.id;
+    let releaseDefinitionId: number = -1;
+    for (const releaseDefinition of releaseDefinitions) {
+        for (const artifact of releaseDefinition.artifacts) {
+            if (artifact.isPrimary) {
+                const releaseDefBuildDef =
+                    artifact.definitionReference['definition'];
+                if (releaseDefBuildDef) {
+                    if (
+                        releaseDefBuildDef.id === buildDefinitionId.toString()
+                    ) {
+                        releaseDefinitionId = releaseDefinition.id;
+                        break;
+                    }
+                }
+            }
+        }
+        if (releaseDefinitionId > -1) break;
+    }
+    if (releaseDefinitionId > -1) {
+        await getReleasesForReleaseBranch(
+            releaseInfoObservable,
+            releaseBranch,
+            releaseDefinitionId,
+            projectId,
+            repositoryId,
+            organizationName,
+            accessToken
+        );
+    }
+}
+
+export async function getReleasesForReleaseBranch(
+    releaseInfoObservable: ObservableArray<IReleaseInfo>,
+    releaseBranch: IReleaseBranchInfo,
+    releaseDefinitionId: number,
+    projectId: string,
+    repositoryId: string,
+    organizationName: string,
+    accessToken: string
+): Promise<void> {
+    accessToken = await getOrRefreshToken(accessToken);
+    axios
+        .get(
+            `https://vsrm.dev.azure.com/${organizationName}/${projectId}/_apis/release/releases?$expand=environments&sourceBranchFilter=${releaseBranch.targetBranch.name}&definitionId=${releaseDefinitionId}&api-version=6.0`,
+            {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                },
+            }
+        )
+        .then((res: AxiosResponse<never>) => {
+            const data: { count: number; value: Release[] } = res.data;
+            if (data && data.count > 0) {
+                const existingIndex: number =
+                    releaseInfoObservable.value.findIndex(
+                        (item) =>
+                            item.releaseBranch.targetBranch.name ===
+                            releaseBranch.targetBranch.name
+                    );
+                const releaseInfo: IReleaseInfo = {
+                    repositoryId:
+                        repositoryId,
+                    releaseBranch: releaseBranch,
+                    releases: data.value,
+                };
+                if (existingIndex < 0) {
+                    releaseInfoObservable.push(releaseInfo);
+                } else {
+                    releaseInfoObservable.change(existingIndex, releaseInfo);
+                }
+            }
+        })
+        .catch((error: any) => {
+            console.error(error);
+            throw error;
+        });
+}
+
+export async function getReleaseDefinitions(
+    projects: TeamProjectReference[],
+    organizationName: string,
+    accessToken: string
+): Promise<ReleaseDefinition[]> {
+    for (const project of projects) {
+        accessToken = await getOrRefreshToken(accessToken);
+        const response = await axios
+            .get(
+                `https://vsrm.dev.azure.com/${organizationName}/${project.id}/_apis/release/definitions?$expand=artifacts&api-version=6.0`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                    },
+                }
+            )
+            .catch((error: any) => {
+                console.error(error);
+                throw error;
+            });
+
+        const data: { count: number; value: ReleaseDefinition[] } =
+            response.data;
+        if (data && data.count > 0) {
+            return data.value;
+        }
+        console.log('release definitions: ', data.value);
+    }
+    return [];
+}
+
+export async function getBuildDefinitions(
+    projects: TeamProjectReference[],
+    organizationName: string,
+    accessToken: string
+): Promise<BuildDefinition[]> {
+    for (const project of projects) {
+        accessToken = await getOrRefreshToken(accessToken);
+        const response = await axios
+            .get(
+                `https://dev.azure.com/${organizationName}/${project.id}/_apis/build/definitions?includeAllProperties=true&api-version=6.0`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                    },
+                }
+            )
+            .catch((error: any) => {
+                console.error(error);
+                throw error;
+            });
+
+        const data: { count: number; value: BuildDefinition[] } = response.data;
+        if (data && data.count > 0) {
+            return data.value;
+        }
+        console.log('build definitions: ', data.value);
+    }
+    return [];
+}
+
+export async function getPullRequests(
+    projects: TeamProjectReference[]
+): Promise<GitPullRequest[]> {
+    // Statuses:
+    // 1 = Queued, 2 = Conflicts, 3 = Premerge Succeeded, 4 = RejectedByPolicy, 5 = Failure
+    let pullRequests: GitPullRequest[] = [];
+    const pullRequestCriteria: GitPullRequestSearchCriteria = {
+        includeLinks: false,
+        creatorId: '',
+        repositoryId: '',
+        reviewerId: '',
+        sourceRefName: '',
+        sourceRepositoryId: '',
+        status: PullRequestStatus.Active,
+        targetRefName: '',
+    };
+    for (const project of projects) {
+        const pullRequestsResponse: GitPullRequest[] = await getClient(
+            GitRestClient
+        ).getPullRequestsByProject(project.id, pullRequestCriteria);
+        pullRequests = pullRequests.concat(pullRequestsResponse);
+    }
+    return pullRequests;
 }

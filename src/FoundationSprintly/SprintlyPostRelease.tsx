@@ -74,7 +74,8 @@ export interface ISprintlyPostReleaseState {
     releaseBranchListSelectedItemObservable: ObservableValue<Common.IReleaseBranchInfo>;
 }
 
-const tagsModalKeyObservable: ObservableValue<string> = new ObservableValue<string>('');
+const tagsModalKeyObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
 const isTagsDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const tagsRepoNameObservable: ObservableValue<string> =
@@ -156,95 +157,21 @@ export default class SprintlyPostRelease extends React.Component<
         if (repositoriesToProcess.length > 0) {
             const filteredProjects = await Common.getFilteredProjects();
             this.loadRepositoriesDisplayState(filteredProjects);
-            await this.loadPullRequests(filteredProjects);
-            await this.loadReleaseDefinitions(filteredProjects);
-            await this.loadBuildDefinitions(filteredProjects);
-        }
-    }
-
-    private async loadReleaseDefinitions(
-        projects: TeamProjectReference[]
-    ): Promise<void> {
-        for (const project of projects) {
-            this.accessToken = await Common.getOrRefreshToken(this.accessToken);
-            axios
-                .get(
-                    `https://vsrm.dev.azure.com/${this.organizationName}/${project.id}/_apis/release/definitions?$expand=artifacts&api-version=6.0`,
-                    {
-                        headers: {
-                            Authorization: `Bearer ${this.accessToken}`,
-                        },
-                    }
-                )
-                .then((res: AxiosResponse<never>) => {
-                    const data: { count: number; value: ReleaseDefinition[] } =
-                        res.data;
-                    if (data && data.count > 0) {
-                        this.releaseDefinitions = data.value;
-                    }
-                    console.log(
-                        'release definitions: ',
-                        this.releaseDefinitions
-                    );
-                })
-                .catch((error: any) => {
-                    console.error(error);
-                    throw error;
-                });
-        }
-    }
-
-    private async loadBuildDefinitions(
-        projects: TeamProjectReference[]
-    ): Promise<void> {
-        for (const project of projects) {
-            this.accessToken = await Common.getOrRefreshToken(this.accessToken);
-            axios
-                .get(
-                    `https://dev.azure.com/${this.organizationName}/${project.id}/_apis/build/definitions?includeAllProperties=true&api-version=6.0`,
-                    {
-                        headers: {
-                            Authorization: `Bearer ${this.accessToken}`,
-                        },
-                    }
-                )
-                .then((res: AxiosResponse<never>) => {
-                    const data: { count: number; value: BuildDefinition[] } =
-                        res.data;
-                    if (data && data.count > 0) {
-                        this.buildDefinitions = data.value;
-                    }
-                    console.log('build definitions: ', this.buildDefinitions);
-                })
-                .catch((error: any) => {
-                    console.error(error);
-                    throw error;
-                });
-        }
-    }
-
-    private async loadPullRequests(
-        projects: TeamProjectReference[]
-    ): Promise<void> {
-        // Statuses:
-        // 1 = Queued, 2 = Conflicts, 3 = Premerge Succeeded, 4 = RejectedByPolicy, 5 = Failure
-        const pullRequestCriteria: GitPullRequestSearchCriteria = {
-            includeLinks: false,
-            creatorId: '',
-            repositoryId: '',
-            reviewerId: '',
-            sourceRefName: '',
-            sourceRepositoryId: '',
-            status: PullRequestStatus.Active,
-            targetRefName: '',
-        };
-        for (const project of projects) {
-            const pullRequests: GitPullRequest[] = await getClient(
-                GitRestClient
-            ).getPullRequestsByProject(project.id, pullRequestCriteria);
             this.setState({
-                pullRequests: this.state.pullRequests.concat(pullRequests),
+                pullRequests: this.state.pullRequests.concat(
+                    await Common.getPullRequests(filteredProjects)
+                ),
             });
+            this.releaseDefinitions = await Common.getReleaseDefinitions(
+                filteredProjects,
+                this.organizationName,
+                this.accessToken
+            );
+            this.buildDefinitions = await Common.getBuildDefinitions(
+                filteredProjects,
+                this.organizationName,
+                this.accessToken
+            );
         }
     }
 
@@ -435,90 +362,30 @@ export default class SprintlyPostRelease extends React.Component<
             this.state.releaseBranchListSelection.select(0);
         }
 
+        const buildDefinitionForRepo: BuildDefinition | undefined =
+            this.buildDefinitions.find(
+                (buildDef) =>
+                    buildDef.repository.id ===
+                    this.state.repositoryListSelectedItemObservable.value.id
+            );
+
         for (const releaseBranch of this.state
             .repositoryListSelectedItemObservable.value
             .existingReleaseBranches) {
-            const buildDefinitionForRepo: BuildDefinition | undefined =
-                this.buildDefinitions.find(
-                    (buildDef) =>
-                        buildDef.repository.id ===
-                        this.state.repositoryListSelectedItemObservable.value.id
-                );
             if (buildDefinitionForRepo) {
-                const buildDefinitionId: number = buildDefinitionForRepo.id;
-                let releaseDefinitionId: number = -1;
-                for (const releaseDefinition of this.releaseDefinitions) {
-                    for (const artifact of releaseDefinition.artifacts) {
-                        if (artifact.isPrimary) {
-                            const releaseDefBuildDef =
-                                artifact.definitionReference['definition'];
-                            if (releaseDefBuildDef) {
-                                if (
-                                    releaseDefBuildDef.id ===
-                                    buildDefinitionId.toString()
-                                ) {
-                                    releaseDefinitionId = releaseDefinition.id;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    if (releaseDefinitionId > -1) break;
-                }
-                if (releaseDefinitionId > -1) {
-                    this.loadReleasesForReleaseBranch(
-                        releaseBranch,
-                        releaseDefinitionId
-                    );
-                }
+                await Common.getBranchReleaseInfo(
+                    releaseInfoObservable,
+                    buildDefinitionForRepo,
+                    this.releaseDefinitions,
+                    releaseBranch,
+                    this.state.repositoryListSelectedItemObservable.value
+                        .project.id,
+                    this.state.repositoryListSelectedItemObservable.value.id,
+                    this.organizationName,
+                    this.accessToken
+                );
             }
         }
-    }
-
-    private async loadReleasesForReleaseBranch(
-        releaseBranch: Common.IReleaseBranchInfo,
-        releaseDefinitionId: number
-    ): Promise<void> {
-        this.accessToken = await Common.getOrRefreshToken(this.accessToken);
-        axios
-            .get(
-                `https://vsrm.dev.azure.com/${this.organizationName}/${this.state.repositoryListSelectedItemObservable.value.project.id}/_apis/release/releases?$expand=environments&sourceBranchFilter=${releaseBranch.targetBranch.name}&definitionId=${releaseDefinitionId}&api-version=6.0`,
-                {
-                    headers: {
-                        Authorization: `Bearer ${this.accessToken}`,
-                    },
-                }
-            )
-            .then((res: AxiosResponse<never>) => {
-                const data: { count: number; value: Release[] } = res.data;
-                if (data && data.count > 0) {
-                    const existingIndex: number =
-                        releaseInfoObservable.value.findIndex(
-                            (item) =>
-                                item.releaseBranch.targetBranch.name ===
-                                releaseBranch.targetBranch.name
-                        );
-                    const releaseInfo: Common.IReleaseInfo = {
-                        repositoryId:
-                            this.state.repositoryListSelectedItemObservable
-                                .value.id,
-                        releaseBranch: releaseBranch,
-                        releases: data.value,
-                    };
-                    if (existingIndex < 0) {
-                        releaseInfoObservable.push(releaseInfo);
-                    } else {
-                        releaseInfoObservable.change(
-                            existingIndex,
-                            releaseInfo
-                        );
-                    }
-                }
-            })
-            .catch((error: any) => {
-                console.error(error);
-                throw error;
-            });
     }
 
     private renderRepositoryList(): JSX.Element {
@@ -718,7 +585,10 @@ export default class SprintlyPostRelease extends React.Component<
                                                     important: true,
                                                     text: 'View Tags',
                                                     onActivate: () => {
-                                                        tagsModalKeyObservable.value = new Date().getTime().toString();
+                                                        tagsModalKeyObservable.value =
+                                                            new Date()
+                                                                .getTime()
+                                                                .toString();
                                                         isTagsDialogOpenObservable.value =
                                                             true;
                                                         const modalContent: ITagsModalContent =
