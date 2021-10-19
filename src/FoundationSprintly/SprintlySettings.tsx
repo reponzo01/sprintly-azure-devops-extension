@@ -9,19 +9,19 @@ import {
     IGlobalMessagesService,
 } from 'azure-devops-extension-api';
 
+import {
+    CoreRestClient,
+    TeamProjectReference,
+} from 'azure-devops-extension-api/Core';
+import { GitRepository, GitRestClient } from 'azure-devops-extension-api/Git';
+
 import { Button } from 'azure-devops-ui/Button';
 import { Dropdown } from 'azure-devops-ui/Dropdown';
 import { Observer } from 'azure-devops-ui/Observer';
 import { DropdownMultiSelection } from 'azure-devops-ui/Utilities/DropdownSelection';
 import { ISelectionRange } from 'azure-devops-ui/Utilities/Selection';
-import {
-    CoreRestClient,
-    TeamProjectReference,
-} from 'azure-devops-extension-api/Core';
 
-import { GitRepository, GitRestClient } from 'azure-devops-extension-api/Git';
-
-import { IAllowedEntity } from './FoundationSprintly';
+import { IAllowedEntity, getOrRefreshToken } from './SprintlyCommon';
 
 const allowedUserGroupsKey: string = 'allowed-user-groups';
 const allowedUsersKey: string = 'allowed-users';
@@ -65,7 +65,10 @@ export default class SprintlySettings extends React.Component<
     private accessToken: string = '';
     private organizationName: string;
 
-    constructor(props: { organizationName: string; dataManager: IExtensionDataManager }) {
+    constructor(props: {
+        organizationName: string;
+        dataManager: IExtensionDataManager;
+    }) {
         super(props);
 
         this.state = {};
@@ -74,13 +77,7 @@ export default class SprintlySettings extends React.Component<
     }
 
     public async componentDidMount(): Promise<void> {
-        await this.initializeSdk();
         await this.initializeComponent();
-    }
-
-    private async initializeSdk(): Promise<void> {
-        await SDK.init();
-        await SDK.ready();
     }
 
     private async initializeComponent(): Promise<void> {
@@ -101,6 +98,7 @@ export default class SprintlySettings extends React.Component<
         resouce: string,
         callback: (data: any) => void
     ): Promise<void> {
+        this.accessToken = await getOrRefreshToken(this.accessToken);
         axios
             .get(
                 `https://vssps.dev.azure.com/${this.organizationName}/_apis/graph/${resouce}`,
@@ -281,10 +279,11 @@ export default class SprintlySettings extends React.Component<
     private onSaveData = (): void => {
         this.setState({ ready: false });
 
-        const userGroupsSelectedArray: IAllowedEntity[] = this.setSelectionRange(
-            this.userGroupsSelection.value,
-            this.allUserGroups
-        );
+        const userGroupsSelectedArray: IAllowedEntity[] =
+            this.setSelectionRange(
+                this.userGroupsSelection.value,
+                this.allUserGroups
+            );
         const usersSelectedArray: IAllowedEntity[] = this.setSelectionRange(
             this.usersSelection.value,
             this.allUsers

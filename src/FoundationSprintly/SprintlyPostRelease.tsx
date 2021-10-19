@@ -1,4 +1,5 @@
 import * as React from 'react';
+import axios, { AxiosResponse } from 'axios';
 import * as SDK from 'azure-devops-extension-sdk';
 import {
     getClient,
@@ -26,10 +27,7 @@ import {
     Release,
     ReleaseDefinition,
 } from 'azure-devops-extension-api/Release';
-import {
-    BuildDefinition,
-    BuildDefinitionReference,
-} from 'azure-devops-extension-api/Build';
+import { BuildDefinition } from 'azure-devops-extension-api/Build';
 
 import {
     ObservableArray,
@@ -59,16 +57,7 @@ import {
 } from 'azure-devops-ui/Splitter';
 import { Tooltip } from 'azure-devops-ui/TooltipEx';
 import { Page } from 'azure-devops-ui/Page';
-
-import {
-    IAllowedEntity,
-    IReleaseBranchInfo,
-    IGitRepositoryExtended,
-    IReleaseInfo,
-    getOrRefreshToken,
-} from './FoundationSprintly';
 import { Pill, PillSize, PillVariant } from 'azure-devops-ui/Pill';
-import axios, { AxiosResponse } from 'axios';
 import {
     CustomHeader,
     HeaderDescription,
@@ -80,16 +69,17 @@ import {
 } from 'azure-devops-ui/Header';
 import { HeaderCommandBar } from 'azure-devops-ui/HeaderCommandBar';
 import { Dialog } from 'azure-devops-ui/Dialog';
-import { EnumMember } from 'typescript';
+
+import * as Common from './SprintlyCommon';
 
 // TODO: Instead of a state, consider just global observables
 export interface ISprintlyPostReleaseState {
-    repositories: ArrayItemProvider<IGitRepositoryExtended>;
+    repositories: ArrayItemProvider<Common.IGitRepositoryExtended>;
     pullRequests: GitPullRequest[];
     repositoryListSelection: ListSelection;
     releaseBranchListSelection: ListSelection;
-    repositoryListSelectedItemObservable: ObservableValue<IGitRepositoryExtended>;
-    releaseBranchListSelectedItemObservable: ObservableValue<IReleaseBranchInfo>;
+    repositoryListSelectedItemObservable: ObservableValue<Common.IGitRepositoryExtended>;
+    releaseBranchListSelectedItemObservable: ObservableValue<Common.IReleaseBranchInfo>;
 }
 
 const isTagsDialogOpenObservable: ObservableValue<boolean> =
@@ -101,8 +91,8 @@ const tagsObservable: ObservableValue<string[]> = new ObservableValue<string[]>(
 );
 const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
-const releaseInfoObservable: ObservableArray<IReleaseInfo> =
-    new ObservableArray<IReleaseInfo>();
+const releaseInfoObservable: ObservableArray<Common.IReleaseInfo> =
+    new ObservableArray<Common.IReleaseInfo>();
 
 const useFilteredRepos: boolean = true;
 const repositoriesToProcessKey: string = 'repositories-to-process';
@@ -130,7 +120,9 @@ export default class SprintlyPostRelease extends React.Component<
         super(props);
 
         this.state = {
-            repositories: new ArrayItemProvider<IGitRepositoryExtended>([]),
+            repositories: new ArrayItemProvider<Common.IGitRepositoryExtended>(
+                []
+            ),
             pullRequests: [],
             repositoryListSelection: new ListSelection({
                 selectOnFocus: false,
@@ -157,128 +149,29 @@ export default class SprintlyPostRelease extends React.Component<
     }
 
     public async componentDidMount(): Promise<void> {
-        await this.initializeSdk();
         await this.initializeComponent();
-    }
-
-    private async initializeSdk(): Promise<void> {
-        await SDK.init();
-        await SDK.ready();
     }
 
     private async initializeComponent(): Promise<void> {
         this.accessToken = await SDK.getAccessToken();
 
-        await this.loadRepositoriesToProcess();
-    }
-
-    // TODO: This function is repeated in SprintlyPage. See about extracting.
-    private async loadRepositoriesToProcess(): Promise<void> {
-        this.dataManager!.getValue<IAllowedEntity[]>(repositoriesToProcessKey, {
-            scopeType: 'User',
-        }).then(async (repositories: IAllowedEntity[]) => {
-            repositoriesToProcess = [];
-            if (repositories) {
-                for (const repository of repositories) {
-                    repositoriesToProcess.push(repository.originId);
-                }
-
-                if (repositoriesToProcess.length > 0) {
-                    const projects: TeamProjectReference[] = await getClient(
-                        CoreRestClient
-                    ).getProjects();
-
-                    const filteredProjects: TeamProjectReference[] =
-                        projects.filter((project: TeamProjectReference) => {
-                            return (
-                                project.name === 'Portfolio' ||
-                                project.name === 'Sample Project'
-                            );
-                        });
-                    await this.loadPullRequests(filteredProjects);
-                    await this.loadRepositoriesDisplayState(filteredProjects);
-                    await this.loadReleasesInfo(filteredProjects);
-
-                    /**
-                     * @param project - Project ID or project name
-                     * @param taskGroupId -
-                     * @param propertyFilters -
-                     */
-                    //getDefinitionEnvironments(project: string, taskGroupId?: string, propertyFilters?: string[]): Promise<Release.DefinitionEnvironmentReference[]>;
-                    /**
-                     * @param project - Project ID or project name
-                     * @param definitionId -
-                     * @param definitionEnvironmentId -
-                     * @param createdBy -
-                     * @param minModifiedTime -
-                     * @param maxModifiedTime -
-                     * @param deploymentStatus -
-                     * @param operationStatus -
-                     * @param latestAttemptsOnly -
-                     * @param queryOrder -
-                     * @param top -
-                     * @param continuationToken -
-                     * @param createdFor -
-                     * @param minStartedTime -
-                     * @param maxStartedTime -
-                     * @param sourceBranch -
-                     */
-                    //getDeployments(project: string, definitionId?: number, definitionEnvironmentId?: number, createdBy?: string, minModifiedTime?: Date, maxModifiedTime?: Date, deploymentStatus?: Release.DeploymentStatus, operationStatus?: Release.DeploymentOperationStatus, latestAttemptsOnly?: boolean, queryOrder?: Release.ReleaseQueryOrder, top?: number, continuationToken?: number, createdFor?: string, minStartedTime?: Date, maxStartedTime?: Date, sourceBranch?: string): Promise<Release.Deployment[]>;
-                    /**
-                     * @param queryParameters -
-                     * @param project - Project ID or project name
-                     */
-                    //getDeploymentsForMultipleEnvironments(queryParameters: Release.DeploymentQueryParameters, project: string): Promise<Release.Deployment[]>;
-                    /**
-                     * Get a release environment.
-                     *
-                     * @param project - Project ID or project name
-                     * @param releaseId - Id of the release.
-                     * @param environmentId - Id of the release environment.
-                     */
-                    //getReleaseEnvironment(project: string, releaseId: number, environmentId: number): Promise<Release.ReleaseEnvironment>;
-                    /**
-                     * @param project - Project ID or project name
-                     * @param releaseId -
-                     */
-                    //getReleaseHistory(project: string, releaseId: number): Promise<Release.ReleaseRevision[]>;
-                    /**
-                     * Get a list of releases
-                     *
-                     * @param project - Project ID or project name
-                     * @param definitionId - Releases from this release definition Id.
-                     * @param definitionEnvironmentId -
-                     * @param searchText - Releases with names containing searchText.
-                     * @param createdBy - Releases created by this user.
-                     * @param statusFilter - Releases that have this status.
-                     * @param environmentStatusFilter -
-                     * @param minCreatedTime - Releases that were created after this time.
-                     * @param maxCreatedTime - Releases that were created before this time.
-                     * @param queryOrder - Gets the results in the defined order of created date for releases. Default is descending.
-                     * @param top - Number of releases to get. Default is 50.
-                     * @param continuationToken - Gets the releases after the continuation token provided.
-                     * @param expand - The property that should be expanded in the list of releases.
-                     * @param artifactTypeId - Releases with given artifactTypeId will be returned. Values can be Build, Jenkins, GitHub, Nuget, Team Build (external), ExternalTFSBuild, Git, TFVC, ExternalTfsXamlBuild.
-                     * @param sourceId - Unique identifier of the artifact used. e.g. For build it would be \{projectGuid\}:\{BuildDefinitionId\}, for Jenkins it would be \{JenkinsConnectionId\}:\{JenkinsDefinitionId\}, for TfsOnPrem it would be \{TfsOnPremConnectionId\}:\{ProjectName\}:\{TfsOnPremDefinitionId\}. For third-party artifacts e.g. TeamCity, BitBucket you may refer 'uniqueSourceIdentifier' inside vss-extension.json https://github.com/Microsoft/vsts-rm-extensions/blob/master/Extensions.
-                     * @param artifactVersionId - Releases with given artifactVersionId will be returned. E.g. in case of Build artifactType, it is buildId.
-                     * @param sourceBranchFilter - Releases with given sourceBranchFilter will be returned.
-                     * @param isDeleted - Gets the soft deleted releases, if true.
-                     * @param tagFilter - A comma-delimited list of tags. Only releases with these tags will be returned.
-                     * @param propertyFilters - A comma-delimited list of extended properties to be retrieved. If set, the returned Releases will contain values for the specified property Ids (if they exist). If not set, properties will not be included. Note that this will not filter out any Release from results irrespective of whether it has property set or not.
-                     * @param releaseIdFilter - A comma-delimited list of releases Ids. Only releases with these Ids will be returned.
-                     * @param path - Releases under this folder path will be returned
-                     */
-                    //getReleases(project?: string, definitionId?: number, definitionEnvironmentId?: number, searchText?: string, createdBy?: string, statusFilter?: Release.ReleaseStatus, environmentStatusFilter?: number, minCreatedTime?: Date, maxCreatedTime?: Date, queryOrder?: Release.ReleaseQueryOrder, top?: number, continuationToken?: number, expand?: Release.ReleaseExpands, artifactTypeId?: string, sourceId?: string, artifactVersionId?: string, sourceBranchFilter?: string, isDeleted?: boolean, tagFilter?: string[], propertyFilters?: string[], releaseIdFilter?: number[], path?: string): Promise<Release.Release[]>;
-                }
-            }
-        });
+        repositoriesToProcess = await Common.getSavedRepositoriesToProcess(
+            this.dataManager,
+            repositoriesToProcessKey
+        );
+        if (repositoriesToProcess.length > 0) {
+            const filteredProjects = await Common.getFilteredProjects();
+            await this.loadRepositoriesDisplayState(filteredProjects);
+            await this.loadPullRequests(filteredProjects);
+            await this.loadReleasesInfo(filteredProjects);
+        }
     }
 
     private async loadReleasesInfo(
         projects: TeamProjectReference[]
     ): Promise<void> {
         for (const project of projects) {
-            this.accessToken = await getOrRefreshToken(this.accessToken);
+            this.accessToken = await Common.getOrRefreshToken(this.accessToken);
             // Match up to each release. List will be big unless narrowed down by branch (sourceBranchFilter=refs/heads/release/2.0.0) and definition id
             // axios
             //     .get(
@@ -410,7 +303,7 @@ export default class SprintlyPostRelease extends React.Component<
     private async loadRepositoriesDisplayState(
         projects: TeamProjectReference[]
     ): Promise<void> {
-        let reposExtended: IGitRepositoryExtended[] = [];
+        let reposExtended: Common.IGitRepositoryExtended[] = [];
         projects.forEach(async (project: TeamProjectReference) => {
             const repos: GitRepository[] = await getClient(
                 GitRestClient
@@ -450,7 +343,8 @@ export default class SprintlyPostRelease extends React.Component<
                     // base = develop, target = each release branch.
                     // if code changes, flag ahead of develop/main/master
 
-                    const existingReleaseBranches: IReleaseBranchInfo[] = [];
+                    const existingReleaseBranches: Common.IReleaseBranchInfo[] =
+                        [];
                     let hasExistingRelease: boolean = false;
                     for (const branch of branchesAndTags) {
                         if (branch.name.includes('heads/release')) {
@@ -514,8 +408,9 @@ export default class SprintlyPostRelease extends React.Component<
                                     developCommitsDiff
                                 );
 
-                            const branchInfo: IReleaseBranchInfo = {
+                            const branchInfo: Common.IReleaseBranchInfo = {
                                 targetBranch: branch,
+                                repositoryId: repo.id,
                                 aheadOfDevelop,
                                 aheadOfMasterMain,
                             };
@@ -579,7 +474,10 @@ export default class SprintlyPostRelease extends React.Component<
 
             if (reposExtended.length > 0) {
                 reposExtended = reposExtended.sort(
-                    (a: IGitRepositoryExtended, b: IGitRepositoryExtended) => {
+                    (
+                        a: Common.IGitRepositoryExtended,
+                        b: Common.IGitRepositoryExtended
+                    ) => {
                         return a.name.localeCompare(b.name);
                     }
                 );
@@ -592,7 +490,7 @@ export default class SprintlyPostRelease extends React.Component<
                 this.state.repositoryListSelection,
                 this.state.repositories,
                 this.state
-                    .repositoryListSelectedItemObservable as ObservableValue<IGitRepositoryExtended>
+                    .repositoryListSelectedItemObservable as ObservableValue<Common.IGitRepositoryExtended>
             );
         });
     }
@@ -691,10 +589,10 @@ export default class SprintlyPostRelease extends React.Component<
     }
 
     private async loadReleasesForBranch(
-        releaseBranch: IReleaseBranchInfo,
+        releaseBranch: Common.IReleaseBranchInfo,
         releaseDefinitionId: number
     ): Promise<void> {
-        this.accessToken = await getOrRefreshToken(this.accessToken);
+        this.accessToken = await Common.getOrRefreshToken(this.accessToken);
         // TODO: Consider using https://vsrm.dev.azure.com/{organization}/{project}/_apis/release/deployments?api-version=6.0
         axios
             .get(
@@ -711,10 +609,10 @@ export default class SprintlyPostRelease extends React.Component<
                     const existingIndex: number =
                         releaseInfoObservable.value.findIndex(
                             (item) =>
-                                item.releaseBranch.targetBranch.objectId ===
-                                releaseBranch.targetBranch.objectId
+                                item.releaseBranch.targetBranch.name ===
+                                releaseBranch.targetBranch.name
                         );
-                    const releaseInfo: IReleaseInfo = {
+                    const releaseInfo: Common.IReleaseInfo = {
                         repositoryId:
                             this.state.repositoryListSelectedItemObservable
                                 .value.id,
@@ -755,8 +653,8 @@ export default class SprintlyPostRelease extends React.Component<
 
     private renderRepositoryListItem(
         index: number,
-        item: IGitRepositoryExtended,
-        details: IListItemDetails<IGitRepositoryExtended>,
+        item: Common.IGitRepositoryExtended,
+        details: IListItemDetails<Common.IGitRepositoryExtended>,
         key?: string
     ): JSX.Element {
         // TODO: Extract these colors into somewhere common
@@ -881,7 +779,9 @@ export default class SprintlyPostRelease extends React.Component<
             <Observer
                 selectedItem={this.state.repositoryListSelectedItemObservable}
             >
-                {(observerProps: { selectedItem: IGitRepositoryExtended }) => (
+                {(observerProps: {
+                    selectedItem: Common.IGitRepositoryExtended;
+                }) => (
                     <Page className="flex-grow single-layer-details">
                         {this.state.repositoryListSelection.selectedCount ==
                             0 && (
@@ -988,7 +888,7 @@ export default class SprintlyPostRelease extends React.Component<
     }
 
     private renderReleaseBranchList(
-        items: ArrayItemProvider<IReleaseBranchInfo>
+        items: ArrayItemProvider<Common.IReleaseBranchInfo>
     ): JSX.Element {
         return (
             <List
@@ -1004,8 +904,8 @@ export default class SprintlyPostRelease extends React.Component<
 
     private renderReleaseBranchListItem(
         index: number,
-        item: IReleaseBranchInfo,
-        details: IListItemDetails<IReleaseBranchInfo>,
+        item: Common.IReleaseBranchInfo,
+        details: IListItemDetails<Common.IReleaseBranchInfo>,
         key?: string
     ): JSX.Element {
         // TODO: Extract these colors into somewhere common
@@ -1034,7 +934,9 @@ export default class SprintlyPostRelease extends React.Component<
             >
                 <div className="master-row-content flex-row flex-center h-scroll-hidden">
                     <Observer releaseInfo={releaseInfoObservable}>
-                        {(observerProps: { releaseInfo: IReleaseInfo[] }) => {
+                        {(observerProps: {
+                            releaseInfo: Common.IReleaseInfo[];
+                        }) => {
                             const environmentStatuses: JSX.Element[] = [];
                             let releases: Release[] = [];
                             console.log(
@@ -1042,7 +944,7 @@ export default class SprintlyPostRelease extends React.Component<
                                 observerProps.releaseInfo
                             );
                             const releaseInfoForBranch:
-                                | IReleaseInfo
+                                | Common.IReleaseInfo
                                 | undefined = observerProps.releaseInfo.find(
                                 (ri) =>
                                     ri.releaseBranch.targetBranch.objectId ===
@@ -1351,8 +1253,8 @@ export default class SprintlyPostRelease extends React.Component<
 function renderName(
     rowIndex: number,
     columnIndex: number,
-    tableColumn: ITableColumn<IGitRepositoryExtended>,
-    tableItem: IGitRepositoryExtended
+    tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
+    tableItem: Common.IGitRepositoryExtended
 ): JSX.Element {
     return (
         <SimpleTableCell
@@ -1381,8 +1283,8 @@ function renderName(
 function renderTags(
     rowIndex: number,
     columnIndex: number,
-    tableColumn: ITableColumn<IGitRepositoryExtended>,
-    tableItem: IGitRepositoryExtended
+    tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
+    tableItem: Common.IGitRepositoryExtended
 ): JSX.Element {
     return (
         <SimpleTableCell

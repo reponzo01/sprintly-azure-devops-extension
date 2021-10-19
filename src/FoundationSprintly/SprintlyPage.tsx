@@ -42,23 +42,22 @@ import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
 import { Dialog } from 'azure-devops-ui/Dialog';
 import { SimpleList } from 'azure-devops-ui/List';
-import {
-    IAllowedEntity,
-    IReleaseBranchInfo,
-    IGitRepositoryExtended,
-} from './FoundationSprintly';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
 
+import * as Common from './SprintlyCommon';
+
 export interface ISprintlyPageState {
-    repositories?: ArrayItemProvider<IGitRepositoryExtended>;
+    repositories?: ArrayItemProvider<Common.IGitRepositoryExtended>;
 }
 
 const newReleaseBranchNamesObservable: Array<ObservableValue<string>> = [];
-const isTagsDialogOpenObservable: ObservableValue<boolean> = new ObservableValue<boolean>(
-    false
+const isTagsDialogOpenObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(false);
+const tagsRepoNameObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
+const tagsObservable: ObservableValue<string[]> = new ObservableValue<string[]>(
+    []
 );
-const tagsRepoNameObservable: ObservableValue<string> = new ObservableValue<string>('');
-const tagsObservable: ObservableValue<string[]> = new ObservableValue<string[]>([]);
 const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
 
@@ -116,51 +115,25 @@ export default class SprintlyPage extends React.Component<
     }
 
     public async componentDidMount(): Promise<void> {
-        await this.initializeSdk();
         await this.initializeComponent();
     }
 
-    private async initializeSdk(): Promise<void> {
-        await SDK.init();
-        await SDK.ready();
-    }
-
     private async initializeComponent(): Promise<void> {
-        await this.loadRepositoriesToProcess();
-    }
-
-    private async loadRepositoriesToProcess(): Promise<void> {
-        this.dataManager!.getValue<IAllowedEntity[]>(repositoriesToProcessKey, {
-            scopeType: 'User',
-        }).then(async (repositories: IAllowedEntity[]) => {
-            repositoriesToProcess = [];
-            if (repositories) {
-                for (const repository of repositories) {
-                    repositoriesToProcess.push(repository.originId);
-                }
-
-                if (repositoriesToProcess.length > 0) {
-                    const projects: TeamProjectReference[] = await getClient(
-                        CoreRestClient
-                    ).getProjects();
-
-                    const filteredProjects: TeamProjectReference[] =
-                        projects.filter((project: TeamProjectReference) => {
-                            return (
-                                project.name === 'Portfolio' ||
-                                project.name === 'Sample Project'
-                            );
-                        });
-                    await this.loadRepositoriesDisplayState(filteredProjects);
-                }
-            }
-        });
+        repositoriesToProcess = await Common.getSavedRepositoriesToProcess(
+            this.dataManager,
+            repositoriesToProcessKey
+        );
+        if (repositoriesToProcess.length > 0) {
+            await this.loadRepositoriesDisplayState(
+                await Common.getFilteredProjects()
+            );
+        }
     }
 
     private async loadRepositoriesDisplayState(
         projects: TeamProjectReference[]
     ): Promise<void> {
-        let reposExtended: IGitRepositoryExtended[] = [];
+        let reposExtended: Common.IGitRepositoryExtended[] = [];
         projects.forEach(async (project: TeamProjectReference) => {
             const repos: GitRepository[] = await getClient(
                 GitRestClient
@@ -223,13 +196,15 @@ export default class SprintlyPage extends React.Component<
                     let createRelease: boolean =
                         this.codeChangesInCommitDiffs(commitsDiff);
 
-                    const existingReleaseBranches: IReleaseBranchInfo[] = [];
+                    const existingReleaseBranches: Common.IReleaseBranchInfo[] =
+                        [];
                     let hasExistingRelease: boolean = false;
                     for (const branch of branchesAndTags) {
                         if (branch.name.includes('heads/release')) {
                             hasExistingRelease = true;
                             existingReleaseBranches.push({
                                 targetBranch: branch,
+                                repositoryId: repo.id
                             });
                         }
                     }
@@ -258,7 +233,10 @@ export default class SprintlyPage extends React.Component<
             }
             if (reposExtended.length > 0) {
                 reposExtended = reposExtended.sort(
-                    (a: IGitRepositoryExtended, b: IGitRepositoryExtended) => {
+                    (
+                        a: Common.IGitRepositoryExtended,
+                        b: Common.IGitRepositoryExtended
+                    ) => {
                         return a.name.localeCompare(b.name);
                     }
                 );
@@ -312,7 +290,11 @@ export default class SprintlyPage extends React.Component<
         };
         return (
             /* tslint:disable */
-            <Observer totalRepositoriesToProcess={totalRepositoriesToProcessObservable}>
+            <Observer
+                totalRepositoriesToProcess={
+                    totalRepositoriesToProcessObservable
+                }
+            >
                 {(props: { totalRepositoriesToProcess: number }) => {
                     if (props.totalRepositoriesToProcess > 0) {
                         return (
@@ -329,7 +311,9 @@ export default class SprintlyPage extends React.Component<
                                     />
                                 )}
                                 <Observer
-                                    isTagsDialogOpen={isTagsDialogOpenObservable}
+                                    isTagsDialogOpen={
+                                        isTagsDialogOpenObservable
+                                    }
                                     tagsRepoName={tagsRepoNameObservable}
                                 >
                                     {(props: {
@@ -387,8 +371,8 @@ export default class SprintlyPage extends React.Component<
 function renderName(
     rowIndex: number,
     columnIndex: number,
-    tableColumn: ITableColumn<IGitRepositoryExtended>,
-    tableItem: IGitRepositoryExtended
+    tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
+    tableItem: Common.IGitRepositoryExtended
 ): JSX.Element {
     return (
         <SimpleTableCell
@@ -419,8 +403,8 @@ function renderName(
 function renderReleaseNeeded(
     rowIndex: number,
     columnIndex: number,
-    tableColumn: ITableColumn<IGitRepositoryExtended>,
-    tableItem: IGitRepositoryExtended
+    tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
+    tableItem: Common.IGitRepositoryExtended
 ): JSX.Element {
     // TODO: Extract these colors into somewhere common
     const redColor: IColor = {
@@ -518,8 +502,8 @@ function renderReleaseNeeded(
 function renderTags(
     rowIndex: number,
     columnIndex: number,
-    tableColumn: ITableColumn<IGitRepositoryExtended>,
-    tableItem: IGitRepositoryExtended
+    tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
+    tableItem: Common.IGitRepositoryExtended
 ): JSX.Element {
     return (
         <SimpleTableCell
@@ -534,7 +518,8 @@ function renderTags(
                         iconProps={{ iconName: 'Tag' }}
                         onClick={() => {
                             isTagsDialogOpenObservable.value = true;
-                            tagsRepoNameObservable.value = tableItem.name + ' Tags';
+                            tagsRepoNameObservable.value =
+                                tableItem.name + ' Tags';
                             tagsObservable.value = [];
                             tableItem.branchesAndTags.forEach((branch) => {
                                 if (branch.name.includes('refs/tags')) {
@@ -552,8 +537,8 @@ function renderTags(
 function renderCreateReleaseBranch(
     rowIndex: number,
     columnIndex: number,
-    tableColumn: ITableColumn<IGitRepositoryExtended>,
-    tableItem: IGitRepositoryExtended
+    tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
+    tableItem: Common.IGitRepositoryExtended
 ): JSX.Element {
     newReleaseBranchNamesObservable[rowIndex] = new ObservableValue<string>('');
     return (

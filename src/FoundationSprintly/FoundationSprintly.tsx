@@ -7,26 +7,21 @@ import {
     IExtensionDataManager,
     IExtensionDataService,
 } from 'azure-devops-extension-api';
-import {
-    GitPullRequest,
-    GitRef,
-    GitRepository,
-} from 'azure-devops-extension-api/Git';
-import { Release } from 'azure-devops-extension-api/Release';
 
 import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
 import { Tab, TabBar, TabSize } from 'azure-devops-ui/Tabs';
 import { Page } from 'azure-devops-ui/Page';
 import { Header, TitleSize } from 'azure-devops-ui/Header';
+import { IHeaderCommandBarItem } from 'azure-devops-ui/HeaderCommandBar';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
 
 import SprintlyPage from './SprintlyPage';
 import SprintlyInRelease from './SprintlyInRelease';
 import SprintlyPostRelease from './SprintlyPostRelease';
 import SprintlySettings from './SprintlySettings';
+import * as Common from './SprintlyCommon';
 import { showRootComponent } from '../Common';
-import { IHeaderCommandBarItem } from 'azure-devops-ui/HeaderCommandBar';
 
 const selectedTabKey: string = 'selected-tab';
 const allowedUserGroupsKey: string = 'allowed-user-groups';
@@ -49,57 +44,8 @@ const loggedInUserDescriptorObservable: ObservableValue<string> =
 const organizationNameObservable: ObservableValue<string> =
     new ObservableValue<string>('');
 
-export interface IAllowedEntity {
-    displayName: string;
-    originId: string;
-    descriptor?: string;
-}
-
-export interface IReleaseBranchInfo {
-    targetBranch: GitRef;
-    aheadOfDevelop?: boolean;
-    aheadOfMasterMain?: boolean;
-    developPR?: GitPullRequest;
-    masterMainPR?: GitPullRequest;
-}
-
-export interface IReleaseInfo {
-    repositoryId: string;
-    releaseBranch: IReleaseBranchInfo;
-    releases: Release[];
-}
-
-export interface IGitRepositoryExtended extends GitRepository {
-    hasExistingRelease: boolean;
-    hasMainBranch: boolean;
-    existingReleaseBranches: IReleaseBranchInfo[];
-    createRelease: boolean;
-    branchesAndTags: GitRef[];
-}
-
 export interface IFoundationSprintlyState {
     allAllowedUsersDescriptors: string[];
-}
-
-export async function getOrRefreshToken(token: string): Promise<string> {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(
-        atob(base64)
-            .split('')
-            .map((c) => {
-                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-            })
-            .join('')
-    );
-
-    const decodedToken = JSON.parse(jsonPayload);
-    const tokenDate = new Date(parseInt(decodedToken.exp) * 1000);
-    const now = new Date();
-    if (tokenDate <= now) {
-        return await SDK.getAccessToken();
-    }
-    return token;
 }
 
 // TODO: Clean up arrow functions for the cases in which I thought I
@@ -113,7 +59,7 @@ export default class FoundationSprintly extends React.Component<
     private dataManager!: IExtensionDataManager;
     private accessToken: string = '';
 
-    private alwaysAllowedGroups: IAllowedEntity[] = [
+    private alwaysAllowedGroups: Common.IAllowedEntity[] = [
         /*{
             displayName: 'Dev Team Leads',
             originId: '841aee2f-860d-45a1-91a5-779aa4dca78c',
@@ -156,7 +102,7 @@ export default class FoundationSprintly extends React.Component<
         organizationNameObservable.value = SDK.getHost().name;
 
         this.accessToken = await SDK.getAccessToken();
-        this.dataManager = await this.initializeDataManager();
+        this.dataManager = await Common.initializeDataManager(this.accessToken);
 
         selectedTabId.value = getUserSelectedTab();
 
@@ -164,20 +110,11 @@ export default class FoundationSprintly extends React.Component<
         this.loadAllowedUsers();
     }
 
-    private async initializeDataManager(): Promise<IExtensionDataManager> {
-        const extDataService: IExtensionDataService =
-            await SDK.getService<IExtensionDataService>(
-                CommonServiceIds.ExtensionDataService
-            );
-        return await extDataService.getExtensionDataManager(
-            SDK.getExtensionContext().id,
-            this.accessToken
-        );
-    }
-
     private loadAllowedUserGroupsUsers(): void {
-        this.dataManager!.getValue<IAllowedEntity[]>(allowedUserGroupsKey).then(
-            (userGroups: IAllowedEntity[]) => {
+        this.dataManager!.getValue<Common.IAllowedEntity[]>(
+            allowedUserGroupsKey
+        ).then(
+            async (userGroups: Common.IAllowedEntity[]) => {
                 if (!userGroups) {
                     userGroups = this.alwaysAllowedGroups;
                 } else {
@@ -185,6 +122,9 @@ export default class FoundationSprintly extends React.Component<
                 }
                 if (userGroups) {
                     for (const group of userGroups) {
+                        this.accessToken = await Common.getOrRefreshToken(
+                            this.accessToken
+                        );
                         axios
                             .get(
                                 `https://vsaex.dev.azure.com/${organizationNameObservable.value}/_apis/GroupEntitlements/${group.originId}/members`,
@@ -227,11 +167,13 @@ export default class FoundationSprintly extends React.Component<
     }
 
     private loadAllowedUsers(): void {
-        this.dataManager!.getValue<IAllowedEntity[]>(allowedUsersKey).then(
-            (users: IAllowedEntity[]) => {
+        this.dataManager!.getValue<Common.IAllowedEntity[]>(
+            allowedUsersKey
+        ).then(
+            (users: Common.IAllowedEntity[]) => {
                 if (users) {
                     const allAllowedUsersDescriptors: string[] = users.map(
-                        (user: IAllowedEntity) => user.descriptor || ''
+                        (user: Common.IAllowedEntity) => user.descriptor || ''
                     );
                     this.setState({
                         allAllowedUsersDescriptors:
@@ -271,6 +213,37 @@ export default class FoundationSprintly extends React.Component<
         ];
     }
 
+    private renderSelectedTabPage(): JSX.Element {
+        switch (selectedTabId.value) {
+            case sprintlyPageTabKey:
+            case '':
+                return <SprintlyPage dataManager={this.dataManager} />;
+            case sprintlySettingsTabKey:
+                return (
+                    <SprintlySettings
+                        organizationName={organizationNameObservable.value}
+                        dataManager={this.dataManager}
+                    />
+                );
+            case sprintlyInReleaseTabKey:
+                return (
+                    <SprintlyInRelease
+                        organizationName={organizationNameObservable.value}
+                        dataManager={this.dataManager}
+                    />
+                );
+            case sprintlyPostReleaseTabKey:
+                return (
+                    <SprintlyPostRelease
+                        organizationName={organizationNameObservable.value}
+                        dataManager={this.dataManager}
+                    />
+                );
+            default:
+                return <div></div>;
+        }
+    }
+
     public render(): JSX.Element {
         return (
             /* tslint:disable */
@@ -283,27 +256,7 @@ export default class FoundationSprintly extends React.Component<
                 <Observer userIsAllowed={userIsAllowed}>
                     {(props: { userIsAllowed: boolean }) => {
                         if (userIsAllowed.value) {
-                            return (
-                                <TabBar
-                                    onSelectedTabChanged={onSelectedTabChanged}
-                                    selectedTabId={selectedTabId}
-                                    tabSize={TabSize.Tall}
-                                >
-                                    <Tab name={sprintlyPageTabName} id={sprintlyPageTabKey} />
-                                    <Tab
-                                        name={sprintlyInReleaseTabName}
-                                        id={sprintlyInReleaseTabKey}
-                                    />
-                                    <Tab
-                                        name={sprintlyPostReleaseTabName}
-                                        id={sprintlyPostReleaseTabKey}
-                                    />
-                                    <Tab
-                                        name={sprintlySettingsTabName}
-                                        id={sprintlySettingsTabKey}
-                                    />
-                                </TabBar>
-                            );
+                            return renderTabBar();
                         }
                         return <div></div>;
                     }}
@@ -318,44 +271,7 @@ export default class FoundationSprintly extends React.Component<
                         userIsAllowed: boolean;
                     }) => {
                         if (userIsAllowed.value) {
-                            switch (selectedTabId.value) {
-                                case sprintlyPageTabKey:
-                                case '':
-                                    return (
-                                        <SprintlyPage
-                                            dataManager={this.dataManager}
-                                        />
-                                    );
-                                case sprintlySettingsTabKey:
-                                    return (
-                                        <SprintlySettings
-                                            organizationName={
-                                                organizationNameObservable.value
-                                            }
-                                            dataManager={this.dataManager}
-                                        />
-                                    );
-                                case sprintlyInReleaseTabKey:
-                                        return (
-                                            <SprintlyInRelease
-                                                organizationName={
-                                                    organizationNameObservable.value
-                                                }
-                                                dataManager={this.dataManager}
-                                            />
-                                        );
-                                case sprintlyPostReleaseTabKey:
-                                    return (
-                                        <SprintlyPostRelease
-                                            organizationName={
-                                                organizationNameObservable.value
-                                            }
-                                            dataManager={this.dataManager}
-                                        />
-                                    );
-                                default:
-                                    return <div></div>;
-                            }
+                            return this.renderSelectedTabPage();
                         }
 
                         return (
@@ -380,6 +296,24 @@ export default class FoundationSprintly extends React.Component<
             /* tslint:disable */
         );
     }
+}
+
+function renderTabBar(): JSX.Element {
+    return (
+        <TabBar
+            onSelectedTabChanged={onSelectedTabChanged}
+            selectedTabId={selectedTabId}
+            tabSize={TabSize.Tall}
+        >
+            <Tab name={sprintlyPageTabName} id={sprintlyPageTabKey} />
+            <Tab name={sprintlyInReleaseTabName} id={sprintlyInReleaseTabKey} />
+            <Tab
+                name={sprintlyPostReleaseTabName}
+                id={sprintlyPostReleaseTabKey}
+            />
+            <Tab name={sprintlySettingsTabName} id={sprintlySettingsTabKey} />
+        </TabBar>
+    );
 }
 
 function onSelectedTabChanged(newTabId: string) {
