@@ -66,27 +66,27 @@ const columns: any = [
         id: 'name',
         name: 'Repository',
         onSize,
-        renderCell: renderName,
+        renderCell: renderNameCell,
         width: new ObservableValue(-30),
     },
     {
         id: 'releaseNeeded',
         name: 'Release Needed?',
         onSize,
-        renderCell: renderReleaseNeeded,
+        renderCell: renderReleaseNeededCell,
         width: new ObservableValue(-30),
     },
     {
         id: 'tags',
         name: 'Tags',
         onSize,
-        renderCell: renderTags,
+        renderCell: renderTagsCell,
         width: new ObservableValue(-30),
     },
     {
         id: 'createReleaseBranch',
         name: 'Create Release Branch',
-        renderCell: renderCreateReleaseBranch,
+        renderCell: renderCreateReleaseBranchCell,
         width: new ObservableValue(-40),
     },
 ];
@@ -320,7 +320,7 @@ export default class SprintlyPage extends React.Component<
     }
 }
 
-function renderName(
+function renderNameCell(
     rowIndex: number,
     columnIndex: number,
     tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
@@ -352,45 +352,29 @@ function renderName(
     );
 }
 
-function renderReleaseNeeded(
+function renderReleaseNeededCell(
     rowIndex: number,
     columnIndex: number,
     tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
     tableItem: Common.IGitRepositoryExtended
 ): JSX.Element {
-    // TODO: Extract these colors into somewhere common
-    const redColor: IColor = {
-        red: 191,
-        green: 65,
-        blue: 65,
-    };
-    const greenColor: IColor = {
-        red: 109,
-        green: 210,
-        blue: 109,
-    };
-    const orangeColor: IColor = {
-        red: 225,
-        green: 172,
-        blue: 74,
-    };
-    let color: IColor = redColor;
+    let color: IColor = Common.redColor;
     let text: string = 'No';
     if (tableItem.createRelease === true) {
-        color = greenColor;
+        color = Common.greenColor;
         text = 'Yes';
     }
     if (tableItem.hasExistingRelease === true) {
-        color = orangeColor;
+        color = Common.orangeColor;
         text = 'Release Exists';
     }
     if (tableItem.hasExistingRelease) {
-        const releaseLinks: JSX.Element[] = [];
+        const releaseBranchLinks: JSX.Element[] = [];
         let counter: number = 0;
         for (const releaseBranch of tableItem.existingReleaseBranches) {
             const releaseBranchName =
                 releaseBranch.targetBranch.name.split('heads/')[1];
-            releaseLinks.push(
+            releaseBranchLinks.push(
                 <Link
                     key={counter}
                     excludeTabStop
@@ -426,7 +410,7 @@ function renderReleaseNeeded(
                         </Pill>
                     </>
                 }
-                line2={<>{releaseLinks}</>}
+                line2={<>{releaseBranchLinks}</>}
             ></TwoLineTableCell>
         );
     }
@@ -451,7 +435,7 @@ function renderReleaseNeeded(
     );
 }
 
-function renderTags(
+function renderTagsCell(
     rowIndex: number,
     columnIndex: number,
     tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
@@ -486,7 +470,7 @@ function renderTags(
     );
 }
 
-function renderCreateReleaseBranch(
+function renderCreateReleaseBranchCell(
     rowIndex: number,
     columnIndex: number,
     tableColumn: ITableColumn<Common.IGitRepositoryExtended>,

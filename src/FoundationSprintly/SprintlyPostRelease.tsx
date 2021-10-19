@@ -445,14 +445,10 @@ export default class SprintlyPostRelease extends React.Component<
         ) {
             this.state.releaseBranchListSelection.select(0);
         }
-        // TODO: For each release branch in this selection, use axios to
-        // get the release, and save it into the IReleaseInfo observable
-        // but make sure you overwrite the existing entry, not add a new one
+
         for (const releaseBranch of this.state
             .repositoryListSelectedItemObservable.value
             .existingReleaseBranches) {
-            // TODO: Before every axios call, use the getOrRefreshToke() method.
-            // *TODO*: Need to filter this by definition id
             const buildDefinitionForRepo: BuildDefinition | undefined =
                 this.buildDefinitions.find(
                     (buildDef) =>
@@ -481,7 +477,7 @@ export default class SprintlyPostRelease extends React.Component<
                     if (releaseDefinitionId > -1) break;
                 }
                 if (releaseDefinitionId > -1) {
-                    this.loadReleasesForBranch(
+                    this.loadReleasesForReleaseBranch(
                         releaseBranch,
                         releaseDefinitionId
                     );
@@ -490,12 +486,11 @@ export default class SprintlyPostRelease extends React.Component<
         }
     }
 
-    private async loadReleasesForBranch(
+    private async loadReleasesForReleaseBranch(
         releaseBranch: Common.IReleaseBranchInfo,
         releaseDefinitionId: number
     ): Promise<void> {
         this.accessToken = await Common.getOrRefreshToken(this.accessToken);
-        // TODO: Consider using https://vsrm.dev.azure.com/{organization}/{project}/_apis/release/deployments?api-version=6.0
         axios
             .get(
                 `https://vsrm.dev.azure.com/${this.organizationName}/${this.state.repositoryListSelectedItemObservable.value.project.id}/_apis/release/releases?$expand=environments&sourceBranchFilter=${releaseBranch.targetBranch.name}&definitionId=${releaseDefinitionId}&api-version=6.0`,
@@ -559,17 +554,6 @@ export default class SprintlyPostRelease extends React.Component<
         details: IListItemDetails<Common.IGitRepositoryExtended>,
         key?: string
     ): JSX.Element {
-        // TODO: Extract these colors into somewhere common
-        const primaryColor: IColor = {
-            red: 0,
-            green: 120,
-            blue: 114,
-        };
-        const primaryColorShade30: IColor = {
-            red: 0,
-            green: 69,
-            blue: 120,
-        };
         const releaseLinks: JSX.Element[] = [];
         let counter: number = 0;
         for (const releaseBranch of item.existingReleaseBranches) {
@@ -592,7 +576,7 @@ export default class SprintlyPostRelease extends React.Component<
                     </Link>
                     {releaseBranch.aheadOfDevelop && (
                         <Pill
-                            color={primaryColor}
+                            color={Common.primaryColor}
                             size={PillSize.regular}
                             className="bolt-list-overlay margin-horizontal-3"
                         >
@@ -613,7 +597,7 @@ export default class SprintlyPostRelease extends React.Component<
                     )}
                     {releaseBranch.aheadOfMasterMain && (
                         <Pill
-                            color={primaryColorShade30}
+                            color={Common.primaryColorShade30}
                             size={PillSize.regular}
                             className="bolt-list-overlay margin-horizontal-3"
                             variant={PillVariant.outlined}
@@ -1148,73 +1132,6 @@ export default class SprintlyPostRelease extends React.Component<
             /* tslint:disable */
         );
     }
-}
-
-// TODO: May be able to remove this function here
-// TODO: This function is repeated in SprintlyPage. See about extracting.
-function renderName(
-    rowIndex: number,
-    columnIndex: number,
-    tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
-    tableItem: Common.IGitRepositoryExtended
-): JSX.Element {
-    return (
-        <SimpleTableCell
-            key={'col-' + columnIndex}
-            columnIndex={columnIndex}
-            tableColumn={tableColumn}
-            children={
-                <>
-                    <Icon ariaLabel="Repository" iconName="Repo" />
-                    &nbsp;
-                    <Link
-                        excludeTabStop
-                        href={tableItem.webUrl + '/branches'}
-                        subtle={true}
-                        target="_blank"
-                    >
-                        <u>{tableItem.name}</u>
-                    </Link>
-                </>
-            }
-        ></SimpleTableCell>
-    );
-}
-
-// TODO: This function is repeated in SprintlyPage. See about extracting.
-function renderTags(
-    rowIndex: number,
-    columnIndex: number,
-    tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
-    tableItem: Common.IGitRepositoryExtended
-): JSX.Element {
-    return (
-        <SimpleTableCell
-            key={'col-' + columnIndex}
-            columnIndex={columnIndex}
-            tableColumn={tableColumn}
-            children={
-                <>
-                    <Button
-                        text="View Tags"
-                        subtle={true}
-                        iconProps={{ iconName: 'Tag' }}
-                        onClick={() => {
-                            isTagsDialogOpenObservable.value = true;
-                            tagsRepoNameObservable.value =
-                                tableItem.name + ' Tags';
-                            tagsObservable.value = [];
-                            tableItem.branchesAndTags.forEach((branch) => {
-                                if (branch.name.includes('refs/tags')) {
-                                    tagsObservable.value.push(branch.name);
-                                }
-                            });
-                        }}
-                    />
-                </>
-            }
-        ></SimpleTableCell>
-    );
 }
 
 // The following code would go on the onclick of a merge button

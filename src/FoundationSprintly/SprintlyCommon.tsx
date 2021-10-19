@@ -13,6 +13,7 @@ import { Release } from 'azure-devops-extension-api/Release';
 import {
     CommonServiceIds,
     getClient,
+    IColor,
     IExtensionDataManager,
     IExtensionDataService,
 } from 'azure-devops-extension-api';
@@ -20,6 +21,36 @@ import {
     CoreRestClient,
     TeamProjectReference,
 } from 'azure-devops-extension-api/Core';
+
+export const primaryColor: IColor = {
+    red: 0,
+    green: 120,
+    blue: 114,
+}
+
+export const primaryColorShade30: IColor = {
+    red: 0,
+    green: 69,
+    blue: 120,
+}
+
+export const redColor: IColor = {
+    red: 191,
+    green: 65,
+    blue: 65,
+}
+
+export const greenColor: IColor = {
+    red: 109,
+    green: 210,
+    blue: 109,
+}
+
+export const orangeColor: IColor = {
+    red: 225,
+    green: 172,
+    blue: 74,
+}
 
 export interface IAllowedEntity {
     displayName: string;
