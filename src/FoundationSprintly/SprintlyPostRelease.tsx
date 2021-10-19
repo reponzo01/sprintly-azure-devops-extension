@@ -193,7 +193,7 @@ export default class SprintlyPostRelease extends React.Component<
 
             for (const repo of filteredRepos) {
                 const repositoryBranchInfo =
-                    await Common.getRepositoryBranchInfo(repo.id);
+                    await Common.getRepositoryBranchesInfo(repo.id);
 
                 const processRepo: boolean =
                     repositoryBranchInfo.hasDevelopBranch &&
@@ -419,67 +419,26 @@ export default class SprintlyPostRelease extends React.Component<
                 releaseBranch.targetBranch.name.split('heads/')[1];
             releaseBranchLinks.push(
                 <div className="flex-row padding-vertical-10" key={counter}>
-                    <Link
-                        excludeTabStop
-                        href={
-                            item.webUrl +
-                            '?version=GB' +
-                            encodeURI(releaseBranchName)
-                        }
-                        subtle={false}
-                        target="_blank"
-                        className="padding-horizontal-6"
-                    >
-                        {releaseBranchName}
-                    </Link>
-                    {releaseBranch.aheadOfDevelop && (
-                        <Pill
-                            color={Common.primaryColor}
-                            size={PillSize.regular}
-                            className="bolt-list-overlay margin-horizontal-3"
-                        >
-                            <div className="sprintly-text-white">
-                                Ahead of develop{' '}
-                                {releaseBranch.developPR && (
-                                    <i>
-                                        <Icon
-                                            ariaLabel="Pull Request"
-                                            iconName="BranchPullRequest"
-                                            size={IconSize.small}
-                                        />{' '}
-                                        #{releaseBranch.developPR.pullRequestId}
-                                    </i>
-                                )}
-                            </div>
-                        </Pill>
+                    {Common.branchLinkJsxElement(
+                        counter + 'link',
+                        item.webUrl,
+                        releaseBranchName,
+                        'padding-horizontal-6'
                     )}
-                    {releaseBranch.aheadOfMasterMain && (
-                        <Pill
-                            color={Common.primaryColorShade30}
-                            size={PillSize.regular}
-                            className="bolt-list-overlay margin-horizontal-3"
-                            variant={PillVariant.outlined}
-                        >
-                            <div className="sprintly-text-white">
-                                Ahead of{' '}
-                                {item.hasMainBranch ? 'main' : 'master'}{' '}
-                                {releaseBranch.masterMainPR && (
-                                    <i>
-                                        <Icon
-                                            ariaLabel="Pull Request"
-                                            iconName="BranchPullRequest"
-                                            size={IconSize.small}
-                                        />{' '}
-                                        #
-                                        {
-                                            releaseBranch.masterMainPR
-                                                .pullRequestId
-                                        }
-                                    </i>
-                                )}
-                            </div>
-                        </Pill>
-                    )}
+                    {releaseBranch.aheadOfDevelop &&
+                        this.renderAheadOfPillJsxElement(
+                            Common.primaryColor,
+                            PillVariant.standard,
+                            'develop',
+                            releaseBranch.developPR
+                        )}
+                    {releaseBranch.aheadOfMasterMain &&
+                        this.renderAheadOfPillJsxElement(
+                            Common.primaryColorShade30,
+                            PillVariant.outlined,
+                            item.hasMainBranch ? 'main' : 'master',
+                            releaseBranch.masterMainPR
+                        )}
                 </div>
             );
             counter++;
@@ -496,15 +455,11 @@ export default class SprintlyPostRelease extends React.Component<
                     <div className="flex-column text-ellipsis">
                         <Tooltip overflowOnly={true}>
                             <div className="primary-text text-ellipsis">
-                                <Link
-                                    excludeTabStop
-                                    href={item.webUrl + '/branches'}
-                                    subtle={true}
-                                    target="_blank"
-                                    className="font-size-1"
-                                >
-                                    <u>{item.name}</u>
-                                </Link>
+                                {Common.repositoryLinkJsxElement(
+                                    item.webUrl,
+                                    'font-size-1',
+                                    item.name
+                                )}
                             </div>
                         </Tooltip>
                         <Tooltip overflowOnly={true}>
@@ -515,6 +470,36 @@ export default class SprintlyPostRelease extends React.Component<
                     </div>
                 </div>
             </ListItem>
+        );
+    }
+
+    private renderAheadOfPillJsxElement(
+        color: IColor,
+        varient: PillVariant,
+        aheadOfText: string,
+        pullRequest?: GitPullRequest
+    ): JSX.Element {
+        return (
+            <Pill
+                color={color}
+                size={PillSize.regular}
+                className="bolt-list-overlay margin-horizontal-3"
+                variant={varient}
+            >
+                <div className="sprintly-text-white">
+                    Ahead of {aheadOfText}{' '}
+                    {pullRequest && (
+                        <i>
+                            <Icon
+                                ariaLabel="Pull Request"
+                                iconName="BranchPullRequest"
+                                size={IconSize.small}
+                            />{' '}
+                            #{pullRequest.pullRequestId}
+                        </i>
+                    )}
+                </div>
+            </Pill>
         );
     }
 

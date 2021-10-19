@@ -47,7 +47,8 @@ export interface ISprintlyPageState {
 }
 
 const newReleaseBranchNamesObservable: Array<ObservableValue<string>> = [];
-const tagsModalKeyObservable: ObservableValue<string> = new ObservableValue<string>('');
+const tagsModalKeyObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
 const isTagsDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const tagsRepoNameObservable: ObservableValue<string> =
@@ -143,7 +144,7 @@ export default class SprintlyPage extends React.Component<
 
             for (const repo of filteredRepos) {
                 const repositoryBranchInfo =
-                    await Common.getRepositoryBranchInfo(repo.id);
+                    await Common.getRepositoryBranchesInfo(repo.id);
 
                 const processRepo: boolean =
                     repositoryBranchInfo.hasDevelopBranch &&
@@ -277,7 +278,8 @@ export default class SprintlyPage extends React.Component<
                                                 }
                                                 tags={tagsObservable.value}
                                                 closeMe={() => {
-                                                    isTagsDialogOpenObservable.value = false;
+                                                    isTagsDialogOpenObservable.value =
+                                                        false;
                                                 }}
                                             ></TagsModal>
                                         );
@@ -325,14 +327,11 @@ function renderNameCell(
                         iconName="Repo"
                         size={IconSize.large}
                     />{' '}
-                    <Link
-                        excludeTabStop
-                        href={tableItem.webUrl + '/branches'}
-                        subtle={true}
-                        target="_blank"
-                    >
-                        <u>{tableItem.name}</u>
-                    </Link>
+                    {Common.repositoryLinkJsxElement(
+                        tableItem.webUrl,
+                        '',
+                        tableItem.name
+                    )}
                 </>
             }
         ></SimpleTableCell>
@@ -362,18 +361,12 @@ function renderReleaseNeededCell(
             const releaseBranchName =
                 releaseBranch.targetBranch.name.split('heads/')[1];
             releaseBranchLinks.push(
-                <Link
-                    key={counter}
-                    excludeTabStop
-                    href={
-                        tableItem.webUrl +
-                        '?version=GB' +
-                        encodeURI(releaseBranchName)
-                    }
-                    target="_blank"
-                >
-                    {releaseBranchName}
-                </Link>
+                Common.branchLinkJsxElement(
+                    counter + 'link',
+                    tableItem.webUrl,
+                    releaseBranchName,
+                    ''
+                )
             );
             counter++;
         }
@@ -440,7 +433,9 @@ function renderTagsCell(
                         subtle={true}
                         iconProps={{ iconName: 'Tag' }}
                         onClick={() => {
-                            tagsModalKeyObservable.value = new Date().getTime().toString();
+                            tagsModalKeyObservable.value = new Date()
+                                .getTime()
+                                .toString();
                             isTagsDialogOpenObservable.value = true;
                             const modalContent: ITagsModalContent =
                                 getTagsModalContent(

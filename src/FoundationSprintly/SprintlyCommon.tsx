@@ -26,6 +26,8 @@ import {
 import axios, { AxiosResponse } from 'axios';
 import { BuildDefinition } from 'azure-devops-extension-api/Build';
 import { ObservableArray } from 'azure-devops-ui/Core/Observable';
+import React from 'react';
+import { Link } from 'azure-devops-ui/Link';
 
 export const primaryColor: IColor = {
     red: 0,
@@ -212,7 +214,7 @@ export function codeChangesInCommitDiffs(commitsDiff: GitCommitDiffs): boolean {
     );
 }
 
-export async function getRepositoryBranchInfo(
+export async function getRepositoryBranchesInfo(
     repositoryId: string
 ): Promise<IRepositoryBranchInfo> {
     let hasDevelopBranch: boolean = false;
@@ -328,8 +330,7 @@ export async function getReleasesForReleaseBranch(
                             releaseBranch.targetBranch.name
                     );
                 const releaseInfo: IReleaseInfo = {
-                    repositoryId:
-                        repositoryId,
+                    repositoryId: repositoryId,
                     releaseBranch: releaseBranch,
                     releases: data.value,
                 };
@@ -430,4 +431,41 @@ export async function getPullRequests(
         pullRequests = pullRequests.concat(pullRequestsResponse);
     }
     return pullRequests;
+}
+
+export function repositoryLinkJsxElement(
+    webUrl: string,
+    className: string,
+    repositoryName: string
+): JSX.Element {
+    return (
+        <Link
+            excludeTabStop
+            href={webUrl + '/branches'}
+            subtle={true}
+            target="_blank"
+            className={className}
+        >
+            <u>{repositoryName}</u>
+        </Link>
+    );
+}
+
+export function branchLinkJsxElement(
+    key: string,
+    webUrl: string,
+    branchName: string,
+    className: string
+): JSX.Element {
+    return (
+        <Link
+            key={key}
+            excludeTabStop
+            href={webUrl + '?version=GB' + encodeURI(branchName)}
+            target="_blank"
+            className={className}
+        >
+            {branchName}
+        </Link>
+    );
 }
