@@ -2,11 +2,7 @@ import * as React from 'react';
 import axios from 'axios';
 
 import * as SDK from 'azure-devops-extension-sdk';
-import {
-    CommonServiceIds,
-    IExtensionDataManager,
-    IExtensionDataService,
-} from 'azure-devops-extension-api';
+import { IExtensionDataManager } from 'azure-devops-extension-api';
 
 import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';

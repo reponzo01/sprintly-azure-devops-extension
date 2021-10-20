@@ -59,6 +59,24 @@ export const orangeColor: IColor = {
     blue: 74,
 };
 
+export const successColor: IColor = {
+    red: 47,
+    green: 92,
+    blue: 55,
+};
+
+export const failedColor: IColor = {
+    red: 205,
+    green: 74,
+    blue: 69,
+};
+
+export const warningColor: IColor = {
+    red: 118,
+    green: 90,
+    blue: 37,
+};
+
 export interface IAllowedEntity {
     displayName: string;
     originId: string;

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import axios, { AxiosResponse } from 'axios';
+import axios from 'axios';
 
 import * as SDK from 'azure-devops-extension-sdk';
 import {
@@ -9,10 +9,7 @@ import {
     IGlobalMessagesService,
 } from 'azure-devops-extension-api';
 
-import {
-    CoreRestClient,
-    TeamProjectReference,
-} from 'azure-devops-extension-api/Core';
+import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import { GitRepository, GitRestClient } from 'azure-devops-extension-api/Git';
 
 import { Button } from 'azure-devops-ui/Button';

@@ -17,7 +17,6 @@ import {
     GitTargetVersionDescriptor,
     GitRepository,
     GitRefUpdate,
-    GitRef,
     GitCommitDiffs,
     GitRefUpdateStatus,
 } from 'azure-devops-extension-api/Git';
@@ -27,7 +26,6 @@ import {
     SimpleTableCell,
     TwoLineTableCell,
 } from 'azure-devops-ui/Table';
-import { Link } from 'azure-devops-ui/Link';
 import { Pill, PillVariant, PillSize } from 'azure-devops-ui/Pill';
 import { Button } from 'azure-devops-ui/Button';
 import { TextField } from 'azure-devops-ui/TextField';

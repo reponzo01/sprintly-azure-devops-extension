@@ -1,21 +1,14 @@
 import * as React from 'react';
-import axios, { AxiosResponse } from 'axios';
 import * as SDK from 'azure-devops-extension-sdk';
-import {
-    getClient,
-    IColor,
-    IExtensionDataManager,
-} from 'azure-devops-extension-api';
+import { IColor, IExtensionDataManager } from 'azure-devops-extension-api';
 import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
     GitBaseVersionDescriptor,
     GitCommitDiffs,
     GitPullRequest,
-    GitPullRequestSearchCriteria,
+    GitRef,
     GitRepository,
-    GitRestClient,
     GitTargetVersionDescriptor,
-    PullRequestStatus,
 } from 'azure-devops-extension-api/Git';
 import {
     EnvironmentStatus,
@@ -137,7 +130,7 @@ export default class SprintlyPostRelease extends React.Component<
             this.renderReleaseBranchDetailList.bind(this);
         this.renderReleaseBranchDetailListItem =
             this.renderReleaseBranchDetailListItem.bind(this);
-        this.renderDetailPage = this.renderDetailPage.bind(this);
+        this.renderDetailPageContent = this.renderDetailPageContent.bind(this);
 
         this.organizationName = props.organizationName;
         this.dataManager = props.dataManager;
@@ -503,7 +496,97 @@ export default class SprintlyPostRelease extends React.Component<
         );
     }
 
-    private renderDetailPage(): JSX.Element {
+    private renderDetailPageHeaderTitle(
+        repositoryName: string,
+        repositoryWebUrl: string
+    ): JSX.Element {
+        return (
+            <HeaderTitleArea>
+                <HeaderTitleRow>
+                    <HeaderTitle
+                        ariaLevel={3}
+                        className="text-ellipsis"
+                        titleSize={TitleSize.Large}
+                    >
+                        <Link
+                            excludeTabStop
+                            href={repositoryWebUrl + '/branches'}
+                            subtle={false}
+                            target="_blank"
+                        >
+                            {repositoryName}
+                        </Link>
+                    </HeaderTitle>
+                </HeaderTitleRow>
+                <HeaderDescription>
+                    Select a release branch below to perform actions on it.
+                </HeaderDescription>
+            </HeaderTitleArea>
+        );
+    }
+
+    private renderDetailPageHeaderCommandBar(
+        repositoryName: string,
+        repositoryBranchesAndTags: GitRef[]
+    ): JSX.Element {
+        return (
+            <HeaderCommandBar
+                items={[
+                    {
+                        iconProps: {
+                            iconName: 'Tag',
+                        },
+                        id: 'testSave',
+                        important: true,
+                        text: 'View Tags',
+                        onActivate: () => {
+                            tagsModalKeyObservable.value = new Date()
+                                .getTime()
+                                .toString();
+                            isTagsDialogOpenObservable.value = true;
+                            const modalContent: ITagsModalContent =
+                                getTagsModalContent(
+                                    repositoryName,
+                                    repositoryBranchesAndTags
+                                );
+                            tagsRepoNameObservable.value =
+                                modalContent.modalName;
+                            tagsObservable.value = modalContent.modalValues;
+                        },
+                    },
+                ]}
+            />
+        );
+    }
+
+    private renderDetailPageHeader(
+        repositoryName: string,
+        repositoryWebUrl: string,
+        repositoryBranchesAndTags: GitRef[]
+    ): JSX.Element {
+        return (
+            <CustomHeader className="bolt-header-with-commandbar">
+                <HeaderIcon
+                    className="bolt-table-status-icon-large"
+                    iconProps={{
+                        iconName: 'Repo',
+                        size: IconSize.large,
+                    }}
+                    titleSize={TitleSize.Large}
+                />
+                {this.renderDetailPageHeaderTitle(
+                    repositoryName,
+                    repositoryWebUrl
+                )}
+                {this.renderDetailPageHeaderCommandBar(
+                    repositoryName,
+                    repositoryBranchesAndTags
+                )}
+            </CustomHeader>
+        );
+    }
+
+    private renderDetailPageContent(): JSX.Element {
         return (
             <Observer
                 selectedItem={this.state.repositoryListSelectedItemObservable}
@@ -522,81 +605,12 @@ export default class SprintlyPostRelease extends React.Component<
                             this.state.repositoryListSelection.selectedCount >
                                 0 && (
                                 <Page>
-                                    <CustomHeader className="bolt-header-with-commandbar">
-                                        <HeaderIcon
-                                            className="bolt-table-status-icon-large"
-                                            iconProps={{
-                                                iconName: 'Repo',
-                                                size: IconSize.large,
-                                            }}
-                                            titleSize={TitleSize.Large}
-                                        />
-                                        <HeaderTitleArea>
-                                            <HeaderTitleRow>
-                                                <HeaderTitle
-                                                    ariaLevel={3}
-                                                    className="text-ellipsis"
-                                                    titleSize={TitleSize.Large}
-                                                >
-                                                    <Link
-                                                        excludeTabStop
-                                                        href={
-                                                            observerProps
-                                                                .selectedItem
-                                                                .webUrl +
-                                                            '/branches'
-                                                        }
-                                                        subtle={false}
-                                                        target="_blank"
-                                                    >
-                                                        {
-                                                            observerProps
-                                                                .selectedItem
-                                                                .name
-                                                        }
-                                                    </Link>
-                                                </HeaderTitle>
-                                            </HeaderTitleRow>
-                                            <HeaderDescription>
-                                                Select a release branch below to
-                                                perform actions on it.
-                                            </HeaderDescription>
-                                        </HeaderTitleArea>
-                                        <HeaderCommandBar
-                                            items={[
-                                                {
-                                                    iconProps: {
-                                                        iconName: 'Tag',
-                                                    },
-                                                    id: 'testSave',
-                                                    important: true,
-                                                    text: 'View Tags',
-                                                    onActivate: () => {
-                                                        tagsModalKeyObservable.value =
-                                                            new Date()
-                                                                .getTime()
-                                                                .toString();
-                                                        isTagsDialogOpenObservable.value =
-                                                            true;
-                                                        const modalContent: ITagsModalContent =
-                                                            getTagsModalContent(
-                                                                observerProps
-                                                                    .selectedItem
-                                                                    .name,
-                                                                observerProps
-                                                                    .selectedItem
-                                                                    .branchesAndTags
-                                                            );
-                                                        tagsRepoNameObservable.value =
-                                                            modalContent.modalName;
-                                                        tagsObservable.value =
-                                                            modalContent.modalValues;
-                                                    },
-                                                },
-                                            ]}
-                                        />
-                                    </CustomHeader>
-
+                                    {this.renderDetailPageHeader(
+                                        observerProps.selectedItem.name,
+                                        observerProps.selectedItem.webUrl,
+                                        observerProps.selectedItem
+                                            .branchesAndTags
+                                    )}
                                     <div className="page-content page-content-top">
                                         <Card>
                                             {this.renderReleaseBranchDetailList(
@@ -635,23 +649,6 @@ export default class SprintlyPostRelease extends React.Component<
         details: IListItemDetails<Common.IReleaseBranchInfo>,
         key?: string
     ): JSX.Element {
-        // TODO: Extract these colors into somewhere common
-        const successColor: IColor = {
-            red: 47,
-            green: 92,
-            blue: 55,
-        };
-        const failedColor: IColor = {
-            red: 205,
-            green: 74,
-            blue: 69,
-        };
-        const warningColor: IColor = {
-            red: 118,
-            green: 90,
-            blue: 37,
-        };
-
         return (
             <ListItem
                 className="master-row border-bottom"
@@ -735,7 +732,7 @@ export default class SprintlyPostRelease extends React.Component<
                                             }
                                         </div>
                                         <Pill
-                                            color={warningColor}
+                                            color={Common.warningColor}
                                             size={PillSize.regular}
                                             variant={PillVariant.outlined}
                                             className="bolt-list-overlay sprintly-environment-status"
@@ -820,7 +817,7 @@ export default class SprintlyPostRelease extends React.Component<
                                             parseInt(
                                                 EnvironmentStatus.Succeeded.toString()
                                             )
-                                                ? successColor
+                                                ? Common.successColor
                                                 : parseInt(envStatusEnum) ===
                                                       parseInt(
                                                           EnvironmentStatus.Undefined.toString()
@@ -837,7 +834,7 @@ export default class SprintlyPostRelease extends React.Component<
                                                       parseInt(
                                                           EnvironmentStatus.PartiallySucceeded.toString()
                                                       )
-                                                ? failedColor
+                                                ? Common.failedColor
                                                 : undefined
                                         }
                                         size={PillSize.regular}
@@ -940,7 +937,9 @@ export default class SprintlyPostRelease extends React.Component<
                                     onRenderNearElement={
                                         this.renderRepositoryMasterPageList
                                     }
-                                    onRenderFarElement={this.renderDetailPage}
+                                    onRenderFarElement={
+                                        this.renderDetailPageContent
+                                    }
                                 />
                                 {this.renderTagsModalActionButton()}
                             </div>
