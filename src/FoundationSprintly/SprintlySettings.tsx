@@ -1,5 +1,5 @@
 import * as React from 'react';
-import axios from 'axios';
+import axios, { AxiosResponse } from 'axios';
 
 import * as SDK from 'azure-devops-extension-sdk';
 import {
@@ -93,7 +93,7 @@ export default class SprintlySettings extends React.Component<
 
     private async getGraphResource(resouce: string): Promise<any> {
         this.accessToken = await Common.getOrRefreshToken(this.accessToken);
-        const response = await axios
+        const response: AxiosResponse<never> = await axios
             .get(
                 `https://vssps.dev.azure.com/${this.organizationName}/_apis/graph/${resouce}`,
                 {
@@ -111,7 +111,7 @@ export default class SprintlySettings extends React.Component<
 
     private async loadGroups(): Promise<void> {
         this.allUserGroups = [];
-        const data = await this.getGraphResource('groups');
+        const data: any = await this.getGraphResource('groups');
         for (const group of data.value) {
             this.allUserGroups.push({
                 displayName: group.displayName,
@@ -123,7 +123,7 @@ export default class SprintlySettings extends React.Component<
 
     private async loadUsers(): Promise<void> {
         this.allUsers = [];
-        const data = await this.getGraphResource('users');
+        const data: any = await this.getGraphResource('users');
         for (const user of data.value) {
             this.allUsers.push({
                 displayName: user.displayName,
@@ -313,13 +313,12 @@ export default class SprintlySettings extends React.Component<
 
     private renderUserGroupsDropdown(): JSX.Element {
         return (
-            /* tslint:disable */
-            <div className="flex-column">
+            <div className='flex-column'>
                 <Observer selection={this.userGroupsSelection}>
                     {() => {
                         return (
                             <Dropdown
-                                ariaLabel="Multiselect"
+                                ariaLabel='Multiselect'
                                 actions={[
                                     {
                                         className:
@@ -334,31 +333,30 @@ export default class SprintlySettings extends React.Component<
                                         },
                                     },
                                 ]}
-                                className="example-dropdown flex-column"
+                                className='example-dropdown flex-column'
                                 items={this.allUserGroups.map(
-                                    (item) => item.displayName
+                                    (item: Common.IAllowedEntity) =>
+                                        item.displayName
                                 )}
                                 selection={this.userGroupsSelection}
-                                placeholder="Select User Groups"
+                                placeholder='Select User Groups'
                                 showFilterBox={true}
                             />
                         );
                     }}
                 </Observer>
             </div>
-            /* tslint:disable */
         );
     }
 
     private renderUsersDropdown(): JSX.Element {
         return (
-            /* tslint:disable */
-            <div className="flex-column">
+            <div className='flex-column'>
                 <Observer selection={this.usersSelection}>
                     {() => {
                         return (
                             <Dropdown
-                                ariaLabel="Multiselect"
+                                ariaLabel='Multiselect'
                                 actions={[
                                     {
                                         className:
@@ -373,31 +371,30 @@ export default class SprintlySettings extends React.Component<
                                         },
                                     },
                                 ]}
-                                className="example-dropdown flex-column"
+                                className='example-dropdown flex-column'
                                 items={this.allUsers.map(
-                                    (item) => item.displayName
+                                    (item: Common.IAllowedEntity) =>
+                                        item.displayName
                                 )}
                                 selection={this.usersSelection}
-                                placeholder="Select Individual Users"
+                                placeholder='Select Individual Users'
                                 showFilterBox={true}
                             />
                         );
                     }}
                 </Observer>
             </div>
-            /* tslint:disable */
         );
     }
 
     private renderRepositoriesDropdown(): JSX.Element {
         return (
-            /* tslint:disable */
-            <div className="flex-column">
+            <div className='flex-column'>
                 <Observer selection={this.repositoriesToProcessSelection}>
                     {() => {
                         return (
                             <Dropdown
-                                ariaLabel="Multiselect"
+                                ariaLabel='Multiselect'
                                 actions={[
                                     {
                                         className:
@@ -424,28 +421,25 @@ export default class SprintlySettings extends React.Component<
                                         },
                                     },
                                 ]}
-                                className="example-dropdown flex-column"
+                                className='example-dropdown flex-column'
                                 items={this.allRepositories.map(
-                                    (item) => item.displayName
+                                    (item: Common.IAllowedEntity) =>
+                                        item.displayName
                                 )}
                                 selection={this.repositoriesToProcessSelection}
-                                placeholder="Select Individual Repositories"
+                                placeholder='Select Individual Repositories'
                                 showFilterBox={true}
                             />
                         );
                     }}
                 </Observer>
             </div>
-            /* tslint:disable */
         );
     }
 
-    public render() {
-        const { ready } = this.state;
-
+    public render(): JSX.Element {
         return (
-            /* tslint:disable */
-            <div className="page-content page-content-top flex-column rhythm-vertical-16">
+            <div className='page-content page-content-top flex-column rhythm-vertical-16'>
                 <div>
                     By default the Azure groups{' '}
                     <u>
@@ -468,16 +462,15 @@ export default class SprintlySettings extends React.Component<
                 </div>
                 {this.renderRepositoriesDropdown()}
 
-                <div className="bolt-button-group flex-row rhythm-horizontal-8">
+                <div className='bolt-button-group flex-row rhythm-horizontal-8'>
                     <Button
-                        text="Save Settings"
+                        text='Save Settings'
                         primary={true}
                         onClick={this.onSaveData}
-                        disabled={!ready}
+                        disabled={!this.state.ready}
                     />
                 </div>
             </div>
-            /* tslint:disable */
         );
     }
 }

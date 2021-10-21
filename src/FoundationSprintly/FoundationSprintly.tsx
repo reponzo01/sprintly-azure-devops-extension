@@ -243,9 +243,9 @@ export default class FoundationSprintly extends React.Component<
     public render(): JSX.Element {
         return (
             /* tslint:disable */
-            <Page className="flex-grow foundation-sprintly">
+            <Page className='flex-grow foundation-sprintly'>
                 <Header
-                    title="Foundation Sprintly"
+                    title='Foundation Sprintly'
                     commandBarItems={this.getCommandBarItems()}
                     titleSize={TitleSize.Large}
                 />
@@ -281,7 +281,7 @@ export default class FoundationSprintly extends React.Component<
                                             extension.
                                         </span>
                                     }
-                                    imageAltText="No Access"
+                                    imageAltText='No Access'
                                     imagePath={'../static/notfound.png'}
                                 />
                             </div>

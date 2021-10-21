@@ -19,6 +19,8 @@ import {
     GitRefUpdate,
     GitCommitDiffs,
     GitRefUpdateStatus,
+    GitBranchStats,
+    GitRefUpdateResult,
 } from 'azure-devops-extension-api/Git';
 import {
     Table,
@@ -110,7 +112,6 @@ export default class SprintlyPage extends React.Component<
     }
 
     public async componentDidMount(): Promise<void> {
-        console.log('called compoent did mount');
         await this.initializeComponent();
     }
 
@@ -120,8 +121,9 @@ export default class SprintlyPage extends React.Component<
                 this.dataManager,
                 repositoriesToProcessKey
             )
-        ).map((item) => item.originId);
-        totalRepositoriesToProcessObservable.value = repositoriesToProcess.length;
+        ).map((item: Common.IAllowedEntity) => item.originId);
+        totalRepositoriesToProcessObservable.value =
+            repositoriesToProcess.length;
         if (repositoriesToProcess.length > 0) {
             await this.loadRepositoriesDisplayState(
                 await Common.getFilteredProjects()
@@ -132,7 +134,7 @@ export default class SprintlyPage extends React.Component<
     private async loadRepositoriesDisplayState(
         projects: TeamProjectReference[]
     ): Promise<void> {
-        let reposExtended: Common.IGitRepositoryExtended[] = [];
+        const reposExtended: Common.IGitRepositoryExtended[] = [];
         for (const project of projects) {
             const filteredRepos: GitRepository[] =
                 await Common.getFilteredProjectRepositories(
@@ -143,7 +145,7 @@ export default class SprintlyPage extends React.Component<
             totalRepositoriesToProcessObservable.value = filteredRepos.length;
 
             for (const repo of filteredRepos) {
-                const repositoryBranchInfo =
+                const repositoryBranchInfo: Common.IRepositoryBranchInfo =
                     await Common.getRepositoryBranchesInfo(repo.id);
 
                 const processRepo: boolean =
@@ -152,7 +154,7 @@ export default class SprintlyPage extends React.Component<
                         repositoryBranchInfo.hasMainBranch);
 
                 if (processRepo === true) {
-                    let createRelease: boolean =
+                    const createRelease: boolean =
                         await this.isDevelopAheadOfMasterMain(
                             repositoryBranchInfo,
                             repo.id
@@ -234,7 +236,6 @@ export default class SprintlyPage extends React.Component<
 
     public render(): JSX.Element {
         return (
-            /* tslint:disable */
             <Observer
                 totalRepositoriesToProcess={
                     totalRepositoriesToProcessObservable
@@ -243,9 +244,9 @@ export default class SprintlyPage extends React.Component<
                 {(props: { totalRepositoriesToProcess: number }) => {
                     if (props.totalRepositoriesToProcess > 0) {
                         return !this.state.repositories ? (
-                            <Spinner label="loading" />
+                            <Spinner label='loading' />
                         ) : (
-                            <div className="page-content page-content-top flex-column rhythm-vertical-16">
+                            <div className='page-content page-content-top flex-column rhythm-vertical-16'>
                                 {this.state.repositories && (
                                     <Table
                                         columns={columns}
@@ -287,21 +288,19 @@ export default class SprintlyPage extends React.Component<
                     }
                     return (
                         <ZeroData
-                            primaryText="No repositories."
+                            primaryText='No repositories.'
                             secondaryText={
                                 <span>
                                     Please select valid repositories from the
                                     Settings page.
                                 </span>
                             }
-                            imageAltText="No repositories"
+                            imageAltText='No repositories'
                             imagePath={'../static/notfound.png'}
                         />
                     );
                 }}
             </Observer>
-
-            /* tslint:disable */
         );
     }
 }
@@ -320,8 +319,8 @@ function renderNameCell(
             children={
                 <>
                     <Icon
-                        ariaLabel="Repository"
-                        iconName="Repo"
+                        ariaLabel='Repository'
+                        iconName='Repo'
                         size={IconSize.large}
                     />{' '}
                     {Common.repositoryLinkJsxElement(
@@ -355,7 +354,7 @@ function renderReleaseNeededCell(
         const releaseBranchLinks: JSX.Element[] = [];
         let counter: number = 0;
         for (const releaseBranch of tableItem.existingReleaseBranches) {
-            const releaseBranchName =
+            const releaseBranchName: string =
                 releaseBranch.targetBranch.name.split('heads/')[1];
             releaseBranchLinks.push(
                 Common.branchLinkJsxElement(
@@ -381,7 +380,7 @@ function renderReleaseNeededCell(
                             size={PillSize.large}
                             variant={PillVariant.colored}
                             iconProps={{ iconName: 'Warning' }}
-                            className="bolt-list-overlay"
+                            className='bolt-list-overlay'
                         >
                             <b>{text}</b>
                         </Pill>
@@ -402,7 +401,7 @@ function renderReleaseNeededCell(
                         color={color}
                         size={PillSize.large}
                         variant={PillVariant.colored}
-                        className="bolt-list-overlay"
+                        className='bolt-list-overlay'
                     >
                         <b>{text}</b>
                     </Pill>
@@ -426,7 +425,7 @@ function renderTagsCell(
             children={
                 <>
                     <Button
-                        text="View Tags"
+                        text='View Tags'
                         subtle={true}
                         iconProps={{ iconName: 'Tag' }}
                         onClick={() => {
@@ -467,23 +466,30 @@ function renderCreateReleaseBranchCell(
                     release /&nbsp;
                     <TextField
                         value={newReleaseBranchNamesObservable[rowIndex]}
-                        onChange={(e, newValue) =>
+                        onChange={(
+                            e: React.ChangeEvent<
+                                HTMLInputElement | HTMLTextAreaElement
+                            >,
+                            newValue: string
+                        ) =>
                             (newReleaseBranchNamesObservable[rowIndex].value =
                                 newValue.trim())
                         }
                     />
                     &nbsp;
                     <Button
-                        text="Create Branch"
+                        text='Create Branch'
                         iconProps={{ iconName: 'OpenSource' }}
                         primary={true}
                         onClick={async () => {
                             const createRefOptions: GitRefUpdate[] = [];
-                            const developBranch = await getClient(
-                                GitRestClient
-                            ).getBranch(tableItem.id, 'develop');
+                            const developBranch: GitBranchStats =
+                                await getClient(GitRestClient).getBranch(
+                                    tableItem.id,
+                                    'develop'
+                                );
 
-                            const newDevObjectId =
+                            const newDevObjectId: string =
                                 developBranch.commit.commitId;
 
                             createRefOptions.push({
@@ -497,26 +503,32 @@ function renderCreateReleaseBranchCell(
                                 oldObjectId:
                                     '0000000000000000000000000000000000000000',
                             });
-                            const createRef = await getClient(
-                                GitRestClient
-                            ).updateRefs(createRefOptions, tableItem.id);
+                            const createRef: GitRefUpdateResult[] =
+                                await getClient(GitRestClient).updateRefs(
+                                    createRefOptions,
+                                    tableItem.id
+                                );
 
                             newReleaseBranchNamesObservable[rowIndex].value =
                                 '';
-                            createRef.forEach(async (ref) => {
-                                const globalMessagesSvc =
-                                    await SDK.getService<IGlobalMessagesService>(
-                                        CommonServiceIds.GlobalMessagesService
-                                    );
-                                globalMessagesSvc.addToast({
-                                    duration: 5000,
-                                    forceOverrideExisting: true,
-                                    message: ref.success
-                                        ? 'Branch Created!'
-                                        : 'Error Creating Branch: ' +
-                                          GitRefUpdateStatus[ref.updateStatus],
-                                });
-                            });
+                            createRef.forEach(
+                                async (ref: GitRefUpdateResult) => {
+                                    const globalMessagesSvc: IGlobalMessagesService =
+                                        await SDK.getService<IGlobalMessagesService>(
+                                            CommonServiceIds.GlobalMessagesService
+                                        );
+                                    globalMessagesSvc.addToast({
+                                        duration: 5000,
+                                        forceOverrideExisting: true,
+                                        message: ref.success
+                                            ? 'Branch Created!'
+                                            : 'Error Creating Branch: ' +
+                                              GitRefUpdateStatus[
+                                                  ref.updateStatus
+                                              ],
+                                    });
+                                }
+                            );
                         }}
                     />
                 </>
@@ -525,6 +537,6 @@ function renderCreateReleaseBranchCell(
     );
 }
 
-function onSize(event: MouseEvent, index: number, width: number) {
+function onSize(event: MouseEvent, index: number, width: number): void {
     (columns[index].width as ObservableValue<number>).value = width;
 }

@@ -12,6 +12,7 @@ import {
     PullRequestStatus,
 } from 'azure-devops-extension-api/Git';
 import {
+    ArtifactSourceReference,
     EnvironmentStatus,
     Release,
     ReleaseDefinition,
@@ -124,20 +125,20 @@ export interface IGitRepositoryExtended extends GitRepository {
 }
 
 export async function getOrRefreshToken(token: string): Promise<string> {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(
+    const base64Url: string = token.split('.')[1];
+    const base64: string = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload: string = decodeURIComponent(
         atob(base64)
             .split('')
-            .map((c) => {
+            .map((c: string) => {
                 return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
             })
             .join('')
     );
 
-    const decodedToken = JSON.parse(jsonPayload);
-    const tokenDate = new Date(parseInt(decodedToken.exp) * 1000);
-    const now = new Date();
+    const decodedToken: any = JSON.parse(jsonPayload);
+    const tokenDate: Date = new Date(parseInt(decodedToken.exp) * 1000);
+    const now: Date = new Date();
     if (tokenDate <= now) {
         return await SDK.getAccessToken();
     }
@@ -300,7 +301,7 @@ export async function storeBranchReleaseInfoIntoObservable(
     for (const releaseDefinition of releaseDefinitions) {
         for (const artifact of releaseDefinition.artifacts) {
             if (artifact.isPrimary) {
-                const releaseDefBuildDef =
+                const releaseDefBuildDef: ArtifactSourceReference =
                     artifact.definitionReference['definition'];
                 if (releaseDefBuildDef) {
                     if (
@@ -351,13 +352,13 @@ export async function getReleasesForReleaseBranch(
             if (data && data.count > 0) {
                 const existingIndex: number =
                     releaseInfoObservable.value.findIndex(
-                        (item) =>
+                        (item: IReleaseInfo) =>
                             item.releaseBranch.targetBranch.name ===
                             releaseBranch.targetBranch.name
                     );
                 const releaseInfo: IReleaseInfo = {
-                    repositoryId: repositoryId,
-                    releaseBranch: releaseBranch,
+                    repositoryId,
+                    releaseBranch,
                     releases: data.value,
                 };
                 if (existingIndex < 0) {
@@ -380,7 +381,7 @@ export async function getReleaseDefinitions(
 ): Promise<ReleaseDefinition[]> {
     for (const project of projects) {
         accessToken = await getOrRefreshToken(accessToken);
-        const response = await axios
+        const response: AxiosResponse<never> = await axios
             .get(
                 `https://vsrm.dev.azure.com/${organizationName}/${project.id}/_apis/release/definitions?$expand=artifacts&api-version=6.0`,
                 {
@@ -399,7 +400,6 @@ export async function getReleaseDefinitions(
         if (data && data.count > 0) {
             return data.value;
         }
-        console.log('release definitions: ', data.value);
     }
     return [];
 }
@@ -411,7 +411,7 @@ export async function getBuildDefinitions(
 ): Promise<BuildDefinition[]> {
     for (const project of projects) {
         accessToken = await getOrRefreshToken(accessToken);
-        const response = await axios
+        const response: AxiosResponse<never> = await axios
             .get(
                 `https://dev.azure.com/${organizationName}/${project.id}/_apis/build/definitions?includeAllProperties=true&api-version=6.0`,
                 {
@@ -429,7 +429,6 @@ export async function getBuildDefinitions(
         if (data && data.count > 0) {
             return data.value;
         }
-        console.log('build definitions: ', data.value);
     }
     return [];
 }
@@ -466,13 +465,11 @@ export function getSortedReleasesForBranch(
     let sortedReleases: Release[] = [];
     const releaseInfoForBranch: IReleaseInfo | undefined =
         releaseInfoForAllBranches.find(
-            (ri) =>
+            (ri: IReleaseInfo) =>
                 ri.releaseBranch.targetBranch.name ===
                     releaseBranchInfo.targetBranch.name &&
                 ri.repositoryId === releaseBranchInfo.repositoryId
         );
-
-    console.log('release info: ', releaseInfoForBranch);
 
     if (releaseInfoForBranch && releaseInfoForBranch.releases.length > 0) {
         sortedReleases = sortedReleases.concat(
@@ -501,7 +498,7 @@ export function repositoryLinkJsxElement(
             excludeTabStop
             href={webUrl + '/branches'}
             subtle={true}
-            target="_blank"
+            target='_blank'
             className={className}
         >
             <u>{repositoryName}</u>
@@ -520,7 +517,7 @@ export function branchLinkJsxElement(
             key={key}
             excludeTabStop
             href={webUrl + '?version=GB' + encodeURI(branchName)}
-            target="_blank"
+            target='_blank'
             className={className}
         >
             {branchName}
@@ -534,12 +531,12 @@ export function noReleaseExistsPillJsxElement(): JSX.Element {
             color={warningColor}
             size={PillSize.regular}
             variant={PillVariant.outlined}
-            className="bolt-list-overlay sprintly-environment-status"
+            className='bolt-list-overlay sprintly-environment-status'
         >
-            <div className="sprintly-text-white">
+            <div className='sprintly-text-white'>
                 <Icon
-                    ariaLabel="No Release Exists"
-                    iconName="Warning"
+                    ariaLabel='No Release Exists'
+                    iconName='Warning'
                     size={IconSize.small}
                 />{' '}
                 No Release
@@ -553,20 +550,17 @@ export function getAllEnvironmentStatusPillJsxElements(
 ): JSX.Element[] {
     const environmentStatuses: JSX.Element[] = [];
     for (const environment of environments) {
-        console.log(environment.name, environment.status);
         let envStatusEnumString: string = '';
         let statusIconName: string = 'Cancel';
-        let divTextClassName = 'sprintly-text-white';
+        let divTextClassName: string = 'sprintly-text-white';
         for (const idx in EnvironmentStatus) {
             if (
                 idx.toLowerCase() ===
                 environment.status.toString().toLowerCase()
             ) {
-                console.log('thing here ', EnvironmentStatus[idx], idx);
                 envStatusEnumString = EnvironmentStatus[idx];
             }
         }
-        console.log(envStatusEnumString, EnvironmentStatus.NotStarted);
         switch (parseInt(envStatusEnumString)) {
             case parseInt(EnvironmentStatus.NotStarted.toString()):
                 statusIconName = 'CircleRing';
@@ -628,13 +622,13 @@ export function environmentStatusPillJsxElement(
             }
             size={PillSize.regular}
             variant={PillVariant.outlined}
-            className="bolt-list-overlay sprintly-environment-status"
+            className='bolt-list-overlay sprintly-environment-status'
         >
             <div className={divTextClassName}>
                 {statusIconName === 'UseRunningStatus' ? (
                     <Status
                         {...Statuses.Running}
-                        key="running"
+                        key='running'
                         size={StatusSize.m}
                     />
                 ) : (

@@ -2,7 +2,10 @@ import { IExtensionDataManager } from 'azure-devops-extension-api';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
 import * as React from 'react';
 
-export default class SprintlyInRelease extends React.Component<{ organizationName: string; dataManager: IExtensionDataManager }> {
+export default class SprintlyInRelease extends React.Component<{
+    organizationName: string;
+    dataManager: IExtensionDataManager;
+}> {
     private dataManager: IExtensionDataManager;
     private organizationName: string;
 
@@ -16,15 +19,17 @@ export default class SprintlyInRelease extends React.Component<{ organizationNam
         this.dataManager = props.dataManager;
     }
 
-    public render() {
+    public render(): JSX.Element {
         return (
             <div>
                 <ZeroData
-                    primaryText="Coming Soon!"
+                    primaryText='Coming Soon!'
                     secondaryText={
-                        <span>In-release (QA) functionality is coming soon!</span>
+                        <span>
+                            In-release (QA) functionality is coming soon!
+                        </span>
                     }
-                    imageAltText="Coming Soon"
+                    imageAltText='Coming Soon'
                     imagePath={'../static/notfound.png'}
                 />
             </div>

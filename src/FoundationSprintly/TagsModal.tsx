@@ -24,7 +24,7 @@ export class TagsModal extends React.Component<{
         super(props);
     }
 
-    public render() {
+    public render(): JSX.Element | null {
         return this.props.isTagsDialogOpen ? (
             <Dialog
                 titleProps={{

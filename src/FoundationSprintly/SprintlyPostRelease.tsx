@@ -10,11 +10,7 @@ import {
     GitRepository,
     GitTargetVersionDescriptor,
 } from 'azure-devops-extension-api/Git';
-import {
-    EnvironmentStatus,
-    Release,
-    ReleaseDefinition,
-} from 'azure-devops-extension-api/Release';
+import { Release, ReleaseDefinition } from 'azure-devops-extension-api/Release';
 import { BuildDefinition } from 'azure-devops-extension-api/Build';
 
 import {
@@ -28,7 +24,6 @@ import { ArrayItemProvider } from 'azure-devops-ui/Utilities/Provider';
 import { Icon, IconSize } from 'azure-devops-ui/Icon';
 import { Link } from 'azure-devops-ui/Link';
 import { Card } from 'azure-devops-ui/Card';
-import { Status, Statuses, StatusSize } from 'azure-devops-ui/Status';
 import {
     IListItemDetails,
     List,
@@ -149,11 +144,12 @@ export default class SprintlyPostRelease extends React.Component<
                 this.dataManager,
                 repositoriesToProcessKey
             )
-        ).map((item) => item.originId);
+        ).map((item: Common.IAllowedEntity) => item.originId);
         totalRepositoriesToProcessObservable.value =
             repositoriesToProcess.length;
         if (repositoriesToProcess.length > 0) {
-            const filteredProjects = await Common.getFilteredProjects();
+            const filteredProjects: TeamProjectReference[] =
+                await Common.getFilteredProjects();
             await this.loadRepositoriesDisplayState(filteredProjects);
             this.setState({
                 pullRequests: this.state.pullRequests.concat(
@@ -177,7 +173,7 @@ export default class SprintlyPostRelease extends React.Component<
     private async loadRepositoriesDisplayState(
         projects: TeamProjectReference[]
     ): Promise<void> {
-        let reposExtended: Common.IGitRepositoryExtended[] = [];
+        const reposExtended: Common.IGitRepositoryExtended[] = [];
         for (const project of projects) {
             const filteredRepos: GitRepository[] =
                 await Common.getFilteredProjectRepositories(
@@ -188,7 +184,7 @@ export default class SprintlyPostRelease extends React.Component<
             totalRepositoriesToProcessObservable.value = filteredRepos.length;
 
             for (const repo of filteredRepos) {
-                const repositoryBranchInfo =
+                const repositoryBranchInfo: Common.IRepositoryBranchInfo =
                     await Common.getRepositoryBranchesInfo(repo.id);
 
                 const processRepo: boolean =
@@ -200,7 +196,7 @@ export default class SprintlyPostRelease extends React.Component<
                     const existingReleaseBranches: Common.IReleaseBranchInfo[] =
                         [];
                     for (const releaseBranch of repositoryBranchInfo.releaseBranches) {
-                        const releaseBranchName =
+                        const releaseBranchName: string =
                             releaseBranch.name.split('heads/')[1];
 
                         const branchInfo: Common.IReleaseBranchInfo = {
@@ -355,14 +351,14 @@ export default class SprintlyPostRelease extends React.Component<
         this.state.releaseBranchListSelection.clear();
         if (
             this.state.repositoryListSelectedItemObservable.value
-                .existingReleaseBranches.length == 1
+                .existingReleaseBranches.length === 1
         ) {
             this.state.releaseBranchListSelection.select(0);
         }
 
         const buildDefinitionForRepo: BuildDefinition | undefined =
             this.buildDefinitions.find(
-                (buildDef) =>
+                (buildDef: BuildDefinition) =>
                     buildDef.repository.id ===
                     this.state.repositoryListSelectedItemObservable.value.id
             );
@@ -387,11 +383,10 @@ export default class SprintlyPostRelease extends React.Component<
     }
 
     private renderRepositoryMasterPageList(): JSX.Element {
-        console.log('inside render list: ', this.state.repositories.length);
         return !this.state.repositories ||
-            this.state.repositories.length == 0 ? (
-            <div className="page-content-top">
-                <Spinner label="loading" />
+            this.state.repositories.length === 0 ? (
+            <div className='page-content-top'>
+                <Spinner label='loading' />
             </div>
         ) : (
             <List
@@ -399,7 +394,7 @@ export default class SprintlyPostRelease extends React.Component<
                 itemProvider={this.state.repositories}
                 selection={this.state.repositoryListSelection}
                 renderRow={this.renderRepositoryListItem}
-                width="100%"
+                width='100%'
                 singleClickActivation={true}
                 onSelect={async () => {
                     await this.selectRepository();
@@ -414,14 +409,13 @@ export default class SprintlyPostRelease extends React.Component<
         details: IListItemDetails<Common.IGitRepositoryExtended>,
         key?: string
     ): JSX.Element {
-        console.log('in render repository list item');
         const releaseBranchLinks: JSX.Element[] = [];
         let counter: number = 0;
         for (const releaseBranch of item.existingReleaseBranches) {
-            const releaseBranchName =
+            const releaseBranchName: string =
                 releaseBranch.targetBranch.name.split('heads/')[1];
             releaseBranchLinks.push(
-                <div className="flex-row padding-vertical-10" key={counter}>
+                <div className='flex-row padding-vertical-10' key={counter}>
                     {Common.branchLinkJsxElement(
                         counter + 'link',
                         item.webUrl,
@@ -446,18 +440,17 @@ export default class SprintlyPostRelease extends React.Component<
             );
             counter++;
         }
-        console.log('release branches ready: ', releaseBranchLinks.length);
         return (
             <ListItem
-                className="master-row border-bottom"
+                className='master-row border-bottom'
                 key={key || 'list-item' + index}
                 index={index}
                 details={details}
             >
-                <div className="master-row-content flex-row flex-center h-scroll-hidden">
-                    <div className="flex-column text-ellipsis">
+                <div className='master-row-content flex-row flex-center h-scroll-hidden'>
+                    <div className='flex-column text-ellipsis'>
                         <Tooltip overflowOnly={true}>
-                            <div className="primary-text text-ellipsis">
+                            <div className='primary-text text-ellipsis'>
                                 {Common.repositoryLinkJsxElement(
                                     item.webUrl,
                                     'font-size-1',
@@ -466,7 +459,7 @@ export default class SprintlyPostRelease extends React.Component<
                             </div>
                         </Tooltip>
                         <Tooltip overflowOnly={true}>
-                            <div className="flex-column primary-text text-ellipsis">
+                            <div className='flex-column primary-text text-ellipsis'>
                                 {<>{releaseBranchLinks}</>}
                             </div>
                         </Tooltip>
@@ -486,16 +479,16 @@ export default class SprintlyPostRelease extends React.Component<
             <Pill
                 color={color}
                 size={PillSize.regular}
-                className="bolt-list-overlay margin-horizontal-3"
+                className='bolt-list-overlay margin-horizontal-3'
                 variant={varient}
             >
-                <div className="sprintly-text-white">
+                <div className='sprintly-text-white'>
                     Ahead of {aheadOfText}{' '}
                     {pullRequest && (
                         <i>
                             <Icon
-                                ariaLabel="Pull Request"
-                                iconName="BranchPullRequest"
+                                ariaLabel='Pull Request'
+                                iconName='BranchPullRequest'
                                 size={IconSize.small}
                             />{' '}
                             #{pullRequest.pullRequestId}
@@ -515,14 +508,14 @@ export default class SprintlyPostRelease extends React.Component<
                 <HeaderTitleRow>
                     <HeaderTitle
                         ariaLevel={3}
-                        className="text-ellipsis"
+                        className='text-ellipsis'
                         titleSize={TitleSize.Large}
                     >
                         <Link
                             excludeTabStop
                             href={repositoryWebUrl + '/branches'}
                             subtle={false}
-                            target="_blank"
+                            target='_blank'
                         >
                             {repositoryName}
                         </Link>
@@ -575,9 +568,9 @@ export default class SprintlyPostRelease extends React.Component<
         repositoryBranchesAndTags: GitRef[]
     ): JSX.Element {
         return (
-            <CustomHeader className="bolt-header-with-commandbar">
+            <CustomHeader className='bolt-header-with-commandbar'>
                 <HeaderIcon
-                    className="bolt-table-status-icon-large"
+                    className='bolt-table-status-icon-large'
                     iconProps={{
                         iconName: 'Repo',
                         size: IconSize.large,
@@ -604,10 +597,10 @@ export default class SprintlyPostRelease extends React.Component<
                 {(observerProps: {
                     selectedItem: Common.IGitRepositoryExtended;
                 }) => (
-                    <Page className="flex-grow single-layer-details">
-                        {this.state.repositoryListSelection.selectedCount ==
+                    <Page className='flex-grow single-layer-details'>
+                        {this.state.repositoryListSelection.selectedCount ===
                             0 && (
-                            <span className="single-layer-details-contents">
+                            <span className='single-layer-details-contents'>
                                 Select a repository on the right to get started.
                             </span>
                         )}
@@ -621,7 +614,7 @@ export default class SprintlyPostRelease extends React.Component<
                                         observerProps.selectedItem
                                             .branchesAndTags
                                     )}
-                                    <div className="page-content page-content-top">
+                                    <div className='page-content page-content-top'>
                                         <Card>
                                             {this.renderReleaseBranchDetailList(
                                                 new ArrayItemProvider(
@@ -647,7 +640,7 @@ export default class SprintlyPostRelease extends React.Component<
                 itemProvider={items}
                 selection={this.state.releaseBranchListSelection}
                 renderRow={this.renderReleaseBranchDetailListItem}
-                width="100%"
+                width='100%'
                 singleClickActivation={true}
             />
         );
@@ -661,12 +654,12 @@ export default class SprintlyPostRelease extends React.Component<
     ): JSX.Element {
         return (
             <ListItem
-                className="master-row border-bottom"
+                className='master-row border-bottom'
                 key={key || 'list-item' + index}
                 index={index}
                 details={details}
             >
-                <div className="master-row-content flex-row flex-center h-scroll-hidden">
+                <div className='master-row-content flex-row flex-center h-scroll-hidden'>
                     <Observer releaseInfoForAllBranches={releaseInfoObservable}>
                         {(observerProps: {
                             releaseInfoForAllBranches: Common.IReleaseInfo[];
@@ -682,10 +675,10 @@ export default class SprintlyPostRelease extends React.Component<
                                         observerProps.releaseInfoForAllBranches
                                     );
                             }
-                            if (sortedReleases.length == 0) {
+                            if (sortedReleases.length === 0) {
                                 return (
-                                    <div className="flex-row">
-                                        <div className="margin-horizontal-10">
+                                    <div className='flex-row'>
+                                        <div className='margin-horizontal-10'>
                                             {Common.getBranchShortName(
                                                 item.targetBranch.name
                                             )}
@@ -694,7 +687,6 @@ export default class SprintlyPostRelease extends React.Component<
                                     </div>
                                 );
                             }
-                            console.log('sortedReleases: ', sortedReleases);
                             const mostRecentRelease: Release =
                                 sortedReleases[0];
                             const environmentStatuses: JSX.Element[] =
@@ -702,8 +694,8 @@ export default class SprintlyPostRelease extends React.Component<
                                     mostRecentRelease.environments
                                 );
                             return (
-                                <div className="flex-row">
-                                    <div className="margin-horizontal-10">
+                                <div className='flex-row'>
+                                    <div className='margin-horizontal-10'>
                                         {Common.getBranchShortName(
                                             item.targetBranch.name
                                         )}
@@ -748,7 +740,6 @@ export default class SprintlyPostRelease extends React.Component<
 
     public render(): JSX.Element {
         return (
-            /* tslint:disable */
             <Observer
                 totalRepositoriesToProcess={
                     totalRepositoriesToProcessObservable
@@ -758,7 +749,7 @@ export default class SprintlyPostRelease extends React.Component<
                     if (props.totalRepositoriesToProcess > 0) {
                         return (
                             <div
-                                className="flex-grow"
+                                className='flex-grow'
                                 style={{
                                     display: 'flex',
                                     height: '0%',
@@ -771,8 +762,8 @@ export default class SprintlyPostRelease extends React.Component<
                                     }
                                     initialFixedSize={450}
                                     minFixedSize={100}
-                                    nearElementClassName="v-scroll-auto custom-scrollbar light-grey"
-                                    farElementClassName="v-scroll-auto custom-scrollbar"
+                                    nearElementClassName='v-scroll-auto custom-scrollbar light-grey'
+                                    farElementClassName='v-scroll-auto custom-scrollbar'
                                     onRenderNearElement={
                                         this.renderRepositoryMasterPageList
                                     }
@@ -786,20 +777,19 @@ export default class SprintlyPostRelease extends React.Component<
                     }
                     return (
                         <ZeroData
-                            primaryText="No repositories."
+                            primaryText='No repositories.'
                             secondaryText={
                                 <span>
                                     Please select valid repositories from the
                                     Settings page.
                                 </span>
                             }
-                            imageAltText="No repositories."
+                            imageAltText='No repositories.'
                             imagePath={'../static/notfound.png'}
                         />
                     );
                 }}
             </Observer>
-            /* tslint:disable */
         );
     }
 }
