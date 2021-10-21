@@ -31,10 +31,10 @@ const sprintlyPostReleaseTabName: string = 'Post Release';
 const sprintlySettingsTabKey: string = 'sprintly-settings';
 const sprintlySettingsTabName: string = 'Settings';
 
-const selectedTabId: ObservableValue<string> = new ObservableValue<string>('');
-const userIsAllowed: ObservableValue<boolean> = new ObservableValue<boolean>(
-    false
-);
+const selectedTabIdObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
+const userIsAllowedObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(false);
 const loggedInUserDescriptorObservable: ObservableValue<string> =
     new ObservableValue<string>('');
 const organizationNameObservable: ObservableValue<string> =
@@ -100,7 +100,7 @@ export default class FoundationSprintly extends React.Component<
         this.accessToken = await SDK.getAccessToken();
         this.dataManager = await Common.initializeDataManager(this.accessToken);
 
-        selectedTabId.value = getUserSelectedTab();
+        selectedTabIdObservable.value = getUserSelectedTab();
 
         this.loadAllowedUserGroupsUsers();
         this.loadAllowedUsers();
@@ -143,7 +143,7 @@ export default class FoundationSprintly extends React.Component<
                                                 .allAllowedUsersDescriptors
                                         ),
                                 });
-                                userIsAllowed.value =
+                                userIsAllowedObservable.value =
                                     this.state.allAllowedUsersDescriptors.includes(
                                         loggedInUserDescriptorObservable.value
                                     );
@@ -177,7 +177,7 @@ export default class FoundationSprintly extends React.Component<
                                 this.state.allAllowedUsersDescriptors
                             ),
                     });
-                    userIsAllowed.value =
+                    userIsAllowedObservable.value =
                         this.state.allAllowedUsersDescriptors.includes(
                             loggedInUserDescriptorObservable.value
                         );
@@ -192,25 +192,27 @@ export default class FoundationSprintly extends React.Component<
     }
 
     private getCommandBarItems(): IHeaderCommandBarItem[] {
-        return [
-            {
-                id: 'refresh',
-                text: 'Refresh Data',
-                onActivate: () => {
-                    window.location.reload();
-                },
-                iconProps: {
-                    iconName: 'Refresh',
-                },
-                tooltipProps: {
-                    text: 'Refresh the data on the page',
-                },
+        return [this.refreshButtonCommanBarItem()];
+    }
+
+    private refreshButtonCommanBarItem(): IHeaderCommandBarItem {
+        return {
+            id: 'refresh',
+            text: 'Refresh Data',
+            onActivate: () => {
+                window.location.reload();
             },
-        ];
+            iconProps: {
+                iconName: 'Refresh',
+            },
+            tooltipProps: {
+                text: 'Refresh the data on the page',
+            },
+        };
     }
 
     private renderSelectedTabPage(): JSX.Element {
-        switch (selectedTabId.value) {
+        switch (selectedTabIdObservable.value) {
             case sprintlyPageTabKey:
             case '':
                 return <SprintlyPage dataManager={this.dataManager} />;
@@ -242,16 +244,20 @@ export default class FoundationSprintly extends React.Component<
 
     public render(): JSX.Element {
         return (
-            /* tslint:disable */
             <Page className='flex-grow foundation-sprintly'>
                 <Header
                     title='Foundation Sprintly'
                     commandBarItems={this.getCommandBarItems()}
                     titleSize={TitleSize.Large}
                 />
-                <Observer userIsAllowed={userIsAllowed}>
-                    {(props: { userIsAllowed: boolean }) => {
-                        if (userIsAllowed.value) {
+                <Observer
+                    userIsAllowedObservable={userIsAllowedObservable}
+                >
+                    {(props: {
+                        userIsAllowedObservable: boolean;
+                        refreshDataObservable: boolean;
+                    }) => {
+                        if (userIsAllowedObservable.value) {
                             return renderTabBar();
                         }
                         return <div></div>;
@@ -259,25 +265,27 @@ export default class FoundationSprintly extends React.Component<
                 </Observer>
 
                 <Observer
-                    selectedTabId={selectedTabId}
-                    userIsAllowed={userIsAllowed}
+                    selectedTabIdObservable={selectedTabIdObservable}
+                    userIsAllowedObservable={userIsAllowedObservable}
                 >
                     {(props: {
-                        selectedTabId: string;
-                        userIsAllowed: boolean;
+                        selectedTabIdObservable: string;
+                        userIsAllowedObservable: boolean;
+                        refreshDataObservable: boolean;
                     }) => {
-                        if (userIsAllowed.value) {
+                        if (userIsAllowedObservable.value) {
                             return this.renderSelectedTabPage();
                         }
-
                         return (
                             <div>
                                 <ZeroData
-                                    primaryText="Sorry, you don't have access yet."
+                                    primaryText={
+                                        "Sorry, you don't have access yet."
+                                    }
                                     secondaryText={
                                         <span>
-                                            Please contact the DevOps team or{' '}
-                                            your team lead for access to this{' '}
+                                            Please contact the DevOps team or
+                                            your team lead for access to this
                                             extension.
                                         </span>
                                     }
@@ -289,7 +297,6 @@ export default class FoundationSprintly extends React.Component<
                     }}
                 </Observer>
             </Page>
-            /* tslint:disable */
         );
     }
 }
@@ -298,7 +305,7 @@ function renderTabBar(): JSX.Element {
     return (
         <TabBar
             onSelectedTabChanged={onSelectedTabChanged}
-            selectedTabId={selectedTabId}
+            selectedTabId={selectedTabIdObservable}
             tabSize={TabSize.Tall}
         >
             <Tab name={sprintlyPageTabName} id={sprintlyPageTabKey} />
@@ -312,8 +319,8 @@ function renderTabBar(): JSX.Element {
     );
 }
 
-function onSelectedTabChanged(newTabId: string) {
-    selectedTabId.value = newTabId;
+function onSelectedTabChanged(newTabId: string): void {
+    selectedTabIdObservable.value = newTabId;
     localStorage.setItem(
         loggedInUserDescriptorObservable.value + '-' + selectedTabKey,
         newTabId

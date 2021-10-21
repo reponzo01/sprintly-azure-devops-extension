@@ -59,35 +59,10 @@ const tagsObservable: ObservableValue<string[]> = new ObservableValue<string[]>(
 const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
 
-const columns: any = [
-    {
-        id: 'name',
-        name: 'Repository',
-        onSize,
-        renderCell: renderNameCell,
-        width: new ObservableValue(-30),
-    },
-    {
-        id: 'releaseNeeded',
-        name: 'Release Needed?',
-        onSize,
-        renderCell: renderReleaseNeededCell,
-        width: new ObservableValue(-30),
-    },
-    {
-        id: 'tags',
-        name: 'Tags',
-        onSize,
-        renderCell: renderTagsCell,
-        width: new ObservableValue(-30),
-    },
-    {
-        id: 'createReleaseBranch',
-        name: 'Create Release Branch',
-        renderCell: renderCreateReleaseBranchCell,
-        width: new ObservableValue(-40),
-    },
-];
+const nameColumnWidthObservable: ObservableValue<number> = new ObservableValue<number>(-30);
+const releaseNeededColumnWidthObservable: ObservableValue<number> = new ObservableValue<number>(-30);
+const tagsColumnWidthObservable: ObservableValue<number> = new ObservableValue<number>(-30);
+const createReleaseBranchColumnWidthObservable: ObservableValue<number> = new ObservableValue<number>(-40);
 
 const repositoriesToProcessKey: string = 'repositories-to-process';
 let repositoriesToProcess: string[] = [];
@@ -104,8 +79,43 @@ export default class SprintlyPage extends React.Component<
 > {
     private dataManager: IExtensionDataManager;
 
+    public columns: any = [];
+
     constructor(props: { dataManager: IExtensionDataManager }) {
         super(props);
+
+        this.onSize = this.onSize.bind(this);
+        this.renderCreateReleaseBranchCell = this.renderCreateReleaseBranchCell.bind(this);
+
+        this.columns = [
+            {
+                id: 'name',
+                name: 'Repository',
+                onSize: this.onSize,
+                renderCell: this.renderNameCell,
+                width: nameColumnWidthObservable,
+            },
+            {
+                id: 'releaseNeeded',
+                name: 'Release Needed?',
+                onSize: this.onSize,
+                renderCell: this.renderReleaseNeededCell,
+                width: releaseNeededColumnWidthObservable,
+            },
+            {
+                id: 'tags',
+                name: 'Tags',
+                onSize: this.onSize,
+                renderCell: this.renderTagsCell,
+                width: tagsColumnWidthObservable,
+            },
+            {
+                id: 'createReleaseBranch',
+                name: 'Create Release Branch',
+                renderCell: this.renderCreateReleaseBranchCell,
+                width: createReleaseBranchColumnWidthObservable,
+            },
+        ];
 
         this.state = {};
         this.dataManager = props.dataManager;
@@ -249,7 +259,7 @@ export default class SprintlyPage extends React.Component<
                             <div className='page-content page-content-top flex-column rhythm-vertical-16'>
                                 {this.state.repositories && (
                                     <Table
-                                        columns={columns}
+                                        columns={this.columns}
                                         itemProvider={this.state.repositories}
                                     />
                                 )}
@@ -303,240 +313,241 @@ export default class SprintlyPage extends React.Component<
             </Observer>
         );
     }
-}
 
-function renderNameCell(
-    rowIndex: number,
-    columnIndex: number,
-    tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
-    tableItem: Common.IGitRepositoryExtended
-): JSX.Element {
-    return (
-        <SimpleTableCell
-            key={'col-' + columnIndex}
-            columnIndex={columnIndex}
-            tableColumn={tableColumn}
-            children={
-                <>
-                    <Icon
-                        ariaLabel='Repository'
-                        iconName='Repo'
-                        size={IconSize.large}
-                    />{' '}
-                    {Common.repositoryLinkJsxElement(
-                        tableItem.webUrl,
-                        '',
-                        tableItem.name
-                    )}
-                </>
-            }
-        ></SimpleTableCell>
-    );
-}
-
-function renderReleaseNeededCell(
-    rowIndex: number,
-    columnIndex: number,
-    tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
-    tableItem: Common.IGitRepositoryExtended
-): JSX.Element {
-    let color: IColor = Common.redColor;
-    let text: string = 'No';
-    if (tableItem.createRelease === true) {
-        color = Common.greenColor;
-        text = 'Yes';
-    }
-    if (tableItem.hasExistingRelease === true) {
-        color = Common.orangeColor;
-        text = 'Release Exists';
-    }
-    if (tableItem.hasExistingRelease) {
-        const releaseBranchLinks: JSX.Element[] = [];
-        let counter: number = 0;
-        for (const releaseBranch of tableItem.existingReleaseBranches) {
-            const releaseBranchName: string =
-                releaseBranch.targetBranch.name.split('heads/')[1];
-            releaseBranchLinks.push(
-                Common.branchLinkJsxElement(
-                    counter + 'link',
-                    tableItem.webUrl,
-                    releaseBranchName,
-                    ''
-                )
-            );
-            counter++;
-        }
-
+    private renderNameCell(
+        rowIndex: number,
+        columnIndex: number,
+        tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
+        tableItem: Common.IGitRepositoryExtended
+    ): JSX.Element {
         return (
-            <TwoLineTableCell
-                className={'flex-direction-col'}
+            <SimpleTableCell
                 key={'col-' + columnIndex}
                 columnIndex={columnIndex}
                 tableColumn={tableColumn}
-                line1={
+                children={
+                    <>
+                        <Icon
+                            ariaLabel='Repository'
+                            iconName='Repo'
+                            size={IconSize.large}
+                        />{' '}
+                        {Common.repositoryLinkJsxElement(
+                            tableItem.webUrl,
+                            '',
+                            tableItem.name
+                        )}
+                    </>
+                }
+            ></SimpleTableCell>
+        );
+    }
+
+    private renderReleaseNeededCell(
+        rowIndex: number,
+        columnIndex: number,
+        tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
+        tableItem: Common.IGitRepositoryExtended
+    ): JSX.Element {
+        let color: IColor = Common.redColor;
+        let text: string = 'No';
+        if (tableItem.createRelease === true) {
+            color = Common.greenColor;
+            text = 'Yes';
+        }
+        if (tableItem.hasExistingRelease === true) {
+            color = Common.orangeColor;
+            text = 'Release Exists';
+        }
+        if (tableItem.hasExistingRelease) {
+            const releaseBranchLinks: JSX.Element[] = [];
+            let counter: number = 0;
+            for (const releaseBranch of tableItem.existingReleaseBranches) {
+                const releaseBranchName: string =
+                    releaseBranch.targetBranch.name.split('heads/')[1];
+                releaseBranchLinks.push(
+                    Common.branchLinkJsxElement(
+                        counter + 'link',
+                        tableItem.webUrl,
+                        releaseBranchName,
+                        ''
+                    )
+                );
+                counter++;
+            }
+
+            return (
+                <TwoLineTableCell
+                    className={'flex-direction-col'}
+                    key={'col-' + columnIndex}
+                    columnIndex={columnIndex}
+                    tableColumn={tableColumn}
+                    line1={
+                        <>
+                            <Pill
+                                color={color}
+                                size={PillSize.large}
+                                variant={PillVariant.colored}
+                                iconProps={{ iconName: 'Warning' }}
+                                className='bolt-list-overlay'
+                            >
+                                <b>{text}</b>
+                            </Pill>
+                        </>
+                    }
+                    line2={<>{releaseBranchLinks}</>}
+                ></TwoLineTableCell>
+            );
+        }
+        return (
+            <SimpleTableCell
+                key={'col-' + columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={tableColumn}
+                children={
                     <>
                         <Pill
                             color={color}
                             size={PillSize.large}
                             variant={PillVariant.colored}
-                            iconProps={{ iconName: 'Warning' }}
                             className='bolt-list-overlay'
                         >
                             <b>{text}</b>
                         </Pill>
                     </>
                 }
-                line2={<>{releaseBranchLinks}</>}
-            ></TwoLineTableCell>
+            ></SimpleTableCell>
         );
     }
-    return (
-        <SimpleTableCell
-            key={'col-' + columnIndex}
-            columnIndex={columnIndex}
-            tableColumn={tableColumn}
-            children={
-                <>
-                    <Pill
-                        color={color}
-                        size={PillSize.large}
-                        variant={PillVariant.colored}
-                        className='bolt-list-overlay'
-                    >
-                        <b>{text}</b>
-                    </Pill>
-                </>
-            }
-        ></SimpleTableCell>
-    );
-}
 
-function renderTagsCell(
-    rowIndex: number,
-    columnIndex: number,
-    tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
-    tableItem: Common.IGitRepositoryExtended
-): JSX.Element {
-    return (
-        <SimpleTableCell
-            key={'col-' + columnIndex}
-            columnIndex={columnIndex}
-            tableColumn={tableColumn}
-            children={
-                <>
-                    <Button
-                        text='View Tags'
-                        subtle={true}
-                        iconProps={{ iconName: 'Tag' }}
-                        onClick={() => {
-                            tagsModalKeyObservable.value = new Date()
-                                .getTime()
-                                .toString();
-                            isTagsDialogOpenObservable.value = true;
-                            const modalContent: ITagsModalContent =
-                                getTagsModalContent(
-                                    tableItem.name,
-                                    tableItem.branchesAndTags
+    private renderTagsCell(
+        rowIndex: number,
+        columnIndex: number,
+        tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
+        tableItem: Common.IGitRepositoryExtended
+    ): JSX.Element {
+        return (
+            <SimpleTableCell
+                key={'col-' + columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={tableColumn}
+                children={
+                    <>
+                        <Button
+                            text='View Tags'
+                            subtle={true}
+                            iconProps={{ iconName: 'Tag' }}
+                            onClick={() => {
+                                tagsModalKeyObservable.value = new Date()
+                                    .getTime()
+                                    .toString();
+                                isTagsDialogOpenObservable.value = true;
+                                const modalContent: ITagsModalContent =
+                                    getTagsModalContent(
+                                        tableItem.name,
+                                        tableItem.branchesAndTags
+                                    );
+                                tagsRepoNameObservable.value =
+                                    modalContent.modalName;
+                                tagsObservable.value = modalContent.modalValues;
+                            }}
+                        />
+                    </>
+                }
+            ></SimpleTableCell>
+        );
+    }
+
+    private renderCreateReleaseBranchCell(
+        rowIndex: number,
+        columnIndex: number,
+        tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
+        tableItem: Common.IGitRepositoryExtended
+    ): JSX.Element {
+        newReleaseBranchNamesObservable[rowIndex] = new ObservableValue<string>('');
+        return (
+            <SimpleTableCell
+                key={'col-' + columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={tableColumn}
+                children={
+                    <>
+                        release /&nbsp;
+                        <TextField
+                            value={newReleaseBranchNamesObservable[rowIndex]}
+                            onChange={(
+                                e: React.ChangeEvent<
+                                    HTMLInputElement | HTMLTextAreaElement
+                                >,
+                                newValue: string
+                            ) =>
+                                (newReleaseBranchNamesObservable[rowIndex].value =
+                                    newValue.trim())
+                            }
+                        />
+                        &nbsp;
+                        <Button
+                            text='Create Branch'
+                            iconProps={{ iconName: 'OpenSource' }}
+                            primary={true}
+                            onClick={async () => {
+                                const createRefOptions: GitRefUpdate[] = [];
+                                const developBranch: GitBranchStats =
+                                    await getClient(GitRestClient).getBranch(
+                                        tableItem.id,
+                                        'develop'
+                                    );
+
+                                const newDevObjectId: string =
+                                    developBranch.commit.commitId;
+
+                                createRefOptions.push({
+                                    repositoryId: tableItem.id,
+                                    name:
+                                        'refs/heads/release/' +
+                                        newReleaseBranchNamesObservable[rowIndex]
+                                            .value,
+                                    isLocked: false,
+                                    newObjectId: newDevObjectId,
+                                    oldObjectId:
+                                        '0000000000000000000000000000000000000000',
+                                });
+                                const createRef: GitRefUpdateResult[] =
+                                    await getClient(GitRestClient).updateRefs(
+                                        createRefOptions,
+                                        tableItem.id
+                                    );
+
+                                newReleaseBranchNamesObservable[rowIndex].value =
+                                    '';
+                                createRef.forEach(
+                                    async (ref: GitRefUpdateResult) => {
+                                        const globalMessagesSvc: IGlobalMessagesService =
+                                            await SDK.getService<IGlobalMessagesService>(
+                                                CommonServiceIds.GlobalMessagesService
+                                            );
+                                        globalMessagesSvc.addToast({
+                                            duration: 5000,
+                                            forceOverrideExisting: true,
+                                            message: ref.success
+                                                ? 'Branch Created!'
+                                                : 'Error Creating Branch: ' +
+                                                  GitRefUpdateStatus[
+                                                      ref.updateStatus
+                                                  ],
+                                        });
+                                        await this.initializeComponent();
+                                    }
                                 );
-                            tagsRepoNameObservable.value =
-                                modalContent.modalName;
-                            tagsObservable.value = modalContent.modalValues;
-                        }}
-                    />
-                </>
-            }
-        ></SimpleTableCell>
-    );
-}
+                            }}
+                        />
+                    </>
+                }
+            ></SimpleTableCell>
+        );
+    }
 
-function renderCreateReleaseBranchCell(
-    rowIndex: number,
-    columnIndex: number,
-    tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
-    tableItem: Common.IGitRepositoryExtended
-): JSX.Element {
-    newReleaseBranchNamesObservable[rowIndex] = new ObservableValue<string>('');
-    return (
-        <SimpleTableCell
-            key={'col-' + columnIndex}
-            columnIndex={columnIndex}
-            tableColumn={tableColumn}
-            children={
-                <>
-                    release /&nbsp;
-                    <TextField
-                        value={newReleaseBranchNamesObservable[rowIndex]}
-                        onChange={(
-                            e: React.ChangeEvent<
-                                HTMLInputElement | HTMLTextAreaElement
-                            >,
-                            newValue: string
-                        ) =>
-                            (newReleaseBranchNamesObservable[rowIndex].value =
-                                newValue.trim())
-                        }
-                    />
-                    &nbsp;
-                    <Button
-                        text='Create Branch'
-                        iconProps={{ iconName: 'OpenSource' }}
-                        primary={true}
-                        onClick={async () => {
-                            const createRefOptions: GitRefUpdate[] = [];
-                            const developBranch: GitBranchStats =
-                                await getClient(GitRestClient).getBranch(
-                                    tableItem.id,
-                                    'develop'
-                                );
-
-                            const newDevObjectId: string =
-                                developBranch.commit.commitId;
-
-                            createRefOptions.push({
-                                repositoryId: tableItem.id,
-                                name:
-                                    'refs/heads/release/' +
-                                    newReleaseBranchNamesObservable[rowIndex]
-                                        .value,
-                                isLocked: false,
-                                newObjectId: newDevObjectId,
-                                oldObjectId:
-                                    '0000000000000000000000000000000000000000',
-                            });
-                            const createRef: GitRefUpdateResult[] =
-                                await getClient(GitRestClient).updateRefs(
-                                    createRefOptions,
-                                    tableItem.id
-                                );
-
-                            newReleaseBranchNamesObservable[rowIndex].value =
-                                '';
-                            createRef.forEach(
-                                async (ref: GitRefUpdateResult) => {
-                                    const globalMessagesSvc: IGlobalMessagesService =
-                                        await SDK.getService<IGlobalMessagesService>(
-                                            CommonServiceIds.GlobalMessagesService
-                                        );
-                                    globalMessagesSvc.addToast({
-                                        duration: 5000,
-                                        forceOverrideExisting: true,
-                                        message: ref.success
-                                            ? 'Branch Created!'
-                                            : 'Error Creating Branch: ' +
-                                              GitRefUpdateStatus[
-                                                  ref.updateStatus
-                                              ],
-                                    });
-                                }
-                            );
-                        }}
-                    />
-                </>
-            }
-        ></SimpleTableCell>
-    );
-}
-
-function onSize(event: MouseEvent, index: number, width: number): void {
-    (columns[index].width as ObservableValue<number>).value = width;
+    private onSize(event: MouseEvent, index: number, width: number): void {
+        (this.columns[index].width as ObservableValue<number>).value = width;
+    }
 }
