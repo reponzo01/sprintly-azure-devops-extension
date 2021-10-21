@@ -11,7 +11,12 @@ import {
     GitTargetVersionDescriptor,
     PullRequestStatus,
 } from 'azure-devops-extension-api/Git';
-import { Release, ReleaseDefinition } from 'azure-devops-extension-api/Release';
+import {
+    EnvironmentStatus,
+    Release,
+    ReleaseDefinition,
+    ReleaseEnvironment,
+} from 'azure-devops-extension-api/Release';
 import {
     CommonServiceIds,
     getClient,
@@ -28,6 +33,9 @@ import { BuildDefinition } from 'azure-devops-extension-api/Build';
 import { ObservableArray } from 'azure-devops-ui/Core/Observable';
 import React from 'react';
 import { Link } from 'azure-devops-ui/Link';
+import { Icon, IconSize } from 'azure-devops-ui/Icon';
+import { Pill, PillSize, PillVariant } from 'azure-devops-ui/Pill';
+import { Status, Statuses, StatusSize } from 'azure-devops-ui/Status';
 
 export const primaryColor: IColor = {
     red: 0,
@@ -277,7 +285,7 @@ export function sortRepositoryList(
     return repositoryList;
 }
 
-export async function getBranchReleaseInfo(
+export async function storeBranchReleaseInfoIntoObservable(
     releaseInfoObservable: ObservableArray<IReleaseInfo>,
     buildDefinitionForRepo: BuildDefinition,
     releaseDefinitions: ReleaseDefinition[],
@@ -451,6 +459,38 @@ export async function getPullRequests(
     return pullRequests;
 }
 
+export function getSortedReleasesForBranch(
+    releaseBranchInfo: IReleaseBranchInfo,
+    releaseInfoForAllBranches: IReleaseInfo[]
+): Release[] {
+    let sortedReleases: Release[] = [];
+    const releaseInfoForBranch: IReleaseInfo | undefined =
+        releaseInfoForAllBranches.find(
+            (ri) =>
+                ri.releaseBranch.targetBranch.name ===
+                    releaseBranchInfo.targetBranch.name &&
+                ri.repositoryId === releaseBranchInfo.repositoryId
+        );
+
+    console.log('release info: ', releaseInfoForBranch);
+
+    if (releaseInfoForBranch && releaseInfoForBranch.releases.length > 0) {
+        sortedReleases = sortedReleases.concat(
+            releaseInfoForBranch.releases.sort((a: Release, b: Release) => {
+                return (
+                    new Date(b.createdOn.toString()).getTime() -
+                    new Date(a.createdOn.toString()).getTime()
+                );
+            })
+        );
+    }
+    return sortedReleases;
+}
+
+export function getBranchShortName(branchRealName: string): string {
+    return branchRealName.split('refs/heads/')[1];
+}
+
 export function repositoryLinkJsxElement(
     webUrl: string,
     className: string,
@@ -485,5 +525,123 @@ export function branchLinkJsxElement(
         >
             {branchName}
         </Link>
+    );
+}
+
+export function noReleaseExistsPillJsxElement(): JSX.Element {
+    return (
+        <Pill
+            color={warningColor}
+            size={PillSize.regular}
+            variant={PillVariant.outlined}
+            className="bolt-list-overlay sprintly-environment-status"
+        >
+            <div className="sprintly-text-white">
+                <Icon
+                    ariaLabel="No Release Exists"
+                    iconName="Warning"
+                    size={IconSize.small}
+                />{' '}
+                No Release
+            </div>
+        </Pill>
+    );
+}
+
+export function getAllEnvironmentStatusPillJsxElements(
+    environments: ReleaseEnvironment[]
+): JSX.Element[] {
+    const environmentStatuses: JSX.Element[] = [];
+    for (const environment of environments) {
+        console.log(environment.name, environment.status);
+        let envStatusEnumString: string = '';
+        let statusIconName: string = 'Cancel';
+        let divTextClassName = 'sprintly-text-white';
+        for (const idx in EnvironmentStatus) {
+            if (
+                idx.toLowerCase() ===
+                environment.status.toString().toLowerCase()
+            ) {
+                console.log('thing here ', EnvironmentStatus[idx], idx);
+                envStatusEnumString = EnvironmentStatus[idx];
+            }
+        }
+        console.log(envStatusEnumString, EnvironmentStatus.NotStarted);
+        switch (parseInt(envStatusEnumString)) {
+            case parseInt(EnvironmentStatus.NotStarted.toString()):
+                statusIconName = 'CircleRing';
+                divTextClassName = '';
+                break;
+            case parseInt(EnvironmentStatus.InProgress.toString()):
+                statusIconName = 'UseRunningStatus';
+                divTextClassName = '';
+                break;
+            case parseInt(EnvironmentStatus.Queued.toString()):
+                statusIconName = 'UseRunningStatus';
+                divTextClassName = '';
+                break;
+            case parseInt(EnvironmentStatus.Scheduled.toString()):
+                statusIconName = 'UseRunningStatus';
+                divTextClassName = '';
+                break;
+            case parseInt(EnvironmentStatus.Succeeded.toString()):
+                statusIconName = 'Accept';
+                break;
+        }
+        environmentStatuses.push(
+            environmentStatusPillJsxElement(
+                environment,
+                envStatusEnumString,
+                divTextClassName,
+                statusIconName
+            )
+        );
+    }
+    return environmentStatuses;
+}
+
+export function environmentStatusPillJsxElement(
+    environment: ReleaseEnvironment,
+    envStatusEnumString: string,
+    divTextClassName: string,
+    statusIconName: string
+): JSX.Element {
+    return (
+        <Pill
+            key={environment.id}
+            color={
+                parseInt(envStatusEnumString) ===
+                parseInt(EnvironmentStatus.Succeeded.toString())
+                    ? successColor
+                    : parseInt(envStatusEnumString) ===
+                          parseInt(EnvironmentStatus.Undefined.toString()) ||
+                      parseInt(envStatusEnumString) ===
+                          parseInt(EnvironmentStatus.Canceled.toString()) ||
+                      parseInt(envStatusEnumString) ===
+                          parseInt(EnvironmentStatus.Rejected.toString()) ||
+                      parseInt(envStatusEnumString) ===
+                          parseInt(
+                              EnvironmentStatus.PartiallySucceeded.toString()
+                          )
+                    ? failedColor
+                    : undefined
+            }
+            size={PillSize.regular}
+            variant={PillVariant.outlined}
+            className="bolt-list-overlay sprintly-environment-status"
+        >
+            <div className={divTextClassName}>
+                {statusIconName === 'UseRunningStatus' ? (
+                    <Status
+                        {...Statuses.Running}
+                        key="running"
+                        size={StatusSize.m}
+                    />
+                ) : (
+                    <Icon iconName={statusIconName} size={IconSize.small} />
+                )}{' '}
+                {environment.name}
+            </div>
+        </Pill>
     );
 }

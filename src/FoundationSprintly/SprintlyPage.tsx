@@ -110,6 +110,7 @@ export default class SprintlyPage extends React.Component<
     }
 
     public async componentDidMount(): Promise<void> {
+        console.log('called compoent did mount');
         await this.initializeComponent();
     }
 
@@ -120,18 +121,19 @@ export default class SprintlyPage extends React.Component<
                 repositoriesToProcessKey
             )
         ).map((item) => item.originId);
+        totalRepositoriesToProcessObservable.value = repositoriesToProcess.length;
         if (repositoriesToProcess.length > 0) {
-            this.loadRepositoriesDisplayState(
+            await this.loadRepositoriesDisplayState(
                 await Common.getFilteredProjects()
             );
         }
     }
 
-    private loadRepositoriesDisplayState(
+    private async loadRepositoriesDisplayState(
         projects: TeamProjectReference[]
-    ): void {
+    ): Promise<void> {
         let reposExtended: Common.IGitRepositoryExtended[] = [];
-        projects.forEach(async (project: TeamProjectReference) => {
+        for (const project of projects) {
             const filteredRepos: GitRepository[] =
                 await Common.getFilteredProjectRepositories(
                     project.id,
@@ -195,7 +197,7 @@ export default class SprintlyPage extends React.Component<
                     Common.sortRepositoryList(reposExtended)
                 ),
             });
-        });
+        }
     }
 
     private async isDevelopAheadOfMasterMain(
@@ -240,13 +242,10 @@ export default class SprintlyPage extends React.Component<
             >
                 {(props: { totalRepositoriesToProcess: number }) => {
                     if (props.totalRepositoriesToProcess > 0) {
-                        return (
+                        return !this.state.repositories ? (
+                            <Spinner label="loading" />
+                        ) : (
                             <div className="page-content page-content-top flex-column rhythm-vertical-16">
-                                {!this.state.repositories && (
-                                    <div className="flex-row">
-                                        <Spinner label="loading" />
-                                    </div>
-                                )}
                                 {this.state.repositories && (
                                     <Table
                                         columns={columns}

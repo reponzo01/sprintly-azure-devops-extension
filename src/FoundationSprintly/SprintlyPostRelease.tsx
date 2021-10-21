@@ -56,6 +56,7 @@ import { HeaderCommandBar } from 'azure-devops-ui/HeaderCommandBar';
 
 import * as Common from './SprintlyCommon';
 import { TagsModal, ITagsModalContent, getTagsModalContent } from './TagsModal';
+import { Spinner } from 'azure-devops-ui/Spinner';
 
 // TODO: Instead of a state, consider just global observables
 export interface ISprintlyPostReleaseState {
@@ -149,9 +150,11 @@ export default class SprintlyPostRelease extends React.Component<
                 repositoriesToProcessKey
             )
         ).map((item) => item.originId);
+        totalRepositoriesToProcessObservable.value =
+            repositoriesToProcess.length;
         if (repositoriesToProcess.length > 0) {
             const filteredProjects = await Common.getFilteredProjects();
-            this.loadRepositoriesDisplayState(filteredProjects);
+            await this.loadRepositoriesDisplayState(filteredProjects);
             this.setState({
                 pullRequests: this.state.pullRequests.concat(
                     await Common.getPullRequests(filteredProjects)
@@ -171,11 +174,11 @@ export default class SprintlyPostRelease extends React.Component<
     }
 
     // TODO: This function is repeated in SprintlyPage. See about extracting.
-    private loadRepositoriesDisplayState(
+    private async loadRepositoriesDisplayState(
         projects: TeamProjectReference[]
-    ): void {
+    ): Promise<void> {
         let reposExtended: Common.IGitRepositoryExtended[] = [];
-        projects.forEach(async (project: TeamProjectReference) => {
+        for (const project of projects) {
             const filteredRepos: GitRepository[] =
                 await Common.getFilteredProjectRepositories(
                     project.id,
@@ -281,7 +284,7 @@ export default class SprintlyPostRelease extends React.Component<
                 this.state
                     .repositoryListSelectedItemObservable as ObservableValue<Common.IGitRepositoryExtended>
             );
-        });
+        }
     }
 
     private async isBranchAheadOfDevelop(
@@ -368,7 +371,7 @@ export default class SprintlyPostRelease extends React.Component<
             .repositoryListSelectedItemObservable.value
             .existingReleaseBranches) {
             if (buildDefinitionForRepo) {
-                await Common.getBranchReleaseInfo(
+                await Common.storeBranchReleaseInfoIntoObservable(
                     releaseInfoObservable,
                     buildDefinitionForRepo,
                     this.releaseDefinitions,
@@ -384,7 +387,13 @@ export default class SprintlyPostRelease extends React.Component<
     }
 
     private renderRepositoryMasterPageList(): JSX.Element {
-        return (
+        console.log('inside render list: ', this.state.repositories.length);
+        return !this.state.repositories ||
+            this.state.repositories.length == 0 ? (
+            <div className="page-content-top">
+                <Spinner label="loading" />
+            </div>
+        ) : (
             <List
                 ariaLabel={'Repositories'}
                 itemProvider={this.state.repositories}
@@ -405,6 +414,7 @@ export default class SprintlyPostRelease extends React.Component<
         details: IListItemDetails<Common.IGitRepositoryExtended>,
         key?: string
     ): JSX.Element {
+        console.log('in render repository list item');
         const releaseBranchLinks: JSX.Element[] = [];
         let counter: number = 0;
         for (const releaseBranch of item.existingReleaseBranches) {
@@ -436,7 +446,7 @@ export default class SprintlyPostRelease extends React.Component<
             );
             counter++;
         }
-
+        console.log('release branches ready: ', releaseBranchLinks.length);
         return (
             <ListItem
                 className="master-row border-bottom"
@@ -657,217 +667,46 @@ export default class SprintlyPostRelease extends React.Component<
                 details={details}
             >
                 <div className="master-row-content flex-row flex-center h-scroll-hidden">
-                    <Observer releaseInfo={releaseInfoObservable}>
+                    <Observer releaseInfoForAllBranches={releaseInfoObservable}>
                         {(observerProps: {
-                            releaseInfo: Common.IReleaseInfo[];
+                            releaseInfoForAllBranches: Common.IReleaseInfo[];
                         }) => {
-                            const environmentStatuses: JSX.Element[] = [];
-                            let releases: Release[] = [];
-                            console.log(
-                                'observable props release info:',
-                                observerProps.releaseInfo
-                            );
-                            const releaseInfoForBranch:
-                                | Common.IReleaseInfo
-                                | undefined = observerProps.releaseInfo.find(
-                                (ri) =>
-                                    ri.releaseBranch.targetBranch.objectId ===
-                                    item.targetBranch.objectId
-                            );
-                            console.log(
-                                'releaseInfoForBranch',
-                                releaseInfoForBranch
-                            );
-                            if (releaseInfoForBranch) {
-                                console.log(
-                                    'releaseInfoForBranch.releases',
-                                    releaseInfoForBranch.releases
-                                );
-                                releases = releases.concat(
-                                    releaseInfoForBranch.releases
-                                );
-                            }
-                            console.log('releases: ', releases);
                             let sortedReleases: Release[] = [];
-                            if (observerProps.releaseInfo.length > 0) {
-                                const releaseInfo:
-                                    | Common.IReleaseInfo
-                                    | undefined = observerProps.releaseInfo.find(
-                                    (ri) =>
-                                        ri.releaseBranch.targetBranch.name ===
-                                            item.targetBranch.name &&
-                                        ri.repositoryId === item.repositoryId
-                                );
-
-                                console.log('release info: ', releaseInfo);
-
-                                if (
-                                    releaseInfo &&
-                                    releaseInfo.releases.length > 0
-                                ) {
-                                    sortedReleases = sortedReleases.concat(
-                                        releaseInfo.releases.sort(
-                                            (a: Release, b: Release) => {
-                                                return (
-                                                    new Date(
-                                                        b.createdOn.toString()
-                                                    ).getTime() -
-                                                    new Date(
-                                                        a.createdOn.toString()
-                                                    ).getTime()
-                                                );
-                                            }
-                                        )
+                            if (
+                                observerProps.releaseInfoForAllBranches.length >
+                                0
+                            ) {
+                                sortedReleases =
+                                    Common.getSortedReleasesForBranch(
+                                        item,
+                                        observerProps.releaseInfoForAllBranches
                                     );
-                                }
                             }
                             if (sortedReleases.length == 0) {
                                 return (
                                     <div className="flex-row">
                                         <div className="margin-horizontal-10">
-                                            {
-                                                item.targetBranch.name.split(
-                                                    'refs/heads/'
-                                                )[1]
-                                            }
+                                            {Common.getBranchShortName(
+                                                item.targetBranch.name
+                                            )}
                                         </div>
-                                        <Pill
-                                            color={Common.warningColor}
-                                            size={PillSize.regular}
-                                            variant={PillVariant.outlined}
-                                            className="bolt-list-overlay sprintly-environment-status"
-                                        >
-                                            <div className="sprintly-text-white">
-                                                <Icon
-                                                    ariaLabel="No Release Exists"
-                                                    iconName="Warning"
-                                                    size={IconSize.small}
-                                                />{' '}
-                                                No Release
-                                            </div>
-                                        </Pill>
+                                        {Common.noReleaseExistsPillJsxElement()}
                                     </div>
                                 );
                             }
                             console.log('sortedReleases: ', sortedReleases);
-                            for (const environment of sortedReleases[0]
-                                .environments) {
-                                console.log(
-                                    environment.name,
-                                    environment.status
+                            const mostRecentRelease: Release =
+                                sortedReleases[0];
+                            const environmentStatuses: JSX.Element[] =
+                                Common.getAllEnvironmentStatusPillJsxElements(
+                                    mostRecentRelease.environments
                                 );
-                                let envStatusEnum: string = '';
-                                let envIconName: string = 'Cancel';
-                                let divClassName = 'sprintly-text-white';
-                                for (const idx in EnvironmentStatus) {
-                                    if (
-                                        idx.toLowerCase() ===
-                                        environment.status
-                                            .toString()
-                                            .toLowerCase()
-                                    ) {
-                                        console.log(
-                                            'thing here ',
-                                            EnvironmentStatus[idx],
-                                            idx
-                                        );
-                                        envStatusEnum = EnvironmentStatus[idx];
-                                    }
-                                }
-                                console.log(
-                                    envStatusEnum,
-                                    EnvironmentStatus.NotStarted
-                                );
-                                switch (parseInt(envStatusEnum)) {
-                                    case parseInt(
-                                        EnvironmentStatus.NotStarted.toString()
-                                    ):
-                                        envIconName = 'CircleRing';
-                                        divClassName = '';
-                                        break;
-                                    case parseInt(
-                                        EnvironmentStatus.InProgress.toString()
-                                    ):
-                                        envIconName = 'UseRunningStatus';
-                                        divClassName = '';
-                                        break;
-                                    case parseInt(
-                                        EnvironmentStatus.Queued.toString()
-                                    ):
-                                        envIconName = 'UseRunningStatus';
-                                        divClassName = '';
-                                        break;
-                                    case parseInt(
-                                        EnvironmentStatus.Scheduled.toString()
-                                    ):
-                                        envIconName = 'UseRunningStatus';
-                                        divClassName = '';
-                                        break;
-                                    case parseInt(
-                                        EnvironmentStatus.Succeeded.toString()
-                                    ):
-                                        envIconName = 'Accept';
-                                        break;
-                                }
-                                environmentStatuses.push(
-                                    <Pill
-                                        key={environment.id}
-                                        color={
-                                            parseInt(envStatusEnum) ===
-                                            parseInt(
-                                                EnvironmentStatus.Succeeded.toString()
-                                            )
-                                                ? Common.successColor
-                                                : parseInt(envStatusEnum) ===
-                                                      parseInt(
-                                                          EnvironmentStatus.Undefined.toString()
-                                                      ) ||
-                                                  parseInt(envStatusEnum) ===
-                                                      parseInt(
-                                                          EnvironmentStatus.Canceled.toString()
-                                                      ) ||
-                                                  parseInt(envStatusEnum) ===
-                                                      parseInt(
-                                                          EnvironmentStatus.Rejected.toString()
-                                                      ) ||
-                                                  parseInt(envStatusEnum) ===
-                                                      parseInt(
-                                                          EnvironmentStatus.PartiallySucceeded.toString()
-                                                      )
-                                                ? Common.failedColor
-                                                : undefined
-                                        }
-                                        size={PillSize.regular}
-                                        variant={PillVariant.outlined}
-                                        className="bolt-list-overlay sprintly-environment-status"
-                                    >
-                                        <div className={divClassName}>
-                                            {envIconName ===
-                                            'UseRunningStatus' ? (
-                                                <Status
-                                                    {...Statuses.Running}
-                                                    key="running"
-                                                    size={StatusSize.m}
-                                                />
-                                            ) : (
-                                                <Icon
-                                                    iconName={envIconName}
-                                                    size={IconSize.small}
-                                                />
-                                            )}{' '}
-                                            {environment.name}
-                                        </div>
-                                    </Pill>
-                                );
-                            }
                             return (
                                 <div className="flex-row">
                                     <div className="margin-horizontal-10">
-                                        {
-                                            item.targetBranch.name.split(
-                                                'refs/heads/'
-                                            )[1]
-                                        }
+                                        {Common.getBranchShortName(
+                                            item.targetBranch.name
+                                        )}
                                     </div>
                                     {environmentStatuses}
                                 </div>
