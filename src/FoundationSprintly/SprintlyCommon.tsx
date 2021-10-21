@@ -286,7 +286,7 @@ export function sortRepositoryList(
     return repositoryList;
 }
 
-export async function storeBranchReleaseInfoIntoObservable(
+export async function fetchAndStoreBranchReleaseInfoIntoObservable(
     releaseInfoObservable: ObservableArray<IReleaseInfo>,
     buildDefinitionForRepo: BuildDefinition,
     releaseDefinitions: ReleaseDefinition[],
@@ -458,11 +458,10 @@ export async function getPullRequests(
     return pullRequests;
 }
 
-export function getSortedReleasesForBranch(
+export function getMostRecentReleaseForBranch(
     releaseBranchInfo: IReleaseBranchInfo,
     releaseInfoForAllBranches: IReleaseInfo[]
-): Release[] {
-    let sortedReleases: Release[] = [];
+): Release | undefined {
     const releaseInfoForBranch: IReleaseInfo | undefined =
         releaseInfoForAllBranches.find(
             (ri: IReleaseInfo) =>
@@ -472,16 +471,18 @@ export function getSortedReleasesForBranch(
         );
 
     if (releaseInfoForBranch && releaseInfoForBranch.releases.length > 0) {
-        sortedReleases = sortedReleases.concat(
-            releaseInfoForBranch.releases.sort((a: Release, b: Release) => {
+        const sortedReleases: Release[] = releaseInfoForBranch.releases.sort(
+            (a: Release, b: Release) => {
                 return (
                     new Date(b.createdOn.toString()).getTime() -
                     new Date(a.createdOn.toString()).getTime()
                 );
-            })
+            }
         );
+        if (sortedReleases.length > 0) {
+            return sortedReleases[0];
+        }
     }
-    return sortedReleases;
 }
 
 export function getBranchShortName(branchRealName: string): string {

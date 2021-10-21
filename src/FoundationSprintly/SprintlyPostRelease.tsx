@@ -348,13 +348,7 @@ export default class SprintlyPostRelease extends React.Component<
     }
 
     private async selectRepository(): Promise<void> {
-        this.state.releaseBranchListSelection.clear();
-        if (
-            this.state.repositoryListSelectedItemObservable.value
-                .existingReleaseBranches.length === 1
-        ) {
-            this.state.releaseBranchListSelection.select(0);
-        }
+        this.autoSelectIfSingleBranch();
 
         const buildDefinitionForRepo: BuildDefinition | undefined =
             this.buildDefinitions.find(
@@ -367,7 +361,7 @@ export default class SprintlyPostRelease extends React.Component<
             .repositoryListSelectedItemObservable.value
             .existingReleaseBranches) {
             if (buildDefinitionForRepo) {
-                await Common.storeBranchReleaseInfoIntoObservable(
+                await Common.fetchAndStoreBranchReleaseInfoIntoObservable(
                     releaseInfoObservable,
                     buildDefinitionForRepo,
                     this.releaseDefinitions,
@@ -379,6 +373,16 @@ export default class SprintlyPostRelease extends React.Component<
                     this.accessToken
                 );
             }
+        }
+    }
+
+    private autoSelectIfSingleBranch(): void {
+        this.state.releaseBranchListSelection.clear();
+        if (
+            this.state.repositoryListSelectedItemObservable.value
+                .existingReleaseBranches.length === 1
+        ) {
+            this.state.releaseBranchListSelection.select(0);
         }
     }
 
@@ -664,18 +668,12 @@ export default class SprintlyPostRelease extends React.Component<
                         {(observerProps: {
                             releaseInfoForAllBranches: Common.IReleaseInfo[];
                         }) => {
-                            let sortedReleases: Release[] = [];
-                            if (
-                                observerProps.releaseInfoForAllBranches.length >
-                                0
-                            ) {
-                                sortedReleases =
-                                    Common.getSortedReleasesForBranch(
-                                        item,
-                                        observerProps.releaseInfoForAllBranches
-                                    );
-                            }
-                            if (sortedReleases.length === 0) {
+                            const mostRecentRelease: Release | undefined =
+                                Common.getMostRecentReleaseForBranch(
+                                    item,
+                                    observerProps.releaseInfoForAllBranches
+                                );
+                            if (!mostRecentRelease) {
                                 return (
                                     <div className='flex-row'>
                                         <div className='margin-horizontal-10'>
@@ -687,8 +685,6 @@ export default class SprintlyPostRelease extends React.Component<
                                     </div>
                                 );
                             }
-                            const mostRecentRelease: Release =
-                                sortedReleases[0];
                             const environmentStatuses: JSX.Element[] =
                                 Common.getAllEnvironmentStatusPillJsxElements(
                                     mostRecentRelease.environments
