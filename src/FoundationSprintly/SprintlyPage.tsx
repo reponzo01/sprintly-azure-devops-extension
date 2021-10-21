@@ -59,10 +59,14 @@ const tagsObservable: ObservableValue<string[]> = new ObservableValue<string[]>(
 const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
 
-const nameColumnWidthObservable: ObservableValue<number> = new ObservableValue<number>(-30);
-const releaseNeededColumnWidthObservable: ObservableValue<number> = new ObservableValue<number>(-30);
-const tagsColumnWidthObservable: ObservableValue<number> = new ObservableValue<number>(-30);
-const createReleaseBranchColumnWidthObservable: ObservableValue<number> = new ObservableValue<number>(-40);
+const nameColumnWidthObservable: ObservableValue<number> =
+    new ObservableValue<number>(-30);
+const releaseNeededColumnWidthObservable: ObservableValue<number> =
+    new ObservableValue<number>(-30);
+const tagsColumnWidthObservable: ObservableValue<number> =
+    new ObservableValue<number>(-30);
+const createReleaseBranchColumnWidthObservable: ObservableValue<number> =
+    new ObservableValue<number>(-40);
 
 const repositoriesToProcessKey: string = 'repositories-to-process';
 let repositoriesToProcess: string[] = [];
@@ -85,7 +89,8 @@ export default class SprintlyPage extends React.Component<
         super(props);
 
         this.onSize = this.onSize.bind(this);
-        this.renderCreateReleaseBranchCell = this.renderCreateReleaseBranchCell.bind(this);
+        this.renderCreateReleaseBranchCell =
+            this.renderCreateReleaseBranchCell.bind(this);
 
         this.columns = [
             {
@@ -263,36 +268,7 @@ export default class SprintlyPage extends React.Component<
                                         itemProvider={this.state.repositories}
                                     />
                                 )}
-                                <Observer
-                                    isTagsDialogOpen={
-                                        isTagsDialogOpenObservable
-                                    }
-                                    tagsRepoName={tagsRepoNameObservable}
-                                    tagsModalKey={tagsModalKeyObservable}
-                                >
-                                    {(props: {
-                                        isTagsDialogOpen: boolean;
-                                        tagsRepoName: string;
-                                        tagsModalKey: string;
-                                    }) => {
-                                        return (
-                                            <TagsModal
-                                                key={props.tagsModalKey}
-                                                isTagsDialogOpen={
-                                                    props.isTagsDialogOpen
-                                                }
-                                                tagsRepoName={
-                                                    props.tagsRepoName
-                                                }
-                                                tags={tagsObservable.value}
-                                                closeMe={() => {
-                                                    isTagsDialogOpenObservable.value =
-                                                        false;
-                                                }}
-                                            ></TagsModal>
-                                        );
-                                    }}
-                                </Observer>
+                                {this.tagsModal()}
                             </div>
                         );
                     }
@@ -308,6 +284,26 @@ export default class SprintlyPage extends React.Component<
                             imageAltText='No repositories'
                             imagePath={'../static/notfound.png'}
                         />
+                    );
+                }}
+            </Observer>
+        );
+    }
+
+    private tagsModal(): JSX.Element {
+        return (
+            <Observer isTagsDialogOpen={isTagsDialogOpenObservable}>
+                {(props: { isTagsDialogOpen: boolean }) => {
+                    return (
+                        <TagsModal
+                            key={tagsModalKeyObservable.value}
+                            isTagsDialogOpen={props.isTagsDialogOpen}
+                            tagsRepoName={tagsRepoNameObservable.value}
+                            tags={tagsObservable.value}
+                            closeMe={() => {
+                                isTagsDialogOpenObservable.value = false;
+                            }}
+                        ></TagsModal>
                     );
                 }}
             </Observer>
@@ -464,7 +460,9 @@ export default class SprintlyPage extends React.Component<
         tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
         tableItem: Common.IGitRepositoryExtended
     ): JSX.Element {
-        newReleaseBranchNamesObservable[rowIndex] = new ObservableValue<string>('');
+        newReleaseBranchNamesObservable[rowIndex] = new ObservableValue<string>(
+            ''
+        );
         return (
             <SimpleTableCell
                 key={'col-' + columnIndex}
@@ -481,8 +479,9 @@ export default class SprintlyPage extends React.Component<
                                 >,
                                 newValue: string
                             ) =>
-                                (newReleaseBranchNamesObservable[rowIndex].value =
-                                    newValue.trim())
+                                (newReleaseBranchNamesObservable[
+                                    rowIndex
+                                ].value = newValue.trim())
                             }
                         />
                         &nbsp;
@@ -505,8 +504,9 @@ export default class SprintlyPage extends React.Component<
                                     repositoryId: tableItem.id,
                                     name:
                                         'refs/heads/release/' +
-                                        newReleaseBranchNamesObservable[rowIndex]
-                                            .value,
+                                        newReleaseBranchNamesObservable[
+                                            rowIndex
+                                        ].value,
                                     isLocked: false,
                                     newObjectId: newDevObjectId,
                                     oldObjectId:
@@ -518,8 +518,9 @@ export default class SprintlyPage extends React.Component<
                                         tableItem.id
                                     );
 
-                                newReleaseBranchNamesObservable[rowIndex].value =
-                                    '';
+                                newReleaseBranchNamesObservable[
+                                    rowIndex
+                                ].value = '';
                                 createRef.forEach(
                                     async (ref: GitRefUpdateResult) => {
                                         const globalMessagesSvc: IGlobalMessagesService =

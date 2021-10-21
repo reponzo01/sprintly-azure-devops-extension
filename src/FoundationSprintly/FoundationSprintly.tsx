@@ -250,9 +250,7 @@ export default class FoundationSprintly extends React.Component<
                     commandBarItems={this.getCommandBarItems()}
                     titleSize={TitleSize.Large}
                 />
-                <Observer
-                    userIsAllowedObservable={userIsAllowedObservable}
-                >
+                <Observer userIsAllowedObservable={userIsAllowedObservable}>
                     {(props: {
                         userIsAllowedObservable: boolean;
                         refreshDataObservable: boolean;
@@ -279,9 +277,7 @@ export default class FoundationSprintly extends React.Component<
                         return (
                             <div>
                                 <ZeroData
-                                    primaryText={
-                                        "Sorry, you don't have access yet."
-                                    }
+                                    primaryText='Sorry, you do not have access yet.'
                                     secondaryText={
                                         <span>
                                             Please contact the DevOps team or
