@@ -169,7 +169,6 @@ export default class SprintlyPostRelease extends React.Component<
         }
     }
 
-    // TODO: This function is repeated in SprintlyPage. See about extracting.
     private async loadRepositoriesDisplayState(
         projects: TeamProjectReference[]
     ): Promise<void> {
@@ -196,8 +195,9 @@ export default class SprintlyPostRelease extends React.Component<
                     const existingReleaseBranches: Common.IReleaseBranchInfo[] =
                         [];
                     for (const releaseBranch of repositoryBranchInfo.releaseBranches) {
+                        console.log(releaseBranch.name);
                         const releaseBranchName: string =
-                            releaseBranch.name.split('heads/')[1];
+                            Common.getBranchShortName(releaseBranch.name);
 
                         const branchInfo: Common.IReleaseBranchInfo = {
                             targetBranch: releaseBranch,

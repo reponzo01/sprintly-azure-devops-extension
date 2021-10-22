@@ -41,11 +41,13 @@ import { ZeroData } from 'azure-devops-ui/ZeroData';
 
 import * as Common from './SprintlyCommon';
 import { TagsModal, ITagsModalContent, getTagsModalContent } from './TagsModal';
+import { Card } from 'azure-devops-ui/Card';
 
 export interface ISprintlyPageState {
     repositories?: ArrayItemProvider<Common.IGitRepositoryExtended>;
 }
 
+//#region "Observables"
 const newReleaseBranchNamesObservable: Array<ObservableValue<string>> = [];
 const tagsModalKeyObservable: ObservableValue<string> =
     new ObservableValue<string>('');
@@ -67,6 +69,7 @@ const tagsColumnWidthObservable: ObservableValue<number> =
     new ObservableValue<number>(-30);
 const createReleaseBranchColumnWidthObservable: ObservableValue<number> =
     new ObservableValue<number>(-40);
+//#endregion "Observables"
 
 const repositoriesToProcessKey: string = 'repositories-to-process';
 let repositoriesToProcess: string[] = [];
@@ -83,7 +86,7 @@ export default class SprintlyPage extends React.Component<
 > {
     private dataManager: IExtensionDataManager;
 
-    public columns: any = [];
+    private columns: any = [];
 
     constructor(props: { dataManager: IExtensionDataManager }) {
         super(props);
@@ -247,47 +250,6 @@ export default class SprintlyPage extends React.Component<
         );
 
         return Common.codeChangesInCommitDiffs(commitsDiff);
-    }
-
-    public render(): JSX.Element {
-        return (
-            <Observer
-                totalRepositoriesToProcess={
-                    totalRepositoriesToProcessObservable
-                }
-            >
-                {(props: { totalRepositoriesToProcess: number }) => {
-                    if (props.totalRepositoriesToProcess > 0) {
-                        return !this.state.repositories ? (
-                            <Spinner label='loading' />
-                        ) : (
-                            <div className='page-content page-content-top flex-column rhythm-vertical-16'>
-                                {this.state.repositories && (
-                                    <Table
-                                        columns={this.columns}
-                                        itemProvider={this.state.repositories}
-                                    />
-                                )}
-                                {this.tagsModal()}
-                            </div>
-                        );
-                    }
-                    return (
-                        <ZeroData
-                            primaryText='No repositories.'
-                            secondaryText={
-                                <span>
-                                    Please select valid repositories from the
-                                    Settings page.
-                                </span>
-                            }
-                            imageAltText='No repositories'
-                            imagePath={'../static/notfound.png'}
-                        />
-                    );
-                }}
-            </Observer>
-        );
     }
 
     private tagsModal(): JSX.Element {
@@ -550,5 +512,50 @@ export default class SprintlyPage extends React.Component<
 
     private onSize(event: MouseEvent, index: number, width: number): void {
         (this.columns[index].width as ObservableValue<number>).value = width;
+    }
+
+    public render(): JSX.Element {
+        return (
+            <Observer
+                totalRepositoriesToProcess={
+                    totalRepositoriesToProcessObservable
+                }
+            >
+                {(props: { totalRepositoriesToProcess: number }) => {
+                    if (props.totalRepositoriesToProcess > 0) {
+                        return !this.state.repositories ? (
+                            <Spinner label='loading' />
+                        ) : (
+                            <div className='page-content page-content-top flex-column rhythm-vertical-16'>
+                                {this.state.repositories && (
+                                    <Card>
+                                        <Table
+                                            columns={this.columns}
+                                            itemProvider={
+                                                this.state.repositories
+                                            }
+                                        />
+                                    </Card>
+                                )}
+                                {this.tagsModal()}
+                            </div>
+                        );
+                    }
+                    return (
+                        <ZeroData
+                            primaryText='No repositories.'
+                            secondaryText={
+                                <span>
+                                    Please select valid repositories from the
+                                    Settings page.
+                                </span>
+                            }
+                            imageAltText='No repositories'
+                            imagePath={'../static/notfound.png'}
+                        />
+                    );
+                }}
+            </Observer>
+        );
     }
 }
