@@ -150,12 +150,13 @@ export default class SprintlyPostRelease extends React.Component<
         if (repositoriesToProcess.length > 0) {
             const filteredProjects: TeamProjectReference[] =
                 await Common.getFilteredProjects();
-            await this.loadRepositoriesDisplayState(filteredProjects);
+            const pullRequests: GitPullRequest[] = await Common.getPullRequests(
+                filteredProjects
+            );
             this.setState({
-                pullRequests: this.state.pullRequests.concat(
-                    await Common.getPullRequests(filteredProjects)
-                ),
+                pullRequests: pullRequests,
             });
+            await this.loadRepositoriesDisplayState(filteredProjects);
             this.releaseDefinitions = await Common.getReleaseDefinitions(
                 filteredProjects,
                 this.organizationName,
@@ -195,7 +196,6 @@ export default class SprintlyPostRelease extends React.Component<
                     const existingReleaseBranches: Common.IReleaseBranchInfo[] =
                         [];
                     for (const releaseBranch of repositoryBranchInfo.releaseBranches) {
-                        console.log(releaseBranch.name);
                         const releaseBranchName: string =
                             Common.getBranchShortName(releaseBranch.name);
 
