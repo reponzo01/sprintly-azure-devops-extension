@@ -156,7 +156,6 @@ export default class SprintlyPostRelease extends React.Component<
             this.setState({
                 pullRequests: pullRequests,
             });
-            await this.loadRepositoriesDisplayState(filteredProjects);
             this.releaseDefinitions = await Common.getReleaseDefinitions(
                 filteredProjects,
                 this.organizationName,
@@ -167,6 +166,7 @@ export default class SprintlyPostRelease extends React.Component<
                 this.organizationName,
                 this.accessToken
             );
+            await this.loadRepositoriesDisplayState(filteredProjects);
         }
     }
 

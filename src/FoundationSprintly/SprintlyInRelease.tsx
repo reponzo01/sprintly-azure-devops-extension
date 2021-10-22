@@ -44,10 +44,10 @@ export interface ISprintlyInReleaseState {
     releaseBranchDeployItemProvider: ITreeItemProvider<IReleaseBranchDeployTableItem>;
 }
 
-export interface IReleaseBranchDeployTableItem
-extends Common.IReleaseInfo
-extends ISimpleTableCell {
+// TODO: Do I still need this?
+export interface IReleaseBranchDeployTableItem {
     name: string;
+    releaseInfo?: Common.IReleaseInfo[];
 }
 
 //#region "Observables"
@@ -59,7 +59,7 @@ const releaseInfoObservable: ObservableArray<Common.IReleaseInfo> =
 const nameColumnWidthObservable: ObservableValue<number> =
     new ObservableValue<number>(-30);
 const deployColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
+    new ObservableValue<number>(-80);
 //#endregion "Observables"
 
 const repositoriesToProcessKey: string = 'repositories-to-process';
@@ -129,9 +129,19 @@ export default class SprintlyInRelease extends React.Component<
         totalRepositoriesToProcessObservable.value =
             repositoriesToProcess.length;
         if (repositoriesToProcess.length > 0) {
-            await this.loadRepositoriesDisplayState(
-                await Common.getFilteredProjects()
+            const filteredProjects: TeamProjectReference[] =
+                await Common.getFilteredProjects();
+            this.releaseDefinitions = await Common.getReleaseDefinitions(
+                filteredProjects,
+                this.organizationName,
+                this.accessToken
             );
+            this.buildDefinitions = await Common.getBuildDefinitions(
+                filteredProjects,
+                this.organizationName,
+                this.accessToken
+            );
+            await this.loadRepositoriesDisplayState(filteredProjects);
         }
     }
 
@@ -145,11 +155,14 @@ export default class SprintlyInRelease extends React.Component<
                     project.id,
                     repositoriesToProcess
                 );
-
+            const releaseBranchRootItems: Array<
+                ITreeItem<IReleaseBranchDeployTableItem>
+            > = [];
             for (const repo of filteredRepos) {
                 const repositoryBranchInfo: Common.IRepositoryBranchInfo =
                     await Common.getRepositoryBranchesInfo(repo.id);
 
+                console.log('build defs: ', this.buildDefinitions);
                 const buildDefinitionForRepo: BuildDefinition | undefined =
                     this.buildDefinitions.find(
                         (buildDef: BuildDefinition) =>
@@ -166,38 +179,51 @@ export default class SprintlyInRelease extends React.Component<
                         }
                     );
 
-                    const repositoryParent: IReleaseBranchDeployTableItem = {
-                        name: repo.name,
-                        repositoryId: repo.id,
-                        releaseBranch
+                const releaseBranchDeployTableItem: ITreeItem<IReleaseBranchDeployTableItem> =
+                    {
+                        childItems: [],
+                        data: {
+                            name: repo.name,
+                        },
+                        expanded: true,
                     };
 
+                console.log('about to go into release loop');
                 for (const releaseBranch of existingReleaseBranches) {
                     if (buildDefinitionForRepo) {
+                        console.log('build def exists for repo');
                         await Common.fetchAndStoreBranchReleaseInfoIntoObservable(
                             releaseInfoObservable,
                             buildDefinitionForRepo,
                             this.releaseDefinitions,
                             releaseBranch,
-                            repo
-                                .project.id,
+                            repo.project.id,
                             repo.id,
                             this.organizationName,
                             this.accessToken
                         );
+
+                        console.log('about to push into child items');
                     }
+                    releaseBranchDeployTableItem.childItems!.push({
+                        data: {
+                            name: Common.getBranchShortName(
+                                releaseBranch.targetBranch.name
+                            ),
+                            releaseInfo: releaseInfoObservable.value,
+                        },
+                        expanded: false,
+                    });
                 }
-                const releaseBranchRootItems: Array<ITreeItem<IReleaseBranchDeployTableItem>> = [];
-                releaseBranchRootItems.push({
-                    childItems: [{}],
-                    data:
-                    expanded: true
-                });
+
+                releaseBranchRootItems.push(releaseBranchDeployTableItem);
             }
 
-            // this.setState({
-            //     releaseBranchDeployItemProvider: new TreeItemProvider(releaseInfoObservable.value);
-            // });
+            this.setState({
+                releaseBranchDeployItemProvider: new TreeItemProvider(
+                    releaseBranchRootItems
+                ),
+            });
 
             totalRepositoriesToProcessObservable.value = filteredRepos.length;
         }
@@ -217,6 +243,7 @@ export default class SprintlyInRelease extends React.Component<
     }
 
     public render(): JSX.Element {
+        console.log(this.state.releaseBranchDeployItemProvider);
         return (
             <Observer
                 totalRepositoriesToProcess={
@@ -227,7 +254,7 @@ export default class SprintlyInRelease extends React.Component<
                     if (props.totalRepositoriesToProcess > 0) {
                         return (
                             <div className='page-content page-content-top flex-column rhythm-vertical-16'>
-                                {this.state.repositories && (
+                                {this.state.releaseBranchDeployItemProvider && (
                                     // const mostRecentRelease: Release | undefined =
                                     // Common.getMostRecentReleaseForBranch(
                                     //     item,
@@ -241,14 +268,14 @@ export default class SprintlyInRelease extends React.Component<
                                                     .releaseBranchDeployTreeColumns
                                             }
                                             itemProvider={
-                                                this
+                                                this.state
                                                     .releaseBranchDeployItemProvider
                                             }
                                             onToggle={(
                                                 event,
                                                 treeItem: ITreeItemEx<IReleaseBranchDeployTableItem>
                                             ) => {
-                                                this.releaseBranchDeployItemProvider.toggle(
+                                                this.state.releaseBranchDeployItemProvider.toggle(
                                                     treeItem.underlyingItem
                                                 );
                                             }}

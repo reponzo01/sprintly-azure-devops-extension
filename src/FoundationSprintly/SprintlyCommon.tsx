@@ -486,7 +486,10 @@ export function getMostRecentReleaseForBranch(
 }
 
 export function getBranchShortName(branchRealName: string): string {
-    return branchRealName.split('refs/heads/')[1];
+    if (branchRealName.includes('refs/heads/')) {
+        return branchRealName.split('refs/heads/')[1];
+    }
+    return branchRealName;
 }
 
 export function repositoryLinkJsxElement(
