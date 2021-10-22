@@ -40,6 +40,7 @@ import { Page } from 'azure-devops-ui/Page';
 import { Pill, PillSize, PillVariant } from 'azure-devops-ui/Pill';
 import {
     CustomHeader,
+    Header,
     HeaderDescription,
     HeaderIcon,
     HeaderTitle,
@@ -350,8 +351,7 @@ export default class SprintlyPostRelease extends React.Component<
     }
 
     private async selectRepository(): Promise<void> {
-        this.autoSelectIfSingleBranch();
-
+        this.state.releaseBranchListSelection.clear();
         const buildDefinitionForRepo: BuildDefinition | undefined =
             this.buildDefinitions.find(
                 (buildDef: BuildDefinition) =>
@@ -376,10 +376,24 @@ export default class SprintlyPostRelease extends React.Component<
                 );
             }
         }
+
+        console.log("existing rels: ", this.state
+        .repositoryListSelectedItemObservable.value
+        .existingReleaseBranches);
+
+        bindSelectionToObservable(
+            this.state.releaseBranchListSelection,
+            new ArrayItemProvider(
+                this.state.repositoryListSelectedItemObservable.value.existingReleaseBranches
+            ),
+            this.state
+                .releaseBranchListSelectedItemObservable as ObservableValue<Common.IReleaseBranchInfo>
+        );
+
+        this.autoSelectIfSingleBranch();
     }
 
     private autoSelectIfSingleBranch(): void {
-        this.state.releaseBranchListSelection.clear();
         if (
             this.state.repositoryListSelectedItemObservable.value
                 .existingReleaseBranches.length === 1
@@ -629,11 +643,78 @@ export default class SprintlyPostRelease extends React.Component<
                                             )}
                                         </Card>
                                     </div>
+                                    {this.renderDetailPageActionsContent()}
                                 </Page>
                             )}
                     </Page>
                 )}
             </Observer>
+        );
+    }
+
+    private renderDetailPageActionsContent(): JSX.Element {
+        return (
+            <Observer
+                selectedItem={
+                    this.state.releaseBranchListSelectedItemObservable
+                }
+            >
+                {(observerProps: { selectedItem: Common.IReleaseBranchInfo }) =>
+                    this.state.releaseBranchListSelection.selectedCount ===
+                    0 ? (
+                        <></>
+                    ) : (
+                        <Page>
+                            <div className='page-content'>
+                                <Card>
+                                    <Page>
+                                        <Header
+                                            title='Develop Branch Actions'
+                                            titleSize={TitleSize.Large}
+                                        />
+                                        <div className='page-content page-content-top'>
+                                            {this.renderDetailPageTopActionContent(observerProps.selectedItem)}
+                                        </div>
+                                    </Page>
+                                </Card>
+                                <Card>
+                                    <Page>
+                                        <Header
+                                            title='Master/Main Branch Actions'
+                                            titleSize={TitleSize.Large}
+                                        />
+                                        <div className='page-content page-content-top'>
+                                            {this.renderDetailPageBottomActionContent(observerProps.selectedItem)}
+                                        </div>
+                                    </Page>
+                                </Card>
+                            </div>
+                        </Page>
+                    )
+                }
+            </Observer>
+        );
+    }
+
+    private renderDetailPageTopActionContent(selectedBranch: Common.IReleaseBranchInfo): JSX.Element {
+        console.log('top: ', selectedBranch);
+        return (
+            <div>
+                1This is content that may be collapsed. Drag the splitter up so
+                that the height of this content is less than the minimum
+                fixed-size height, and this content will be collapsed.
+            </div>
+        );
+    }
+
+    private renderDetailPageBottomActionContent(selectedBranch: Common.IReleaseBranchInfo): JSX.Element {
+        console.log('bottom: ', selectedBranch);
+        return (
+            <div>
+                2This is content that may be collapsed. Drag the splitter up so
+                that the height of this content is less than the minimum
+                fixed-size height, and this content will be collapsed.
+            </div>
         );
     }
 
