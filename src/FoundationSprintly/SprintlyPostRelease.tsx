@@ -63,6 +63,7 @@ export interface ISprintlyPostReleaseState {
     releaseBranchListSelectedItemObservable: ObservableValue<Common.IReleaseBranchInfo>;
 }
 
+//#region "Observables"
 const tagsModalKeyObservable: ObservableValue<string> =
     new ObservableValue<string>('');
 const isTagsDialogOpenObservable: ObservableValue<boolean> =
@@ -74,8 +75,9 @@ const tagsObservable: ObservableValue<string[]> = new ObservableValue<string[]>(
 );
 const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
-const releaseInfoObservable: ObservableArray<Common.IReleaseInfo> =
+const allBranchesReleaseInfoObservable: ObservableArray<Common.IReleaseInfo> =
     new ObservableArray<Common.IReleaseInfo>();
+//#endregion "Observables"
 
 const repositoriesToProcessKey: string = 'repositories-to-process';
 let repositoriesToProcess: string[] = [];
@@ -362,7 +364,7 @@ export default class SprintlyPostRelease extends React.Component<
             .existingReleaseBranches) {
             if (buildDefinitionForRepo) {
                 await Common.fetchAndStoreBranchReleaseInfoIntoObservable(
-                    releaseInfoObservable,
+                    allBranchesReleaseInfoObservable,
                     buildDefinitionForRepo,
                     this.releaseDefinitions,
                     releaseBranch,
@@ -619,7 +621,7 @@ export default class SprintlyPostRelease extends React.Component<
                                             .branchesAndTags
                                     )}
                                     <div className='page-content page-content-top'>
-                                        <Card>
+                                        <Card className='bolt-card-white'>
                                             {this.renderReleaseBranchDetailList(
                                                 new ArrayItemProvider(
                                                     observerProps.selectedItem.existingReleaseBranches
@@ -664,7 +666,11 @@ export default class SprintlyPostRelease extends React.Component<
                 details={details}
             >
                 <div className='master-row-content flex-row flex-center h-scroll-hidden'>
-                    <Observer releaseInfoForAllBranches={releaseInfoObservable}>
+                    <Observer
+                        releaseInfoForAllBranches={
+                            allBranchesReleaseInfoObservable
+                        }
+                    >
                         {(observerProps: {
                             releaseInfoForAllBranches: Common.IReleaseInfo[];
                         }) => {

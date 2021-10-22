@@ -338,7 +338,7 @@ export async function getReleasesForReleaseBranch(
     accessToken: string
 ): Promise<void> {
     accessToken = await getOrRefreshToken(accessToken);
-    axios
+    const response: AxiosResponse<never> = await axios
         .get(
             `https://vsrm.dev.azure.com/${organizationName}/${projectId}/_apis/release/releases?$expand=environments&sourceBranchFilter=${releaseBranch.targetBranch.name}&definitionId=${releaseDefinitionId}&api-version=6.0`,
             {
@@ -347,31 +347,29 @@ export async function getReleasesForReleaseBranch(
                 },
             }
         )
-        .then((res: AxiosResponse<never>) => {
-            const data: { count: number; value: Release[] } = res.data;
-            if (data && data.count > 0) {
-                const existingIndex: number =
-                    releaseInfoObservable.value.findIndex(
-                        (item: IReleaseInfo) =>
-                            item.releaseBranch.targetBranch.name ===
-                            releaseBranch.targetBranch.name
-                    );
-                const releaseInfo: IReleaseInfo = {
-                    repositoryId,
-                    releaseBranch,
-                    releases: data.value,
-                };
-                if (existingIndex < 0) {
-                    releaseInfoObservable.push(releaseInfo);
-                } else {
-                    releaseInfoObservable.change(existingIndex, releaseInfo);
-                }
-            }
-        })
         .catch((error: any) => {
             console.error(error);
             throw error;
         });
+
+    const data: { count: number; value: Release[] } = response.data;
+    if (data && data.count > 0) {
+        const existingIndex: number = releaseInfoObservable.value.findIndex(
+            (item: IReleaseInfo) =>
+                item.releaseBranch.targetBranch.name ===
+                releaseBranch.targetBranch.name
+        );
+        const releaseInfo: IReleaseInfo = {
+            repositoryId,
+            releaseBranch,
+            releases: data.value,
+        };
+        if (existingIndex < 0) {
+            releaseInfoObservable.push(releaseInfo);
+        } else {
+            releaseInfoObservable.change(existingIndex, releaseInfo);
+        }
+    }
 }
 
 export async function getReleaseDefinitions(
@@ -459,9 +457,10 @@ export async function getPullRequests(
 }
 
 export function getMostRecentReleaseForBranch(
-    releaseBranchInfo: IReleaseBranchInfo,
+    releaseBranchInfo: IReleaseBranchInfo | undefined,
     releaseInfoForAllBranches: IReleaseInfo[]
 ): Release | undefined {
+    if (!releaseBranchInfo) return;
     const releaseInfoForBranch: IReleaseInfo | undefined =
         releaseInfoForAllBranches.find(
             (ri: IReleaseInfo) =>
@@ -550,62 +549,70 @@ export function noReleaseExistsPillJsxElement(): JSX.Element {
 }
 
 export function getAllEnvironmentStatusPillJsxElements(
-    environments: ReleaseEnvironment[]
+    environments: ReleaseEnvironment[],
+    onClickAction?: () => void
 ): JSX.Element[] {
     const environmentStatuses: JSX.Element[] = [];
     for (const environment of environments) {
-        let envStatusEnumString: string = '';
-        let statusIconName: string = 'Cancel';
-        let divTextClassName: string = 'sprintly-text-white';
-        for (const idx in EnvironmentStatus) {
-            if (
-                idx.toLowerCase() ===
-                environment.status.toString().toLowerCase()
-            ) {
-                envStatusEnumString = EnvironmentStatus[idx];
-            }
-        }
-        switch (parseInt(envStatusEnumString)) {
-            case parseInt(EnvironmentStatus.NotStarted.toString()):
-                statusIconName = 'CircleRing';
-                divTextClassName = '';
-                break;
-            case parseInt(EnvironmentStatus.InProgress.toString()):
-                statusIconName = 'UseRunningStatus';
-                divTextClassName = '';
-                break;
-            case parseInt(EnvironmentStatus.Queued.toString()):
-                statusIconName = 'UseRunningStatus';
-                divTextClassName = '';
-                break;
-            case parseInt(EnvironmentStatus.Scheduled.toString()):
-                statusIconName = 'UseRunningStatus';
-                divTextClassName = '';
-                break;
-            case parseInt(EnvironmentStatus.Succeeded.toString()):
-                statusIconName = 'Accept';
-                break;
-        }
         environmentStatuses.push(
-            environmentStatusPillJsxElement(
-                environment,
-                envStatusEnumString,
-                divTextClassName,
-                statusIconName
-            )
+            getSingleEnvironmentStatusPillJsxElement(environment, onClickAction)
         );
     }
     return environmentStatuses;
+}
+
+export function getSingleEnvironmentStatusPillJsxElement(
+    environment: ReleaseEnvironment,
+    onClickAction?: () => void
+): JSX.Element {
+    let envStatusEnumString: string = '';
+    let statusIconName: string = 'Cancel';
+    let divTextClassName: string = 'sprintly-text-white';
+    for (const idx in EnvironmentStatus) {
+        if (idx.toLowerCase() === environment.status.toString().toLowerCase()) {
+            envStatusEnumString = EnvironmentStatus[idx];
+        }
+    }
+    switch (parseInt(envStatusEnumString)) {
+        case parseInt(EnvironmentStatus.NotStarted.toString()):
+            statusIconName = 'CircleRing';
+            divTextClassName = '';
+            break;
+        case parseInt(EnvironmentStatus.InProgress.toString()):
+            statusIconName = 'UseRunningStatus';
+            divTextClassName = '';
+            break;
+        case parseInt(EnvironmentStatus.Queued.toString()):
+            statusIconName = 'UseRunningStatus';
+            divTextClassName = '';
+            break;
+        case parseInt(EnvironmentStatus.Scheduled.toString()):
+            statusIconName = 'UseRunningStatus';
+            divTextClassName = '';
+            break;
+        case parseInt(EnvironmentStatus.Succeeded.toString()):
+            statusIconName = 'Accept';
+            break;
+    }
+    return environmentStatusPillJsxElement(
+        environment,
+        envStatusEnumString,
+        divTextClassName,
+        statusIconName,
+        onClickAction
+    );
 }
 
 export function environmentStatusPillJsxElement(
     environment: ReleaseEnvironment,
     envStatusEnumString: string,
     divTextClassName: string,
-    statusIconName: string
+    statusIconName: string,
+    onClickAction?: () => void
 ): JSX.Element {
     return (
         <Pill
+            onClick={onClickAction}
             key={environment.id}
             color={
                 parseInt(envStatusEnumString) ===
@@ -626,7 +633,10 @@ export function environmentStatusPillJsxElement(
             }
             size={PillSize.regular}
             variant={PillVariant.outlined}
-            className='bolt-list-overlay sprintly-environment-status'
+            className={
+                'sprintly-environment-status' +
+                (onClickAction === undefined ? ' bolt-list-overlay' : '')
+            }
         >
             <div className={divTextClassName}>
                 {statusIconName === 'UseRunningStatus' ? (

@@ -9,7 +9,7 @@ import {
 } from 'azure-devops-extension-api';
 import { GitRepository } from 'azure-devops-extension-api/Git';
 import { TeamProjectReference } from 'azure-devops-extension-api/Core';
-import { ReleaseDefinition } from 'azure-devops-extension-api/Release';
+import { Release, ReleaseDefinition } from 'azure-devops-extension-api/Release';
 import { BuildDefinition } from 'azure-devops-extension-api/Build';
 
 import {
@@ -28,33 +28,46 @@ import {
     ObservableArray,
     ObservableValue,
 } from 'azure-devops-ui/Core/Observable';
-import { ISimpleTableCell } from 'azure-devops-ui/Table';
+import { ISimpleTableCell, SimpleTableCell } from 'azure-devops-ui/Table';
 import { Observer } from 'azure-devops-ui/Observer';
 import { Card } from 'azure-devops-ui/Card';
 import {
     Tree,
     renderExpandableTreeCell,
     renderTreeCell,
+    ITreeColumn,
 } from 'azure-devops-ui/TreeEx';
 import { Spinner } from 'azure-devops-ui/Spinner';
 
 import * as Common from './SprintlyCommon';
+import { Icon } from 'azure-devops-ui/Icon';
+import { Link } from 'azure-devops-ui/Link';
+import { Dialog } from 'azure-devops-ui/Dialog';
 
 export interface ISprintlyInReleaseState {
     releaseBranchDeployItemProvider: ITreeItemProvider<IReleaseBranchDeployTableItem>;
 }
 
-// TODO: Do I still need this?
 export interface IReleaseBranchDeployTableItem {
     name: string;
-    releaseInfo?: Common.IReleaseInfo[];
+    webUrl?: string;
+    releaseInfo?: Common.IReleaseInfo;
+    isRepositoryItem: boolean;
 }
 
 //#region "Observables"
 const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
-const releaseInfoObservable: ObservableArray<Common.IReleaseInfo> =
+const allBranchesReleaseInfoObservable: ObservableArray<Common.IReleaseInfo> =
     new ObservableArray<Common.IReleaseInfo>();
+const isDeployDialogOpenObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(false);
+const clickedDeployEnvironmentObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
+const clickedDeployBranchNameObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
+const clickedDeployReleaseIdObservable: ObservableValue<number> =
+    new ObservableValue<number>(0);
 
 const nameColumnWidthObservable: ObservableValue<number> =
     new ObservableValue<number>(-30);
@@ -91,16 +104,16 @@ export default class SprintlyInRelease extends React.Component<
         this.releaseBranchDeployTreeColumns = [
             {
                 id: 'name',
-                name: 'Repository',
+                name: 'Repository Release Branches',
                 onSize: this.onSize,
-                renderCell: renderExpandableTreeCell,
+                renderCell: this.renderBranchColumn,
                 width: nameColumnWidthObservable,
             },
             {
                 id: 'deploy',
                 name: 'Deploy Status',
                 onSize: this.onSize,
-                renderCell: renderTreeCell,
+                renderCell: this.renderDeployStatusColumn,
                 width: deployColumnWidthObservable,
             },
         ];
@@ -162,7 +175,6 @@ export default class SprintlyInRelease extends React.Component<
                 const repositoryBranchInfo: Common.IRepositoryBranchInfo =
                     await Common.getRepositoryBranchesInfo(repo.id);
 
-                console.log('build defs: ', this.buildDefinitions);
                 const buildDefinitionForRepo: BuildDefinition | undefined =
                     this.buildDefinitions.find(
                         (buildDef: BuildDefinition) =>
@@ -184,16 +196,15 @@ export default class SprintlyInRelease extends React.Component<
                         childItems: [],
                         data: {
                             name: repo.name,
+                            isRepositoryItem: true,
                         },
                         expanded: true,
                     };
 
-                console.log('about to go into release loop');
                 for (const releaseBranch of existingReleaseBranches) {
                     if (buildDefinitionForRepo) {
-                        console.log('build def exists for repo');
                         await Common.fetchAndStoreBranchReleaseInfoIntoObservable(
-                            releaseInfoObservable,
+                            allBranchesReleaseInfoObservable,
                             buildDefinitionForRepo,
                             this.releaseDefinitions,
                             releaseBranch,
@@ -202,17 +213,22 @@ export default class SprintlyInRelease extends React.Component<
                             this.organizationName,
                             this.accessToken
                         );
-
-                        console.log('about to push into child items');
                     }
                     releaseBranchDeployTableItem.childItems!.push({
                         data: {
                             name: Common.getBranchShortName(
                                 releaseBranch.targetBranch.name
                             ),
-                            releaseInfo: releaseInfoObservable.value,
+                            webUrl: repo.webUrl,
+                            releaseInfo:
+                                allBranchesReleaseInfoObservable.value.find(
+                                    (ri) =>
+                                        ri.repositoryId === repo.id &&
+                                        ri.releaseBranch.targetBranch.name ===
+                                            releaseBranch.targetBranch.name
+                                ),
+                            isRepositoryItem: false,
                         },
-                        expanded: false,
                     });
                 }
 
@@ -229,10 +245,181 @@ export default class SprintlyInRelease extends React.Component<
         }
     }
 
-    private getReleaseBranchDeployItemProvider(): ITreeItemProvider<IReleaseBranchDeployTableItem> {
-        const rootItems: Array<ITreeItem<IReleaseBranchDeployTableItem>> = [];
+    private renderBranchColumn(
+        rowIndex: number,
+        columnIndex: number,
+        treeColumn: ITreeColumn<IReleaseBranchDeployTableItem>,
+        treeItem: ITreeItemEx<IReleaseBranchDeployTableItem>
+    ): JSX.Element {
+        return (
+            <SimpleTableCell
+                key={columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={treeColumn}
+                children={
+                    <>
+                        {treeItem.depth === 0 ? (
+                            <>
+                                <Icon
+                                    iconName={
+                                        treeItem.underlyingItem.expanded
+                                            ? 'ChevronDownMed'
+                                            : 'ChevronRightMed'
+                                    }
+                                    className='bolt-tree-expand-button cursor-pointer'
+                                ></Icon>
+                                <Icon
+                                    iconName='FabricFolderFill'
+                                    className='icon-margin'
+                                    style={{ color: '#DCB67A' }}
+                                ></Icon>
+                                <span className='icon-margin'>
+                                    {treeItem.underlyingItem.data.name}
+                                </span>
+                            </>
+                        ) : (
+                            <>
+                                <Icon
+                                    iconName='ChevronRightMed'
+                                    className='invisible'
+                                    style={{
+                                        marginLeft: `${treeItem.depth * 16}px`,
+                                    }}
+                                ></Icon>
+                                <Icon
+                                    iconName='OpenSource'
+                                    className='icon-margin'
+                                ></Icon>
+                                <u>
+                                    {Common.branchLinkJsxElement(
+                                        columnIndex.toString(),
+                                        treeItem.underlyingItem.data.webUrl ??
+                                            '#',
+                                        treeItem.underlyingItem.data.name,
+                                        'bolt-table-link bolt-table-inline-link'
+                                    )}
+                                </u>
+                            </>
+                        )}
+                    </>
+                }
+            ></SimpleTableCell>
+        );
+    }
 
-        return new TreeItemProvider<IReleaseBranchDeployTableItem>(rootItems);
+    private renderDeployStatusColumn(
+        rowIndex: number,
+        columnIndex: number,
+        treeColumn: ITreeColumn<IReleaseBranchDeployTableItem>,
+        treeItem: ITreeItemEx<IReleaseBranchDeployTableItem>
+    ): JSX.Element {
+        return (
+            <SimpleTableCell
+                key={columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={treeColumn}
+                children={
+                    <>
+                        <Observer
+                            releaseInfoForAllBranches={
+                                allBranchesReleaseInfoObservable
+                            }
+                        >
+                            {(observerProps: {
+                                releaseInfoForAllBranches: Common.IReleaseInfo[];
+                            }) => {
+                                if (
+                                    treeItem.underlyingItem.data
+                                        .isRepositoryItem
+                                ) {
+                                    return <></>;
+                                }
+                                const mostRecentRelease: Release | undefined =
+                                    Common.getMostRecentReleaseForBranch(
+                                        treeItem.underlyingItem.data.releaseInfo
+                                            ?.releaseBranch,
+                                        observerProps.releaseInfoForAllBranches
+                                    );
+                                if (!mostRecentRelease) {
+                                    return Common.noReleaseExistsPillJsxElement();
+                                }
+
+                                const environmentStatuses: JSX.Element[] = [];
+                                for (const environment of mostRecentRelease.environments) {
+                                    environmentStatuses.push(
+                                        Common.getSingleEnvironmentStatusPillJsxElement(
+                                            environment,
+                                            () => {
+                                                clickedDeployEnvironmentObservable.value =
+                                                    environment.name;
+                                                clickedDeployBranchNameObservable.value =
+                                                    treeItem.underlyingItem.data.name;
+                                                clickedDeployReleaseIdObservable.value =
+                                                    mostRecentRelease.id;
+                                                isDeployDialogOpenObservable.value =
+                                                    true;
+                                            }
+                                        )
+                                    );
+                                }
+                                return environmentStatuses;
+                            }}
+                        </Observer>
+                    </>
+                }
+            ></SimpleTableCell>
+        );
+    }
+
+    private renderDeployModalAction(): JSX.Element {
+        return (
+            <Observer isDeployDialogOpen={isDeployDialogOpenObservable}>
+                {(props: { isDeployDialogOpen: boolean }) => {
+                    return props.isDeployDialogOpen ? (
+                        <Dialog
+                            titleProps={{
+                                text: `Deploy to ${clickedDeployEnvironmentObservable.value}?`,
+                            }}
+                            footerButtonProps={[
+                                {
+                                    text: 'Cancel',
+                                    onClick: this.onDismissDeployActionModal,
+                                },
+                                {
+                                    text: 'Refresh Data',
+                                    iconProps: {
+                                        iconName: 'Refresh',
+                                    },
+                                    onClick: () => {
+                                        window.location.reload();
+                                    },
+                                },
+                                {
+                                    text: 'Deploy',
+                                    onClick: this.onDismissDeployActionModal,
+                                    primary: true,
+                                },
+                            ]}
+                            onDismiss={this.onDismissDeployActionModal}
+                        >
+                            You are about to deploy release #
+                            {clickedDeployReleaseIdObservable.value} for branch{' '}
+                            {clickedDeployBranchNameObservable.value} to{' '}
+                            {clickedDeployEnvironmentObservable.value}
+                            . Are you sure?
+                            <Icon ariaLabel='Warning' iconName='Warning' />{' '}
+                            Note: Please ensure you have refreshed the data on
+                            this page to avoid deploying a potentially obsolete
+                            release.
+                        </Dialog>
+                    ) : null;
+                }}
+            </Observer>
+        );
+    }
+
+    private onDismissDeployActionModal(): void {
+        isDeployDialogOpenObservable.value = false;
     }
 
     private onSize(event: MouseEvent, index: number, width: number): void {
@@ -243,7 +430,6 @@ export default class SprintlyInRelease extends React.Component<
     }
 
     public render(): JSX.Element {
-        console.log(this.state.releaseBranchDeployItemProvider);
         return (
             <Observer
                 totalRepositoriesToProcess={
@@ -252,15 +438,38 @@ export default class SprintlyInRelease extends React.Component<
             >
                 {(props: { totalRepositoriesToProcess: number }) => {
                     if (props.totalRepositoriesToProcess > 0) {
+                        if (
+                            this.state.releaseBranchDeployItemProvider
+                                .length === 0
+                        ) {
+                            return (
+                                <div className='page-content-top'>
+                                    <Spinner label='loading' />
+                                </div>
+                            );
+                        }
                         return (
                             <div className='page-content page-content-top flex-column rhythm-vertical-16'>
                                 {this.state.releaseBranchDeployItemProvider && (
-                                    // const mostRecentRelease: Release | undefined =
-                                    // Common.getMostRecentReleaseForBranch(
-                                    //     item,
-                                    //     observerProps.releaseInfoForAllBranches
-                                    // );
-                                    <Card>
+                                    <Card
+                                        className='bolt-table-card bolt-card-white'
+                                        titleProps={{ text: 'Deploy Actions' }}
+                                        headerDescriptionProps={{
+                                            text: 'This table displays ONLY the most recent release artifact for each release branch. Click an environment to deploy to that environment.',
+                                        }}
+                                        headerCommandBarItems={[
+                                            {
+                                                id: 'export',
+                                                text: 'Export to CSV',
+                                                onActivate: () => {
+                                                    alert('Example text');
+                                                },
+                                                iconProps: {
+                                                    iconName: 'Download',
+                                                },
+                                            },
+                                        ]}
+                                    >
                                         <Tree<IReleaseBranchDeployTableItem>
                                             ariaLabel='Basic tree'
                                             columns={
@@ -283,19 +492,20 @@ export default class SprintlyInRelease extends React.Component<
                                         />
                                     </Card>
                                 )}
+                                {this.renderDeployModalAction()}
                             </div>
                         );
                     }
                     return (
                         <ZeroData
-                            primaryText='Coming Soon!'
+                            primaryText='No repositories.'
                             secondaryText={
                                 <span>
-                                    In-release (QA) functionality is coming
-                                    soon!
+                                    Please select valid repositories from the
+                                    Settings page.
                                 </span>
                             }
-                            imageAltText='Coming Soon'
+                            imageAltText='No repositories.'
                             imagePath={'../static/notfound.png'}
                         />
                     );

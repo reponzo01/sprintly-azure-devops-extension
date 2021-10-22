@@ -528,7 +528,7 @@ export default class SprintlyPage extends React.Component<
                         ) : (
                             <div className='page-content page-content-top flex-column rhythm-vertical-16'>
                                 {this.state.repositories && (
-                                    <Card>
+                                    <Card className='bolt-table-card bolt-card-white'>
                                         <Table
                                             columns={this.columns}
                                             itemProvider={
