@@ -50,9 +50,19 @@ import {
 } from 'azure-devops-ui/Header';
 import { HeaderCommandBar } from 'azure-devops-ui/HeaderCommandBar';
 
-import * as Common from './SprintlyCommon';
 import { TagsModal, ITagsModalContent, getTagsModalContent } from './TagsModal';
 import { Spinner } from 'azure-devops-ui/Spinner';
+import {
+    IStatusProps,
+    Status,
+    Statuses,
+    StatusSize,
+} from 'azure-devops-ui/Status';
+import { Button } from 'azure-devops-ui/Button';
+import { ButtonGroup } from 'azure-devops-ui/ButtonGroup';
+
+import * as Common from './SprintlyCommon';
+import { Panel } from 'azure-devops-ui/Panel';
 
 // TODO: Instead of a state, consider just global observables
 export interface ISprintlyPostReleaseState {
@@ -62,12 +72,15 @@ export interface ISprintlyPostReleaseState {
     releaseBranchListSelection: ListSelection;
     repositoryListSelectedItemObservable: ObservableValue<Common.IGitRepositoryExtended>;
     releaseBranchListSelectedItemObservable: ObservableValue<Common.IReleaseBranchInfo>;
+    selectedRepositoryWebUrl?: string;
 }
 
 //#region "Observables"
 const tagsModalKeyObservable: ObservableValue<string> =
     new ObservableValue<string>('');
 const isTagsDialogOpenObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(false);
+const isPRCreatePanelOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const tagsRepoNameObservable: ObservableValue<string> =
     new ObservableValue<string>('');
@@ -377,10 +390,6 @@ export default class SprintlyPostRelease extends React.Component<
             }
         }
 
-        console.log("existing rels: ", this.state
-        .repositoryListSelectedItemObservable.value
-        .existingReleaseBranches);
-
         bindSelectionToObservable(
             this.state.releaseBranchListSelection,
             new ArrayItemProvider(
@@ -390,6 +399,10 @@ export default class SprintlyPostRelease extends React.Component<
                 .releaseBranchListSelectedItemObservable as ObservableValue<Common.IReleaseBranchInfo>
         );
 
+        this.setState({
+            selectedRepositoryWebUrl:
+                this.state.repositoryListSelectedItemObservable.value.webUrl,
+        });
         this.autoSelectIfSingleBranch();
     }
 
@@ -666,28 +679,44 @@ export default class SprintlyPostRelease extends React.Component<
                     ) : (
                         <Page>
                             <div className='page-content'>
-                                <Card>
-                                    <Page>
-                                        <Header
-                                            title='Develop Branch Actions'
-                                            titleSize={TitleSize.Large}
-                                        />
+                                <div>
+                                    <Card
+                                        className='bolt-table-card bolt-card-white'
+                                        titleProps={{
+                                            text: 'Develop Branch Actions',
+                                        }}
+                                    >
                                         <div className='page-content page-content-top'>
-                                            {this.renderDetailPageTopActionContent(observerProps.selectedItem)}
+                                            {this.renderDetailPageTopActionContent(
+                                                observerProps.selectedItem
+                                            )}
                                         </div>
-                                    </Page>
-                                </Card>
-                                <Card>
-                                    <Page>
-                                        <Header
-                                            title='Master/Main Branch Actions'
-                                            titleSize={TitleSize.Large}
-                                        />
+                                    </Card>
+                                </div>
+                                <div style={{ marginTop: '16px' }}>
+                                    <Card
+                                        className='bolt-table-card bolt-card-white'
+                                        titleProps={{
+                                            text: 'Master/Main Branch Actions',
+                                        }}
+                                    >
                                         <div className='page-content page-content-top'>
-                                            {this.renderDetailPageBottomActionContent(observerProps.selectedItem)}
+                                            {this.renderDetailPageBottomActionContent(
+                                                observerProps.selectedItem
+                                            )}
                                         </div>
-                                    </Page>
-                                </Card>
+                                    </Card>
+                                </div>
+                                <div className='page-content-top'>
+                                    <Button
+                                        text='Delete branch'
+                                        iconProps={{ iconName: 'Delete' }}
+                                        onClick={() =>
+                                            alert('Icon Button clicked!')
+                                        }
+                                        danger={true}
+                                    />
+                                </div>
                             </div>
                         </Page>
                     )
@@ -696,25 +725,93 @@ export default class SprintlyPostRelease extends React.Component<
         );
     }
 
-    private renderDetailPageTopActionContent(selectedBranch: Common.IReleaseBranchInfo): JSX.Element {
-        console.log('top: ', selectedBranch);
+    private renderPullRequestActionSection(
+        baseBranch: string,
+        aheadOfStatus?: boolean,
+        pullRequest?: GitPullRequest
+    ): JSX.Element {
+        let statusText = '';
+        let status: IStatusProps = { ...Statuses.Success };
+        let prLink: JSX.Element = <></>;
+        let actionButtons: JSX.Element = <></>;
+        if (aheadOfStatus && aheadOfStatus.valueOf()) {
+            if (pullRequest) {
+                statusText = `This branch is ahead of ${baseBranch} and an open PR exists.`;
+                status = { ...Statuses.Information };
+                prLink = (
+                    <Link
+                        excludeTabStop
+                        href={`${this.state.selectedRepositoryWebUrl}/pullrequest/${pullRequest.pullRequestId}`}
+                        subtle={false}
+                        target='_blank'
+                    >
+                        <Icon
+                            ariaLabel='Pull Request'
+                            iconName='BranchPullRequest'
+                            size={IconSize.small}
+                        />{' '}
+                        #{pullRequest.pullRequestId}
+                    </Link>
+                );
+                actionButtons = (
+                    <ButtonGroup>
+                        <Button
+                            iconProps={{ iconName: 'Accept' }}
+                            text='Complete PR'
+                            onClick={() => alert('Default button clicked!')}
+                        />
+                    </ButtonGroup>
+                );
+            } else {
+                statusText = `This branch is ahead of ${baseBranch} and no open PR exists.`;
+                status = { ...Statuses.Warning };
+                actionButtons = (
+                    <ButtonGroup>
+                        <Button
+                            iconProps={{ iconName: 'Add' }}
+                            text='Create New PR'
+                            primary={true}
+                            onClick={() =>
+                                (isPRCreatePanelOpenObservable.value = true)
+                            }
+                        />
+                    </ButtonGroup>
+                );
+            }
+        } else {
+            statusText = `This branch is not ahead of ${baseBranch}.`;
+            status = { ...Statuses.Success };
+        }
         return (
-            <div>
-                1This is content that may be collapsed. Drag the splitter up so
-                that the height of this content is less than the minimum
-                fixed-size height, and this content will be collapsed.
-            </div>
+            <>
+                <div className='flex-row'>
+                    <Status {...status} size={StatusSize.l} animated={false} />
+                </div>
+                <div className='flex-row page-content-top'>
+                    {statusText}&nbsp;{prLink}
+                </div>
+                <div className='flex-row page-content-top'>{actionButtons}</div>
+            </>
         );
     }
 
-    private renderDetailPageBottomActionContent(selectedBranch: Common.IReleaseBranchInfo): JSX.Element {
-        console.log('bottom: ', selectedBranch);
-        return (
-            <div>
-                2This is content that may be collapsed. Drag the splitter up so
-                that the height of this content is less than the minimum
-                fixed-size height, and this content will be collapsed.
-            </div>
+    private renderDetailPageTopActionContent(
+        selectedBranch: Common.IReleaseBranchInfo
+    ): JSX.Element {
+        return this.renderPullRequestActionSection(
+            'develop',
+            selectedBranch.aheadOfDevelop,
+            selectedBranch.developPR
+        );
+    }
+
+    private renderDetailPageBottomActionContent(
+        selectedBranch: Common.IReleaseBranchInfo
+    ): JSX.Element {
+        return this.renderPullRequestActionSection(
+            'master/main',
+            selectedBranch.aheadOfMasterMain,
+            selectedBranch.masterMainPR
         );
     }
 
@@ -821,6 +918,37 @@ export default class SprintlyPostRelease extends React.Component<
         );
     }
 
+    private renderPRCreatePanelActionButton(): JSX.Element {
+        return (
+            <Observer isPRCreatePanelOpen={isPRCreatePanelOpenObservable}>
+                {(observerProps: { isPRCreatePanelOpen: boolean }) => {
+                    return observerProps.isPRCreatePanelOpen ? (
+                        <Panel
+                            onDismiss={() =>
+                                (isPRCreatePanelOpenObservable.value = false)
+                            }
+                            titleProps={{ text: 'Sample Panel Title' }}
+                            description={
+                                'A description of the header. It can expand to multiple lines. Consumers should try to limit this to a maximum of three lines.'
+                            }
+                            footerButtonProps={[
+                                {
+                                    text: 'Cancel',
+                                    onClick: () =>
+                                        (isPRCreatePanelOpenObservable.value =
+                                            false),
+                                },
+                                { text: 'Create', primary: true },
+                            ]}
+                        >
+                            <div>Panel Content</div>
+                        </Panel>
+                    ) : null;
+                }}
+            </Observer>
+        );
+    }
+
     public render(): JSX.Element {
         return (
             <Observer
@@ -855,6 +983,7 @@ export default class SprintlyPostRelease extends React.Component<
                                     }
                                 />
                                 {this.renderTagsModalActionButton()}
+                                {this.renderPRCreatePanelActionButton()}
                             </div>
                         );
                     }
