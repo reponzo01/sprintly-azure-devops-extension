@@ -1,10 +1,12 @@
 import * as React from 'react';
+import axios, { AxiosResponse } from 'axios';
 import * as SDK from 'azure-devops-extension-sdk';
 import {
     getClient,
     IColor,
     IExtensionDataManager,
     IGlobalMessagesService,
+    MessageBannerLevel,
 } from 'azure-devops-extension-api';
 import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
@@ -18,6 +20,8 @@ import {
     GitRepository,
     GitRestClient,
     GitTargetVersionDescriptor,
+    PullRequestAsyncStatus,
+    PullRequestStatus,
 } from 'azure-devops-extension-api/Git';
 import { Release, ReleaseDefinition } from 'azure-devops-extension-api/Release';
 import { BuildDefinition } from 'azure-devops-extension-api/Build';
@@ -95,6 +99,7 @@ export interface ISprintlyPostReleaseState {
     releaseBranchSafeToDelete?: boolean;
     pullRequestSourceBranchName?: string;
     pullRequestTargetBranchName?: string;
+    pullRequestToComplete?: GitPullRequest;
 }
 
 //#region "Observables"
@@ -102,9 +107,11 @@ const tagsModalKeyObservable: ObservableValue<string> =
     new ObservableValue<string>('');
 const isTagsDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
-const isPRCreatePanelOpenObservable: ObservableValue<boolean> =
+const isCreatePullRequestPanelOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const isDeleteBranchDialogOpenObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(false);
+const isCompletePullRequestDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const tagsRepoNameObservable: ObservableValue<string> =
     new ObservableValue<string>('');
@@ -181,6 +188,8 @@ export default class SprintlyPostRelease extends React.Component<
             this.renderReleaseBranchDetailListItem.bind(this);
         this.renderDetailPageContent = this.renderDetailPageContent.bind(this);
         this.deleteBranchAction = this.deleteBranchAction.bind(this);
+        this.completePullRequestAction =
+            this.completePullRequestAction.bind(this);
 
         this.organizationName = props.organizationName;
         this.globalMessagesSvc = props.globalMessagesSvc;
@@ -573,13 +582,21 @@ export default class SprintlyPostRelease extends React.Component<
                     Ahead of {aheadOfText}{' '}
                     {pullRequest && (
                         <i>
+                            {pullRequest.mergeStatus ===
+                                PullRequestAsyncStatus.Conflicts && (
+                                <Icon
+                                    ariaLabel='Merge Conflicts'
+                                    iconName='Warning'
+                                    size={IconSize.small}
+                                    style={{ color: 'orange' }}
+                                />
+                            )}{' '}
                             <Icon
                                 ariaLabel='Pull Request'
                                 iconName='BranchPullRequest'
                                 size={IconSize.small}
                             />{' '}
                             #{pullRequest.pullRequestId}
-                            {/* TODO: Check for merge conflicts and add icon. Use pullRequest.status */}
                         </i>
                     )}
                 </div>
@@ -728,8 +745,8 @@ export default class SprintlyPostRelease extends React.Component<
                 }
             >
                 {(observerProps: { selectedItem: Common.IReleaseBranchInfo }) =>
-                    this.state.releaseBranchListSelection.selectedCount ===
-                    0 ? (
+                    this.state.releaseBranchListSelection.selectedCount === 0 ||
+                    !observerProps.selectedItem ? (
                         <></>
                     ) : (
                         <Page>
@@ -803,8 +820,27 @@ export default class SprintlyPostRelease extends React.Component<
         let actionButtons: JSX.Element = <></>;
         if (aheadOfStatus && aheadOfStatus.valueOf()) {
             if (pullRequest) {
+                const mergeConflict: boolean =
+                    pullRequest.mergeStatus ===
+                    PullRequestAsyncStatus.Conflicts;
+                const mergeFailed: boolean =
+                    pullRequest.mergeStatus === PullRequestAsyncStatus.Failure;
+                const mergeQueued: boolean =
+                    pullRequest.mergeStatus === PullRequestAsyncStatus.Queued;
+
                 statusText = `This branch is ahead of ${baseBranch} and an open PR exists.`;
-                status = { ...Statuses.Information };
+                statusText = mergeConflict
+                    ? `${statusText} There are merge conflicts.`
+                    : statusText;
+                statusText = mergeFailed
+                    ? `${statusText} There are merge failures.`
+                    : statusText;
+                status =
+                    mergeConflict || mergeFailed
+                        ? { ...Statuses.Failed }
+                        : mergeQueued
+                        ? { ...Statuses.Queued }
+                        : { ...Statuses.Information };
                 prLink = (
                     <Link
                         excludeTabStop
@@ -822,11 +858,30 @@ export default class SprintlyPostRelease extends React.Component<
                 );
                 actionButtons = (
                     <ButtonGroup>
-                        <Button
-                            iconProps={{ iconName: 'Accept' }}
-                            text='Complete PR'
-                            onClick={() => alert('Default button clicked!')}
-                        />
+                        {mergeConflict || mergeFailed || mergeQueued ? (
+                            <Button
+                                iconProps={{ iconName: 'BranchPullRequest' }}
+                                text='Review PR'
+                                onClick={() =>
+                                    window.open(
+                                        `${this.state.selectedRepositoryWebUrl}/pullrequest/${pullRequest.pullRequestId}`,
+                                        '_blank'
+                                    )
+                                }
+                            />
+                        ) : (
+                            <Button
+                                iconProps={{ iconName: 'Accept' }}
+                                text='Complete PR'
+                                onClick={() => {
+                                    this.setState({
+                                        pullRequestToComplete: pullRequest,
+                                    });
+                                    isCompletePullRequestDialogOpenObservable.value =
+                                        true;
+                                }}
+                            />
+                        )}
                     </ButtonGroup>
                 );
             } else {
@@ -848,7 +903,8 @@ export default class SprintlyPostRelease extends React.Component<
                                         sourceBranchName,
                                 });
 
-                                isPRCreatePanelOpenObservable.value = true;
+                                isCreatePullRequestPanelOpenObservable.value =
+                                    true;
                             }}
                         />
                     </ButtonGroup>
@@ -861,7 +917,7 @@ export default class SprintlyPostRelease extends React.Component<
         return (
             <>
                 <div className='flex-row'>
-                    <Status {...status} size={StatusSize.l} animated={false} />
+                    <Status {...status} size={StatusSize.l} />
                 </div>
                 <div className='flex-row page-content-top'>
                     {statusText}&nbsp;{prLink}
@@ -998,13 +1054,15 @@ export default class SprintlyPostRelease extends React.Component<
 
     private renderPRCreatePanelActionButton(): JSX.Element {
         return (
-            <Observer isPRCreatePanelOpen={isPRCreatePanelOpenObservable}>
+            <Observer
+                isPRCreatePanelOpen={isCreatePullRequestPanelOpenObservable}
+            >
                 {(observerProps: { isPRCreatePanelOpen: boolean }) => {
                     return observerProps.isPRCreatePanelOpen ? (
                         <Panel
-                            contentClassName='flex-column'
                             onDismiss={() =>
-                                (isPRCreatePanelOpenObservable.value = false)
+                                (isCreatePullRequestPanelOpenObservable.value =
+                                    false)
                             }
                             titleProps={{ text: 'Create New Pull Request' }}
                             description={`Create a PR from ${Common.getBranchShortName(
@@ -1016,14 +1074,14 @@ export default class SprintlyPostRelease extends React.Component<
                                 {
                                     text: 'Cancel',
                                     onClick: () =>
-                                        (isPRCreatePanelOpenObservable.value =
+                                        (isCreatePullRequestPanelOpenObservable.value =
                                             false),
                                 },
                                 {
                                     text: 'Create',
                                     primary: true,
                                     onClick: () => {
-                                        isPRCreatePanelOpenObservable.value =
+                                        isCreatePullRequestPanelOpenObservable.value =
                                             false;
                                         this.createPullRequestAction();
                                     },
@@ -1132,6 +1190,54 @@ export default class SprintlyPostRelease extends React.Component<
         );
     }
 
+    private renderCompletePullRequestConfirmAction(): JSX.Element {
+        return (
+            <Observer
+                isCompletePullRequestDialogOpen={
+                    isCompletePullRequestDialogOpenObservable
+                }
+            >
+                {(props: { isCompletePullRequestDialogOpen: boolean }) => {
+                    return props.isCompletePullRequestDialogOpen ? (
+                        <Dialog
+                            titleProps={{
+                                text: 'Complete Pull Request',
+                            }}
+                            footerButtonProps={[
+                                {
+                                    text: 'Cancel',
+                                    onClick:
+                                        this
+                                            .onDismissCompletePullRequestActionModal,
+                                },
+                                {
+                                    text: 'Complete',
+                                    onClick: this.completePullRequestAction,
+                                    danger: true,
+                                },
+                            ]}
+                            onDismiss={
+                                this.onDismissCompletePullRequestActionModal
+                            }
+                        >
+                            <>
+                                <Icon
+                                    style={{ color: 'orange' }}
+                                    ariaLabel='Warning'
+                                    iconName='Warning'
+                                    size={IconSize.large}
+                                />{' '}
+                                Note: If you have permissions to override branch
+                                policies, this action will complete this pull
+                                request overriding any branch policies.
+                            </>
+                        </Dialog>
+                    ) : null;
+                }}
+            </Observer>
+        );
+    }
+
     private onDismissDeleteBranchActionModal(): void {
         isDeleteBranchDialogOpenObservable.value = false;
     }
@@ -1210,7 +1316,7 @@ export default class SprintlyPostRelease extends React.Component<
                     message: 'PR creation failed!' + error,
                 });
             });
-        isPRCreatePanelOpenObservable.value = false;
+        isCreatePullRequestPanelOpenObservable.value = false;
     }
 
     private async reloadComponent(): Promise<void> {
@@ -1225,6 +1331,80 @@ export default class SprintlyPostRelease extends React.Component<
             repoSelectionIndex[0].beginIndex
         );
         await this.selectRepository();
+    }
+
+    private onDismissCompletePullRequestActionModal(): void {
+        isCompletePullRequestDialogOpenObservable.value = false;
+    }
+
+    private completePullRequestAction(): void {
+        if (!this.state.pullRequestToComplete) {
+            isCompletePullRequestDialogOpenObservable.value = false;
+            return;
+        }
+        const url: string = `https://dev.azure.com/${this.organizationName}/${this.state.pullRequestToComplete.repository.project.id}/_apis/git/repositories/${this.state.pullRequestToComplete.repository.id}/pullrequests/${this.state.pullRequestToComplete.pullRequestId}?api-version=5.0`;
+        const requestBody: any = {
+            completionOptions: {
+                autoCompleteIgnoreConfigIds: [],
+                bypassPolicy: true,
+                bypassReason: 'Post release cleanup',
+                deleteSourceBranch: false,
+                mergeCommitMessage: `Merge ${Common.getBranchShortName(
+                    this.state.pullRequestToComplete.sourceRefName
+                )} into ${Common.getBranchShortName(
+                    this.state.pullRequestToComplete.targetRefName
+                )}`,
+                mergeStrategy: 1,
+                transitionWorkItems: false,
+            },
+            lastMergeSourceCommit: {
+                commitId: `${this.state.pullRequestToComplete.lastMergeSourceCommit.commitId}`,
+                url: `${this.state.pullRequestToComplete.lastMergeSourceCommit.url}`,
+            },
+            status: PullRequestStatus.Completed,
+        };
+
+        Common.getOrRefreshToken(this.accessToken).then(async (token) => {
+            await axios
+                .patch(url, requestBody, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                })
+                .then(async (result: void | AxiosResponse<any>) => {
+                    this.globalMessagesSvc.addToast({
+                        duration: 5000,
+                        forceOverrideExisting: true,
+                        message: 'PR completion queued!',
+                    });
+                    await this.reloadComponent();
+                })
+                .catch((error: any) => {
+                    if (error.response.status == 403) {
+                        this.globalMessagesSvc.addBanner({
+                            dismissable: true,
+                            level: MessageBannerLevel.error,
+                            message:
+                                'Permission denied! The target branch may have policies that you do not have permissions to override.',
+                            buttons: [
+                                {
+                                    text: 'Check Permissions',
+                                    href: `https://dev.azure.com/${this.organizationName}/${this.state.pullRequestToComplete?.repository.project.id}/_settings/repositories?_a=permissions`,
+                                    target: '_blank',
+                                },
+                            ],
+                        });
+                    } else {
+                        this.globalMessagesSvc.addToast({
+                            duration: 5000,
+                            forceOverrideExisting: true,
+                            message: 'PR completion failed!' + error,
+                        });
+                    }
+                });
+        });
+
+        isCompletePullRequestDialogOpenObservable.value = false;
     }
 
     public render(): JSX.Element {
@@ -1263,6 +1443,7 @@ export default class SprintlyPostRelease extends React.Component<
                                 {this.renderTagsModalActionButton()}
                                 {this.renderPRCreatePanelActionButton()}
                                 {this.renderDeleteBranchConfirmAction()}
+                                {this.renderCompletePullRequestConfirmAction()}
                             </div>
                         );
                     }
