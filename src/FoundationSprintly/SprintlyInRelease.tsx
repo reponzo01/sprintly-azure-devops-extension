@@ -371,7 +371,7 @@ export default class SprintlyInRelease extends React.Component<
         );
     }
 
-    private renderDeployModalAction(): JSX.Element {
+    private renderDeployConfirmAction(): JSX.Element {
         return (
             <Observer isDeployDialogOpen={isDeployDialogOpenObservable}>
                 {(props: { isDeployDialogOpen: boolean }) => {
@@ -492,7 +492,7 @@ export default class SprintlyInRelease extends React.Component<
                                         />
                                     </Card>
                                 )}
-                                {this.renderDeployModalAction()}
+                                {this.renderDeployConfirmAction()}
                             </div>
                         );
                     }
