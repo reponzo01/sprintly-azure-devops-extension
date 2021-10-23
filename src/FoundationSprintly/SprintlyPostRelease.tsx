@@ -74,6 +74,12 @@ import * as Common from './SprintlyCommon';
 import { Panel } from 'azure-devops-ui/Panel';
 import { Dialog } from 'azure-devops-ui/Dialog';
 import { ISelectionRange } from 'azure-devops-ui/Utilities/Selection';
+import {
+    TextField,
+    TextFieldStyle,
+    TextFieldWidth,
+} from 'azure-devops-ui/TextField';
+import { FormItem } from 'azure-devops-ui/FormItem';
 
 // TODO: Instead of a state, consider just global observables
 export interface ISprintlyPostReleaseState {
@@ -83,8 +89,12 @@ export interface ISprintlyPostReleaseState {
     releaseBranchListSelection: ListSelection;
     repositoryListSelectedItemObservable: ObservableValue<Common.IGitRepositoryExtended>;
     releaseBranchListSelectedItemObservable: ObservableValue<Common.IReleaseBranchInfo>;
+    baseDevelopBranch: string;
+    baseMasterMainBranch: string;
     selectedRepositoryWebUrl?: string;
     releaseBranchSafeToDelete?: boolean;
+    pullRequestSourceBranchName?: string;
+    pullRequestTargetBranchName?: string;
 }
 
 //#region "Observables"
@@ -105,6 +115,10 @@ const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
 const allBranchesReleaseInfoObservable: ObservableArray<Common.IReleaseInfo> =
     new ObservableArray<Common.IReleaseInfo>();
+const pullRequestTitleObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
+const pullRequestDescriptionObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
 //#endregion "Observables"
 
 const repositoriesToProcessKey: string = 'repositories-to-process';
@@ -153,6 +167,8 @@ export default class SprintlyPostRelease extends React.Component<
             releaseBranchListSelectedItemObservable: new ObservableValue<any>(
                 {}
             ),
+            baseDevelopBranch: '',
+            baseMasterMainBranch: '',
         };
 
         this.renderRepositoryMasterPageList =
@@ -238,6 +254,15 @@ export default class SprintlyPostRelease extends React.Component<
                         repositoryBranchInfo.hasMainBranch);
 
                 if (processRepo === true) {
+                    this.setState({
+                        baseDevelopBranch: repositoryBranchInfo.hasDevelopBranch
+                            ? 'refs/heads/develop'
+                            : '',
+                        baseMasterMainBranch:
+                            repositoryBranchInfo.hasMasterBranch
+                                ? 'refs/heads/master'
+                                : 'refs/heads/main',
+                    });
                     const existingReleaseBranches: Common.IReleaseBranchInfo[] =
                         [];
                     for (const releaseBranch of repositoryBranchInfo.releaseBranches) {
@@ -554,6 +579,7 @@ export default class SprintlyPostRelease extends React.Component<
                                 size={IconSize.small}
                             />{' '}
                             #{pullRequest.pullRequestId}
+                            {/* TODO: Check for merge conflicts and add icon. Use pullRequest.status */}
                         </i>
                     )}
                 </div>
@@ -765,7 +791,9 @@ export default class SprintlyPostRelease extends React.Component<
     }
 
     private renderPullRequestActionSection(
+        // TODO: Extract the baseBranch ('develop', 'master/main') into enum
         baseBranch: string,
+        sourceBranchName: string,
         aheadOfStatus?: boolean,
         pullRequest?: GitPullRequest
     ): JSX.Element {
@@ -810,9 +838,18 @@ export default class SprintlyPostRelease extends React.Component<
                             iconProps={{ iconName: 'Add' }}
                             text='Create New PR'
                             primary={true}
-                            onClick={() =>
-                                (isPRCreatePanelOpenObservable.value = true)
-                            }
+                            onClick={() => {
+                                this.setState({
+                                    pullRequestTargetBranchName:
+                                        baseBranch === 'develop'
+                                            ? this.state.baseDevelopBranch
+                                            : this.state.baseMasterMainBranch,
+                                    pullRequestSourceBranchName:
+                                        sourceBranchName,
+                                });
+
+                                isPRCreatePanelOpenObservable.value = true;
+                            }}
                         />
                     </ButtonGroup>
                 );
@@ -839,8 +876,9 @@ export default class SprintlyPostRelease extends React.Component<
     ): JSX.Element {
         return this.renderPullRequestActionSection(
             'develop',
-            selectedBranch?.aheadOfDevelop,
-            selectedBranch?.developPR
+            selectedBranch.targetBranch.name,
+            selectedBranch.aheadOfDevelop,
+            selectedBranch.developPR
         );
     }
 
@@ -849,8 +887,9 @@ export default class SprintlyPostRelease extends React.Component<
     ): JSX.Element {
         return this.renderPullRequestActionSection(
             'master/main',
-            selectedBranch?.aheadOfMasterMain,
-            selectedBranch?.masterMainPR
+            selectedBranch.targetBranch.name,
+            selectedBranch.aheadOfMasterMain,
+            selectedBranch.masterMainPR
         );
     }
 
@@ -963,13 +1002,16 @@ export default class SprintlyPostRelease extends React.Component<
                 {(observerProps: { isPRCreatePanelOpen: boolean }) => {
                     return observerProps.isPRCreatePanelOpen ? (
                         <Panel
+                            contentClassName='flex-column'
                             onDismiss={() =>
                                 (isPRCreatePanelOpenObservable.value = false)
                             }
-                            titleProps={{ text: 'Sample Panel Title' }}
-                            description={
-                                'A description of the header. It can expand to multiple lines. Consumers should try to limit this to a maximum of three lines.'
-                            }
+                            titleProps={{ text: 'Create New Pull Request' }}
+                            description={`Create a PR from ${Common.getBranchShortName(
+                                this.state.pullRequestSourceBranchName ?? ''
+                            )} to ${Common.getBranchShortName(
+                                this.state.pullRequestTargetBranchName ?? ''
+                            )}`}
                             footerButtonProps={[
                                 {
                                     text: 'Cancel',
@@ -977,10 +1019,50 @@ export default class SprintlyPostRelease extends React.Component<
                                         (isPRCreatePanelOpenObservable.value =
                                             false),
                                 },
-                                { text: 'Create', primary: true },
+                                {
+                                    text: 'Create',
+                                    primary: true,
+                                    onClick: () => {
+                                        isPRCreatePanelOpenObservable.value =
+                                            false;
+                                        this.createPullRequestAction();
+                                    },
+                                },
                             ]}
                         >
-                            <div>Panel Content</div>
+                            <Page>
+                                <div>
+                                    <FormItem label='Title:'>
+                                        <TextField
+                                            value={pullRequestTitleObservable}
+                                            onChange={(e, newValue) =>
+                                                (pullRequestTitleObservable.value =
+                                                    newValue)
+                                            }
+                                            placeholder='Pull Request Title'
+                                            style={TextFieldStyle.inline}
+                                            width={TextFieldWidth.standard}
+                                        />
+                                    </FormItem>
+                                </div>
+                                <div className='page-content-top'>
+                                    <FormItem label='Description:'>
+                                        <TextField
+                                            value={
+                                                pullRequestDescriptionObservable
+                                            }
+                                            onChange={(e, newValue) =>
+                                                (pullRequestDescriptionObservable.value =
+                                                    newValue)
+                                            }
+                                            multiline={true}
+                                            placeholder='Pull Request Description'
+                                            style={TextFieldStyle.inline}
+                                            width={TextFieldWidth.standard}
+                                        />
+                                    </FormItem>
+                                </div>
+                            </Page>
                         </Panel>
                     ) : null;
                 }}
@@ -1069,6 +1151,7 @@ export default class SprintlyPostRelease extends React.Component<
             newObjectId: '0000000000000000000000000000000000000000',
         });
 
+        // TODO: Error handling delete permissions
         getClient(GitRestClient)
             .updateRefs(
                 createRefOptions,
@@ -1085,18 +1168,63 @@ export default class SprintlyPostRelease extends React.Component<
                               GitRefUpdateStatus[res.updateStatus],
                     });
                 }
-                this.state.releaseBranchListSelection.clear();
-                const repoSelectionIndex: ISelectionRange[] =
-                    this.state.repositoryListSelection.value;
-                this.state.repositoryListSelection.clear();
-
-                await this.initializeComponent();
-                this.setState(this.state);
-                this.forceUpdate();
-                this.state.repositoryListSelection.select(repoSelectionIndex[0].beginIndex)
-                await this.selectRepository();
+                await this.reloadComponent();
+            })
+            .catch((error: any) => {
+                this.globalMessagesSvc.addToast({
+                    duration: 5000,
+                    forceOverrideExisting: true,
+                    message: 'Branch deletion failed!' + error,
+                });
             });
         this.onDismissDeleteBranchActionModal();
+    }
+
+    private createPullRequestAction(): void {
+        const pullRequest: any = {
+            title: pullRequestTitleObservable.value,
+            description: pullRequestDescriptionObservable.value,
+            isDraft: false,
+            labels: [],
+            reviewers: [],
+            sourceRefName: this.state.pullRequestSourceBranchName,
+            targetRefName: this.state.pullRequestTargetBranchName,
+        };
+        getClient(GitRestClient)
+            .createPullRequest(
+                pullRequest as GitPullRequest,
+                this.state.repositoryListSelectedItemObservable.value.id
+            )
+            .then(async (result) => {
+                this.globalMessagesSvc.addToast({
+                    duration: 5000,
+                    forceOverrideExisting: true,
+                    message: 'PR creation started!',
+                });
+                await this.reloadComponent();
+            })
+            .catch((error: any) => {
+                this.globalMessagesSvc.addToast({
+                    duration: 5000,
+                    forceOverrideExisting: true,
+                    message: 'PR creation failed!' + error,
+                });
+            });
+        isPRCreatePanelOpenObservable.value = false;
+    }
+
+    private async reloadComponent(): Promise<void> {
+        this.state.releaseBranchListSelection.clear();
+        const repoSelectionIndex: ISelectionRange[] =
+            this.state.repositoryListSelection.value;
+        this.state.repositoryListSelection.clear();
+        await this.initializeComponent();
+        this.setState(this.state);
+        this.forceUpdate();
+        this.state.repositoryListSelection.select(
+            repoSelectionIndex[0].beginIndex
+        );
+        await this.selectRepository();
     }
 
     public render(): JSX.Element {
