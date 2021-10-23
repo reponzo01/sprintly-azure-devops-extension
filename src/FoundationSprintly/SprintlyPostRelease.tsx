@@ -1,13 +1,22 @@
 import * as React from 'react';
 import * as SDK from 'azure-devops-extension-sdk';
-import { IColor, IExtensionDataManager } from 'azure-devops-extension-api';
+import {
+    getClient,
+    IColor,
+    IExtensionDataManager,
+    IGlobalMessagesService,
+} from 'azure-devops-extension-api';
 import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
     GitBaseVersionDescriptor,
     GitCommitDiffs,
     GitPullRequest,
     GitRef,
+    GitRefUpdate,
+    GitRefUpdateResult,
+    GitRefUpdateStatus,
     GitRepository,
+    GitRestClient,
     GitTargetVersionDescriptor,
 } from 'azure-devops-extension-api/Git';
 import { Release, ReleaseDefinition } from 'azure-devops-extension-api/Release';
@@ -64,6 +73,7 @@ import { ButtonGroup } from 'azure-devops-ui/ButtonGroup';
 import * as Common from './SprintlyCommon';
 import { Panel } from 'azure-devops-ui/Panel';
 import { Dialog } from 'azure-devops-ui/Dialog';
+import { ISelectionRange } from 'azure-devops-ui/Utilities/Selection';
 
 // TODO: Instead of a state, consider just global observables
 export interface ISprintlyPostReleaseState {
@@ -105,10 +115,16 @@ let repositoriesToProcess: string[] = [];
 // The solution is to bind those functions to `this` in the constructor.
 // See SprintlyPostRelease as an example.
 export default class SprintlyPostRelease extends React.Component<
-    { organizationName: string; dataManager: IExtensionDataManager },
+    {
+        organizationName: string;
+        globalMessagesSvc: IGlobalMessagesService;
+        dataManager: IExtensionDataManager;
+    },
     ISprintlyPostReleaseState
 > {
+    _isMounted: boolean = false;
     private dataManager: IExtensionDataManager;
+    private globalMessagesSvc: IGlobalMessagesService;
     private accessToken: string = '';
     private organizationName: string;
 
@@ -117,6 +133,7 @@ export default class SprintlyPostRelease extends React.Component<
 
     constructor(props: {
         organizationName: string;
+        globalMessagesSvc: IGlobalMessagesService;
         dataManager: IExtensionDataManager;
     }) {
         super(props);
@@ -147,46 +164,54 @@ export default class SprintlyPostRelease extends React.Component<
         this.renderReleaseBranchDetailListItem =
             this.renderReleaseBranchDetailListItem.bind(this);
         this.renderDetailPageContent = this.renderDetailPageContent.bind(this);
+        this.deleteBranchAction = this.deleteBranchAction.bind(this);
 
         this.organizationName = props.organizationName;
+        this.globalMessagesSvc = props.globalMessagesSvc;
         this.dataManager = props.dataManager;
     }
 
     public async componentDidMount(): Promise<void> {
+        this._isMounted = true;
         await this.initializeComponent();
     }
 
-    private async initializeComponent(): Promise<void> {
-        this.accessToken = await SDK.getAccessToken();
+    public async componentWillUnmount() {
+        this._isMounted = false;
+    }
 
-        repositoriesToProcess = (
-            await Common.getSavedRepositoriesToProcess(
-                this.dataManager,
-                repositoriesToProcessKey
-            )
-        ).map((item: Common.IAllowedEntity) => item.originId);
-        totalRepositoriesToProcessObservable.value =
-            repositoriesToProcess.length;
-        if (repositoriesToProcess.length > 0) {
-            const filteredProjects: TeamProjectReference[] =
-                await Common.getFilteredProjects();
-            const pullRequests: GitPullRequest[] = await Common.getPullRequests(
-                filteredProjects
-            );
-            this.setState({
-                pullRequests: pullRequests,
-            });
-            this.releaseDefinitions = await Common.getReleaseDefinitions(
-                filteredProjects,
-                this.organizationName,
-                this.accessToken
-            );
-            this.buildDefinitions = await Common.getBuildDefinitions(
-                filteredProjects,
-                this.organizationName,
-                this.accessToken
-            );
-            await this.loadRepositoriesDisplayState(filteredProjects);
+    private async initializeComponent(): Promise<void> {
+        if (this._isMounted) {
+            this.accessToken = await SDK.getAccessToken();
+
+            repositoriesToProcess = (
+                await Common.getSavedRepositoriesToProcess(
+                    this.dataManager,
+                    repositoriesToProcessKey
+                )
+            ).map((item: Common.IAllowedEntity) => item.originId);
+            totalRepositoriesToProcessObservable.value =
+                repositoriesToProcess.length;
+            if (repositoriesToProcess.length > 0) {
+                const filteredProjects: TeamProjectReference[] =
+                    await Common.getFilteredProjects();
+                const pullRequests: GitPullRequest[] =
+                    await Common.getPullRequests(filteredProjects);
+                this.setState({
+                    pullRequests: pullRequests,
+                });
+                this.releaseDefinitions = await Common.getReleaseDefinitions(
+                    filteredProjects,
+                    this.organizationName,
+                    this.accessToken
+                );
+                this.buildDefinitions = await Common.getBuildDefinitions(
+                    filteredProjects,
+                    this.organizationName,
+                    this.accessToken
+                );
+                await this.loadRepositoriesDisplayState(filteredProjects);
+            }
         }
     }
 
@@ -720,10 +745,12 @@ export default class SprintlyPostRelease extends React.Component<
                                                 true;
                                             this.setState({
                                                 releaseBranchSafeToDelete:
-                                                    !observerProps.selectedItem
-                                                        .aheadOfDevelop &&
-                                                    !observerProps.selectedItem
-                                                        .aheadOfMasterMain,
+                                                    (!observerProps.selectedItem
+                                                        .aheadOfDevelop ||
+                                                        !observerProps.selectedItem.aheadOfDevelop.valueOf()) &&
+                                                    (!observerProps.selectedItem
+                                                        .aheadOfMasterMain ||
+                                                        !observerProps.selectedItem.aheadOfMasterMain.valueOf()),
                                             });
                                         }}
                                         danger={true}
@@ -812,8 +839,8 @@ export default class SprintlyPostRelease extends React.Component<
     ): JSX.Element {
         return this.renderPullRequestActionSection(
             'develop',
-            selectedBranch.aheadOfDevelop,
-            selectedBranch.developPR
+            selectedBranch?.aheadOfDevelop,
+            selectedBranch?.developPR
         );
     }
 
@@ -822,8 +849,8 @@ export default class SprintlyPostRelease extends React.Component<
     ): JSX.Element {
         return this.renderPullRequestActionSection(
             'master/main',
-            selectedBranch.aheadOfMasterMain,
-            selectedBranch.masterMainPR
+            selectedBranch?.aheadOfMasterMain,
+            selectedBranch?.masterMainPR
         );
     }
 
@@ -970,7 +997,7 @@ export default class SprintlyPostRelease extends React.Component<
                     return props.isDeleteBranchDialogOpen ? (
                         <Dialog
                             titleProps={{
-                                text: 'Are you sure?',
+                                text: 'Delete branch',
                             }}
                             footerButtonProps={[
                                 {
@@ -980,8 +1007,7 @@ export default class SprintlyPostRelease extends React.Component<
                                 },
                                 {
                                     text: 'Delete',
-                                    onClick:
-                                        this.onDismissDeleteBranchActionModal,
+                                    onClick: this.deleteBranchAction,
                                     danger: true,
                                 },
                             ]}
@@ -989,12 +1015,14 @@ export default class SprintlyPostRelease extends React.Component<
                         >
                             {this.state.releaseBranchSafeToDelete ? (
                                 <>
-                                    You are about to delete{' '}
+                                    Branch{' '}
                                     {Common.getBranchShortName(
                                         this.state
                                             .releaseBranchListSelectedItemObservable
                                             .value.targetBranch.name
                                     )}
+                                    will be permanently deleted. Are you sure
+                                    you want to proceed?
                                 </>
                             ) : (
                                 <>
@@ -1024,6 +1052,51 @@ export default class SprintlyPostRelease extends React.Component<
 
     private onDismissDeleteBranchActionModal(): void {
         isDeleteBranchDialogOpenObservable.value = false;
+    }
+
+    private deleteBranchAction(): void {
+        const createRefOptions: GitRefUpdate[] = [];
+
+        createRefOptions.push({
+            repositoryId:
+                this.state.repositoryListSelectedItemObservable.value.id,
+            name: this.state.releaseBranchListSelectedItemObservable.value
+                .targetBranch.name,
+            isLocked: false,
+            oldObjectId:
+                this.state.releaseBranchListSelectedItemObservable.value
+                    .targetBranch.objectId,
+            newObjectId: '0000000000000000000000000000000000000000',
+        });
+
+        getClient(GitRestClient)
+            .updateRefs(
+                createRefOptions,
+                this.state.repositoryListSelectedItemObservable.value.id
+            )
+            .then(async (result) => {
+                for (const res of result) {
+                    this.globalMessagesSvc.addToast({
+                        duration: 5000,
+                        forceOverrideExisting: true,
+                        message: res.success
+                            ? 'Branch Deleted!'
+                            : 'Error Deleting Branch: ' +
+                              GitRefUpdateStatus[res.updateStatus],
+                    });
+                }
+                this.state.releaseBranchListSelection.clear();
+                const repoSelectionIndex: ISelectionRange[] =
+                    this.state.repositoryListSelection.value;
+                this.state.repositoryListSelection.clear();
+
+                await this.initializeComponent();
+                this.setState(this.state);
+                this.forceUpdate();
+                this.state.repositoryListSelection.select(repoSelectionIndex[0].beginIndex)
+                await this.selectRepository();
+            });
+        this.onDismissDeleteBranchActionModal();
     }
 
     public render(): JSX.Element {

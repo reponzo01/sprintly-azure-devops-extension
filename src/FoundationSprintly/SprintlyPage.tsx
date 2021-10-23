@@ -81,14 +81,19 @@ let repositoriesToProcess: string[] = [];
 export default class SprintlyPage extends React.Component<
     {
         dataManager: IExtensionDataManager;
+        globalMessagesSvc: IGlobalMessagesService;
     },
     ISprintlyPageState
 > {
     private dataManager: IExtensionDataManager;
+    private globalMessagesSvc: IGlobalMessagesService;
 
     private columns: any = [];
 
-    constructor(props: { dataManager: IExtensionDataManager }) {
+    constructor(props: {
+        dataManager: IExtensionDataManager;
+        globalMessagesSvc: IGlobalMessagesService;
+    }) {
         super(props);
 
         this.onSize = this.onSize.bind(this);
@@ -127,6 +132,7 @@ export default class SprintlyPage extends React.Component<
 
         this.state = {};
         this.dataManager = props.dataManager;
+        this.globalMessagesSvc = props.globalMessagesSvc;
     }
 
     public async componentDidMount(): Promise<void> {
@@ -485,11 +491,7 @@ export default class SprintlyPage extends React.Component<
                                 ].value = '';
                                 createRef.forEach(
                                     async (ref: GitRefUpdateResult) => {
-                                        const globalMessagesSvc: IGlobalMessagesService =
-                                            await SDK.getService<IGlobalMessagesService>(
-                                                CommonServiceIds.GlobalMessagesService
-                                            );
-                                        globalMessagesSvc.addToast({
+                                        this.globalMessagesSvc.addToast({
                                             duration: 5000,
                                             forceOverrideExisting: true,
                                             message: ref.success

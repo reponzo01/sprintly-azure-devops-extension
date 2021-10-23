@@ -2,7 +2,11 @@ import * as React from 'react';
 import axios from 'axios';
 
 import * as SDK from 'azure-devops-extension-sdk';
-import { IExtensionDataManager } from 'azure-devops-extension-api';
+import {
+    CommonServiceIds,
+    IExtensionDataManager,
+    IGlobalMessagesService,
+} from 'azure-devops-extension-api';
 
 import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
@@ -53,6 +57,7 @@ export default class FoundationSprintly extends React.Component<
     IFoundationSprintlyState
 > {
     private dataManager!: IExtensionDataManager;
+    private globalMessagesSvc!: IGlobalMessagesService;
     private accessToken: string = '';
 
     private alwaysAllowedGroups: Common.IAllowedEntity[] = [
@@ -98,6 +103,9 @@ export default class FoundationSprintly extends React.Component<
         organizationNameObservable.value = SDK.getHost().name;
 
         this.accessToken = await SDK.getAccessToken();
+        this.globalMessagesSvc = await SDK.getService<IGlobalMessagesService>(
+            CommonServiceIds.GlobalMessagesService
+        );
         this.dataManager = await Common.initializeDataManager(this.accessToken);
 
         selectedTabIdObservable.value = getUserSelectedTab();
@@ -215,7 +223,12 @@ export default class FoundationSprintly extends React.Component<
         switch (selectedTabIdObservable.value) {
             case sprintlyPageTabKey:
             case '':
-                return <SprintlyPage dataManager={this.dataManager} />;
+                return (
+                    <SprintlyPage
+                        dataManager={this.dataManager}
+                        globalMessagesSvc={this.globalMessagesSvc}
+                    />
+                );
             case sprintlySettingsTabKey:
                 return (
                     <SprintlySettings
@@ -234,6 +247,7 @@ export default class FoundationSprintly extends React.Component<
                 return (
                     <SprintlyPostRelease
                         organizationName={organizationNameObservable.value}
+                        globalMessagesSvc={this.globalMessagesSvc}
                         dataManager={this.dataManager}
                     />
                 );
