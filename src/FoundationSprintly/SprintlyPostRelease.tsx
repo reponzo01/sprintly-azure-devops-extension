@@ -63,6 +63,7 @@ import { ButtonGroup } from 'azure-devops-ui/ButtonGroup';
 
 import * as Common from './SprintlyCommon';
 import { Panel } from 'azure-devops-ui/Panel';
+import { Dialog } from 'azure-devops-ui/Dialog';
 
 // TODO: Instead of a state, consider just global observables
 export interface ISprintlyPostReleaseState {
@@ -73,6 +74,7 @@ export interface ISprintlyPostReleaseState {
     repositoryListSelectedItemObservable: ObservableValue<Common.IGitRepositoryExtended>;
     releaseBranchListSelectedItemObservable: ObservableValue<Common.IReleaseBranchInfo>;
     selectedRepositoryWebUrl?: string;
+    releaseBranchSafeToDelete?: boolean;
 }
 
 //#region "Observables"
@@ -81,6 +83,8 @@ const tagsModalKeyObservable: ObservableValue<string> =
 const isTagsDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const isPRCreatePanelOpenObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(false);
+const isDeleteBranchDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const tagsRepoNameObservable: ObservableValue<string> =
     new ObservableValue<string>('');
@@ -711,9 +715,17 @@ export default class SprintlyPostRelease extends React.Component<
                                     <Button
                                         text='Delete branch'
                                         iconProps={{ iconName: 'Delete' }}
-                                        onClick={() =>
-                                            alert('Icon Button clicked!')
-                                        }
+                                        onClick={() => {
+                                            isDeleteBranchDialogOpenObservable.value =
+                                                true;
+                                            this.setState({
+                                                releaseBranchSafeToDelete:
+                                                    !observerProps.selectedItem
+                                                        .aheadOfDevelop &&
+                                                    !observerProps.selectedItem
+                                                        .aheadOfMasterMain,
+                                            });
+                                        }}
                                         danger={true}
                                     />
                                 </div>
@@ -949,6 +961,71 @@ export default class SprintlyPostRelease extends React.Component<
         );
     }
 
+    private renderDeleteBranchConfirmAction(): JSX.Element {
+        return (
+            <Observer
+                isDeleteBranchDialogOpen={isDeleteBranchDialogOpenObservable}
+            >
+                {(props: { isDeleteBranchDialogOpen: boolean }) => {
+                    return props.isDeleteBranchDialogOpen ? (
+                        <Dialog
+                            titleProps={{
+                                text: 'Are you sure?',
+                            }}
+                            footerButtonProps={[
+                                {
+                                    text: 'Cancel',
+                                    onClick:
+                                        this.onDismissDeleteBranchActionModal,
+                                },
+                                {
+                                    text: 'Delete',
+                                    onClick:
+                                        this.onDismissDeleteBranchActionModal,
+                                    danger: true,
+                                },
+                            ]}
+                            onDismiss={this.onDismissDeleteBranchActionModal}
+                        >
+                            {this.state.releaseBranchSafeToDelete ? (
+                                <>
+                                    You are about to delete{' '}
+                                    {Common.getBranchShortName(
+                                        this.state
+                                            .releaseBranchListSelectedItemObservable
+                                            .value.targetBranch.name
+                                    )}
+                                </>
+                            ) : (
+                                <>
+                                    <Icon
+                                        style={{ color: 'orange' }}
+                                        ariaLabel='Warning'
+                                        iconName='Warning'
+                                        size={IconSize.large}
+                                    />{' '}
+                                    Note:{' '}
+                                    {Common.getBranchShortName(
+                                        this.state
+                                            .releaseBranchListSelectedItemObservable
+                                            .value.targetBranch.name
+                                    )}{' '}
+                                    may need to still be back-merged into
+                                    develop or main/master. Are you sure you
+                                    want to delete it?
+                                </>
+                            )}
+                        </Dialog>
+                    ) : null;
+                }}
+            </Observer>
+        );
+    }
+
+    private onDismissDeleteBranchActionModal(): void {
+        isDeleteBranchDialogOpenObservable.value = false;
+    }
+
     public render(): JSX.Element {
         return (
             <Observer
@@ -984,6 +1061,7 @@ export default class SprintlyPostRelease extends React.Component<
                                 />
                                 {this.renderTagsModalActionButton()}
                                 {this.renderPRCreatePanelActionButton()}
+                                {this.renderDeleteBranchConfirmAction()}
                             </div>
                         );
                     }
