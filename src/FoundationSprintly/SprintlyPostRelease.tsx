@@ -10,8 +10,10 @@ import {
 } from 'azure-devops-extension-api';
 import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
+    GitAnnotatedTag,
     GitBaseVersionDescriptor,
     GitCommitDiffs,
+    GitObjectType,
     GitPullRequest,
     GitRef,
     GitRefUpdate,
@@ -75,7 +77,6 @@ import { Button } from 'azure-devops-ui/Button';
 import { ButtonGroup } from 'azure-devops-ui/ButtonGroup';
 
 import * as Common from './SprintlyCommon';
-import { Panel } from 'azure-devops-ui/Panel';
 import { Dialog } from 'azure-devops-ui/Dialog';
 import { ISelectionRange } from 'azure-devops-ui/Utilities/Selection';
 import {
@@ -93,13 +94,15 @@ export interface ISprintlyPostReleaseState {
     releaseBranchListSelection: ListSelection;
     repositoryListSelectedItemObservable: ObservableValue<Common.IGitRepositoryExtended>;
     releaseBranchListSelectedItemObservable: ObservableValue<Common.IReleaseBranchInfo>;
-    baseDevelopBranch: string;
-    baseMasterMainBranch: string;
+    baseDevelopBranch?: GitRef;
+    baseMasterMainBranch?: GitRef;
     selectedRepositoryWebUrl?: string;
     releaseBranchSafeToDelete?: boolean;
     pullRequestSourceBranchName?: string;
     pullRequestTargetBranchName?: string;
     pullRequestToComplete?: GitPullRequest;
+    createTagTitle?: string;
+    createTagDescription?: string;
 }
 
 //#region "Observables"
@@ -107,11 +110,13 @@ const tagsModalKeyObservable: ObservableValue<string> =
     new ObservableValue<string>('');
 const isTagsDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
-const isCreatePullRequestPanelOpenObservable: ObservableValue<boolean> =
+const isCreatePullRequestDialogOpenObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(false);
+const isCompletePullRequestDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const isDeleteBranchDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
-const isCompletePullRequestDialogOpenObservable: ObservableValue<boolean> =
+const isCreateTagDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const tagsRepoNameObservable: ObservableValue<string> =
     new ObservableValue<string>('');
@@ -122,9 +127,13 @@ const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
 const allBranchesReleaseInfoObservable: ObservableArray<Common.IReleaseInfo> =
     new ObservableArray<Common.IReleaseInfo>();
-const pullRequestTitleObservable: ObservableValue<string> =
+const createPullRequestTitleObservable: ObservableValue<string> =
     new ObservableValue<string>('');
-const pullRequestDescriptionObservable: ObservableValue<string> =
+const createPullRequestDescriptionObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
+const createTagTitleObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
+const createTagDescriptionObservable: ObservableValue<string> =
     new ObservableValue<string>('');
 //#endregion "Observables"
 
@@ -174,8 +183,6 @@ export default class SprintlyPostRelease extends React.Component<
             releaseBranchListSelectedItemObservable: new ObservableValue<any>(
                 {}
             ),
-            baseDevelopBranch: '',
-            baseMasterMainBranch: '',
         };
 
         this.renderRepositoryMasterPageList =
@@ -240,6 +247,20 @@ export default class SprintlyPostRelease extends React.Component<
         }
     }
 
+    private async reloadComponent(): Promise<void> {
+        this.state.releaseBranchListSelection.clear();
+        const repoSelectionIndex: ISelectionRange[] =
+            this.state.repositoryListSelection.value;
+        this.state.repositoryListSelection.clear();
+        await this.initializeComponent();
+        this.setState(this.state);
+        this.forceUpdate();
+        this.state.repositoryListSelection.select(
+            repoSelectionIndex[0].beginIndex
+        );
+        await this.selectRepository();
+    }
+
     private async loadRepositoriesDisplayState(
         projects: TeamProjectReference[]
     ): Promise<void> {
@@ -263,14 +284,25 @@ export default class SprintlyPostRelease extends React.Component<
                         repositoryBranchInfo.hasMainBranch);
 
                 if (processRepo === true) {
+                    const baseDevelopBranch: GitRef | undefined =
+                        repositoryBranchInfo.hasDevelopBranch
+                            ? repositoryBranchInfo.allBranchesAndTags.find(
+                                  (branch) =>
+                                      branch.name === 'refs/heads/develop'
+                              )
+                            : undefined;
+                    const baseMasterMainBranch: GitRef | undefined =
+                        repositoryBranchInfo.hasMasterBranch
+                            ? repositoryBranchInfo.allBranchesAndTags.find(
+                                  (branch) =>
+                                      branch.name === 'refs/heads/master'
+                              )
+                            : repositoryBranchInfo.allBranchesAndTags.find(
+                                  (branch) => branch.name === 'refs/heads/main'
+                              );
                     this.setState({
-                        baseDevelopBranch: repositoryBranchInfo.hasDevelopBranch
-                            ? 'refs/heads/develop'
-                            : '',
-                        baseMasterMainBranch:
-                            repositoryBranchInfo.hasMasterBranch
-                                ? 'refs/heads/master'
-                                : 'refs/heads/main',
+                        baseDevelopBranch: baseDevelopBranch,
+                        baseMasterMainBranch: baseMasterMainBranch,
                     });
                     const existingReleaseBranches: Common.IReleaseBranchInfo[] =
                         [];
@@ -780,24 +812,37 @@ export default class SprintlyPostRelease extends React.Component<
                                     </Card>
                                 </div>
                                 <div className='page-content-top'>
-                                    <Button
-                                        text='Delete branch'
-                                        iconProps={{ iconName: 'Delete' }}
-                                        onClick={() => {
-                                            isDeleteBranchDialogOpenObservable.value =
-                                                true;
-                                            this.setState({
-                                                releaseBranchSafeToDelete:
-                                                    (!observerProps.selectedItem
-                                                        .aheadOfDevelop ||
-                                                        !observerProps.selectedItem.aheadOfDevelop.valueOf()) &&
-                                                    (!observerProps.selectedItem
-                                                        .aheadOfMasterMain ||
-                                                        !observerProps.selectedItem.aheadOfMasterMain.valueOf()),
-                                            });
-                                        }}
-                                        danger={true}
-                                    />
+                                    <ButtonGroup>
+                                        <Button
+                                            text='Create Tag'
+                                            iconProps={{ iconName: 'Tag' }}
+                                            onClick={() => {
+                                                isCreateTagDialogOpenObservable.value =
+                                                    true;
+                                            }}
+                                            primary={true}
+                                        />
+                                        <Button
+                                            text='Delete branch'
+                                            iconProps={{ iconName: 'Delete' }}
+                                            onClick={() => {
+                                                isDeleteBranchDialogOpenObservable.value =
+                                                    true;
+                                                this.setState({
+                                                    releaseBranchSafeToDelete:
+                                                        (!observerProps
+                                                            .selectedItem
+                                                            .aheadOfDevelop ||
+                                                            !observerProps.selectedItem.aheadOfDevelop.valueOf()) &&
+                                                        (!observerProps
+                                                            .selectedItem
+                                                            .aheadOfMasterMain ||
+                                                            !observerProps.selectedItem.aheadOfMasterMain.valueOf()),
+                                                });
+                                            }}
+                                            danger={true}
+                                        />
+                                    </ButtonGroup>
                                 </div>
                             </div>
                         </Page>
@@ -897,13 +942,14 @@ export default class SprintlyPostRelease extends React.Component<
                                 this.setState({
                                     pullRequestTargetBranchName:
                                         baseBranch === 'develop'
-                                            ? this.state.baseDevelopBranch
-                                            : this.state.baseMasterMainBranch,
+                                            ? this.state.baseDevelopBranch?.name
+                                            : this.state.baseMasterMainBranch
+                                                  ?.name,
                                     pullRequestSourceBranchName:
                                         sourceBranchName,
                                 });
 
-                                isCreatePullRequestPanelOpenObservable.value =
+                                isCreatePullRequestDialogOpenObservable.value =
                                     true;
                             }}
                         />
@@ -1024,7 +1070,7 @@ export default class SprintlyPostRelease extends React.Component<
         );
     }
 
-    private renderTagsModalActionButton(): JSX.Element {
+    private renderViewTagsModal(): JSX.Element {
         return (
             <Observer
                 isTagsDialogOpen={isTagsDialogOpenObservable}
@@ -1052,83 +1098,7 @@ export default class SprintlyPostRelease extends React.Component<
         );
     }
 
-    private renderPRCreatePanelActionButton(): JSX.Element {
-        return (
-            <Observer
-                isPRCreatePanelOpen={isCreatePullRequestPanelOpenObservable}
-            >
-                {(observerProps: { isPRCreatePanelOpen: boolean }) => {
-                    return observerProps.isPRCreatePanelOpen ? (
-                        <Panel
-                            onDismiss={() =>
-                                (isCreatePullRequestPanelOpenObservable.value =
-                                    false)
-                            }
-                            titleProps={{ text: 'Create New Pull Request' }}
-                            description={`Create a PR from ${Common.getBranchShortName(
-                                this.state.pullRequestSourceBranchName ?? ''
-                            )} to ${Common.getBranchShortName(
-                                this.state.pullRequestTargetBranchName ?? ''
-                            )}`}
-                            footerButtonProps={[
-                                {
-                                    text: 'Cancel',
-                                    onClick: () =>
-                                        (isCreatePullRequestPanelOpenObservable.value =
-                                            false),
-                                },
-                                {
-                                    text: 'Create',
-                                    primary: true,
-                                    onClick: () => {
-                                        isCreatePullRequestPanelOpenObservable.value =
-                                            false;
-                                        this.createPullRequestAction();
-                                    },
-                                },
-                            ]}
-                        >
-                            <Page>
-                                <div>
-                                    <FormItem label='Title:'>
-                                        <TextField
-                                            value={pullRequestTitleObservable}
-                                            onChange={(e, newValue) =>
-                                                (pullRequestTitleObservable.value =
-                                                    newValue)
-                                            }
-                                            placeholder='Pull Request Title'
-                                            style={TextFieldStyle.inline}
-                                            width={TextFieldWidth.standard}
-                                        />
-                                    </FormItem>
-                                </div>
-                                <div className='page-content-top'>
-                                    <FormItem label='Description:'>
-                                        <TextField
-                                            value={
-                                                pullRequestDescriptionObservable
-                                            }
-                                            onChange={(e, newValue) =>
-                                                (pullRequestDescriptionObservable.value =
-                                                    newValue)
-                                            }
-                                            multiline={true}
-                                            placeholder='Pull Request Description'
-                                            style={TextFieldStyle.inline}
-                                            width={TextFieldWidth.standard}
-                                        />
-                                    </FormItem>
-                                </div>
-                            </Page>
-                        </Panel>
-                    ) : null;
-                }}
-            </Observer>
-        );
-    }
-
-    private renderDeleteBranchConfirmAction(): JSX.Element {
+    private renderDeleteBranchActionModal(): JSX.Element {
         return (
             <Observer
                 isDeleteBranchDialogOpen={isDeleteBranchDialogOpenObservable}
@@ -1190,7 +1160,177 @@ export default class SprintlyPostRelease extends React.Component<
         );
     }
 
-    private renderCompletePullRequestConfirmAction(): JSX.Element {
+    private deleteBranchAction(): void {
+        const createRefOptions: GitRefUpdate[] = [];
+
+        createRefOptions.push({
+            repositoryId:
+                this.state.repositoryListSelectedItemObservable.value.id,
+            name: this.state.releaseBranchListSelectedItemObservable.value
+                .targetBranch.name,
+            isLocked: false,
+            oldObjectId:
+                this.state.releaseBranchListSelectedItemObservable.value
+                    .targetBranch.objectId,
+            newObjectId: '0000000000000000000000000000000000000000',
+        });
+
+        // TODO: Error handling delete permissions
+        getClient(GitRestClient)
+            .updateRefs(
+                createRefOptions,
+                this.state.repositoryListSelectedItemObservable.value.id
+            )
+            .then(async (result) => {
+                for (const res of result) {
+                    this.globalMessagesSvc.addToast({
+                        duration: 5000,
+                        forceOverrideExisting: true,
+                        message: res.success
+                            ? 'Branch Deleted!'
+                            : 'Error Deleting Branch: ' +
+                              GitRefUpdateStatus[res.updateStatus],
+                    });
+                }
+                await this.reloadComponent();
+            })
+            .catch((error: any) => {
+                this.globalMessagesSvc.addToast({
+                    duration: 5000,
+                    forceOverrideExisting: true,
+                    message: 'Branch deletion failed!' + error,
+                });
+            });
+        this.onDismissDeleteBranchActionModal();
+    }
+
+    private onDismissDeleteBranchActionModal(): void {
+        isDeleteBranchDialogOpenObservable.value = false;
+    }
+
+    private renderCreatePullRequestActionModal(): JSX.Element {
+        return (
+            <Observer
+                isCreatePullRequestDialogOpen={
+                    isCreatePullRequestDialogOpenObservable
+                }
+                pullRequestTitle={createPullRequestTitleObservable}
+                pullRequestDescription={createPullRequestDescriptionObservable}
+            >
+                {(observerProps: {
+                    isCreatePullRequestDialogOpen: boolean;
+                    pullRequestTitle: string;
+                    pullRequestDescription: string;
+                }) => {
+                    return observerProps.isCreatePullRequestDialogOpen ? (
+                        <Dialog
+                            onDismiss={() =>
+                                this.onDismissCreatePullRequestActionModal()
+                            }
+                            titleProps={{
+                                text: `Create a PR from ${Common.getBranchShortName(
+                                    this.state.pullRequestSourceBranchName ?? ''
+                                )} to ${Common.getBranchShortName(
+                                    this.state.pullRequestTargetBranchName ?? ''
+                                )}`,
+                                size: TitleSize.Medium,
+                                iconProps: { iconName: 'BranchPullRequest' },
+                            }}
+                            footerButtonProps={[
+                                {
+                                    text: 'Cancel',
+                                    onClick: () =>
+                                        this.onDismissCreatePullRequestActionModal(),
+                                },
+                                {
+                                    text: 'Create',
+                                    primary: true,
+                                    disabled:
+                                        createPullRequestTitleObservable.value.trim() ===
+                                            '' ||
+                                        createPullRequestDescriptionObservable.value.trim() ===
+                                            '',
+                                    onClick: () => {
+                                        this.onDismissCreatePullRequestActionModal();
+                                        this.createPullRequestAction();
+                                    },
+                                },
+                            ]}
+                        >
+                            <Page className='flex-column rhythm-vertical-16 flex-grow scroll-auto'>
+                                <FormItem label='Title *'>
+                                    <TextField
+                                        required={true}
+                                        value={createPullRequestTitleObservable}
+                                        onChange={(e, newValue) =>
+                                            (createPullRequestTitleObservable.value =
+                                                newValue)
+                                        }
+                                        style={TextFieldStyle.normal}
+                                    />
+                                </FormItem>
+                                <FormItem label='Description *'>
+                                    <TextField
+                                        required={true}
+                                        value={
+                                            createPullRequestDescriptionObservable
+                                        }
+                                        onChange={(e, newValue) =>
+                                            (createPullRequestDescriptionObservable.value =
+                                                newValue)
+                                        }
+                                        multiline={true}
+                                        style={TextFieldStyle.normal}
+                                    />
+                                </FormItem>
+                            </Page>
+                        </Dialog>
+                    ) : null;
+                }}
+            </Observer>
+        );
+    }
+
+    private createPullRequestAction(): void {
+        const pullRequest: any = {
+            title: createPullRequestTitleObservable.value,
+            description: createPullRequestDescriptionObservable.value,
+            isDraft: false,
+            labels: [],
+            reviewers: [],
+            sourceRefName: this.state.pullRequestSourceBranchName,
+            targetRefName: this.state.pullRequestTargetBranchName,
+        };
+        getClient(GitRestClient)
+            .createPullRequest(
+                pullRequest as GitPullRequest,
+                this.state.repositoryListSelectedItemObservable.value.id
+            )
+            .then(async (result) => {
+                this.globalMessagesSvc.addToast({
+                    duration: 5000,
+                    forceOverrideExisting: true,
+                    message: 'PR creation started!',
+                });
+                await this.reloadComponent();
+            })
+            .catch((error: any) => {
+                this.globalMessagesSvc.addToast({
+                    duration: 5000,
+                    forceOverrideExisting: true,
+                    message: 'PR creation failed!' + error,
+                });
+            });
+        isCreatePullRequestDialogOpenObservable.value = false;
+    }
+
+    private onDismissCreatePullRequestActionModal(): void {
+        createPullRequestTitleObservable.value = '';
+        createPullRequestDescriptionObservable.value = '';
+        isCreatePullRequestDialogOpenObservable.value = false;
+    }
+
+    private renderCompletePullRequestActionModal(): JSX.Element {
         return (
             <Observer
                 isCompletePullRequestDialogOpen={
@@ -1236,105 +1376,6 @@ export default class SprintlyPostRelease extends React.Component<
                 }}
             </Observer>
         );
-    }
-
-    private onDismissDeleteBranchActionModal(): void {
-        isDeleteBranchDialogOpenObservable.value = false;
-    }
-
-    private deleteBranchAction(): void {
-        const createRefOptions: GitRefUpdate[] = [];
-
-        createRefOptions.push({
-            repositoryId:
-                this.state.repositoryListSelectedItemObservable.value.id,
-            name: this.state.releaseBranchListSelectedItemObservable.value
-                .targetBranch.name,
-            isLocked: false,
-            oldObjectId:
-                this.state.releaseBranchListSelectedItemObservable.value
-                    .targetBranch.objectId,
-            newObjectId: '0000000000000000000000000000000000000000',
-        });
-
-        // TODO: Error handling delete permissions
-        getClient(GitRestClient)
-            .updateRefs(
-                createRefOptions,
-                this.state.repositoryListSelectedItemObservable.value.id
-            )
-            .then(async (result) => {
-                for (const res of result) {
-                    this.globalMessagesSvc.addToast({
-                        duration: 5000,
-                        forceOverrideExisting: true,
-                        message: res.success
-                            ? 'Branch Deleted!'
-                            : 'Error Deleting Branch: ' +
-                              GitRefUpdateStatus[res.updateStatus],
-                    });
-                }
-                await this.reloadComponent();
-            })
-            .catch((error: any) => {
-                this.globalMessagesSvc.addToast({
-                    duration: 5000,
-                    forceOverrideExisting: true,
-                    message: 'Branch deletion failed!' + error,
-                });
-            });
-        this.onDismissDeleteBranchActionModal();
-    }
-
-    private createPullRequestAction(): void {
-        const pullRequest: any = {
-            title: pullRequestTitleObservable.value,
-            description: pullRequestDescriptionObservable.value,
-            isDraft: false,
-            labels: [],
-            reviewers: [],
-            sourceRefName: this.state.pullRequestSourceBranchName,
-            targetRefName: this.state.pullRequestTargetBranchName,
-        };
-        getClient(GitRestClient)
-            .createPullRequest(
-                pullRequest as GitPullRequest,
-                this.state.repositoryListSelectedItemObservable.value.id
-            )
-            .then(async (result) => {
-                this.globalMessagesSvc.addToast({
-                    duration: 5000,
-                    forceOverrideExisting: true,
-                    message: 'PR creation started!',
-                });
-                await this.reloadComponent();
-            })
-            .catch((error: any) => {
-                this.globalMessagesSvc.addToast({
-                    duration: 5000,
-                    forceOverrideExisting: true,
-                    message: 'PR creation failed!' + error,
-                });
-            });
-        isCreatePullRequestPanelOpenObservable.value = false;
-    }
-
-    private async reloadComponent(): Promise<void> {
-        this.state.releaseBranchListSelection.clear();
-        const repoSelectionIndex: ISelectionRange[] =
-            this.state.repositoryListSelection.value;
-        this.state.repositoryListSelection.clear();
-        await this.initializeComponent();
-        this.setState(this.state);
-        this.forceUpdate();
-        this.state.repositoryListSelection.select(
-            repoSelectionIndex[0].beginIndex
-        );
-        await this.selectRepository();
-    }
-
-    private onDismissCompletePullRequestActionModal(): void {
-        isCompletePullRequestDialogOpenObservable.value = false;
     }
 
     private completePullRequestAction(): void {
@@ -1407,6 +1448,143 @@ export default class SprintlyPostRelease extends React.Component<
         isCompletePullRequestDialogOpenObservable.value = false;
     }
 
+    private onDismissCompletePullRequestActionModal(): void {
+        isCompletePullRequestDialogOpenObservable.value = false;
+    }
+
+    private renderCreateTagActionModal(): JSX.Element {
+        return (
+            <Observer
+                isCreateTagDialogOpen={isCreateTagDialogOpenObservable}
+                tagTitle={createTagTitleObservable}
+                tagDescription={createTagDescriptionObservable}
+            >
+                {(observerProps: {
+                    isCreateTagDialogOpen: boolean;
+                    tagTitle: string;
+                    tagDescription: string;
+                }) => {
+                    return observerProps.isCreateTagDialogOpen ? (
+                        <Dialog
+                            onDismiss={() =>
+                                this.onDismissCreateTagActionModal()
+                            }
+                            titleProps={{
+                                text: `Create a Tag from ${Common.getBranchShortName(
+                                    this.state.baseMasterMainBranch?.name ?? ''
+                                )}`,
+                                size: TitleSize.Medium,
+                                iconProps: { iconName: 'Tag' },
+                            }}
+                            footerButtonProps={[
+                                {
+                                    text: 'Cancel',
+                                    onClick: () =>
+                                        this.onDismissCreateTagActionModal(),
+                                },
+                                {
+                                    text: 'Create',
+                                    primary: true,
+                                    disabled:
+                                        createTagTitleObservable.value.trim() ===
+                                            '' ||
+                                        createTagDescriptionObservable.value.trim() ===
+                                            '',
+                                    onClick: () => {
+                                        this.onDismissCreateTagActionModal();
+                                        this.createTagAction();
+                                    },
+                                },
+                            ]}
+                        >
+                            <Page className='flex-column rhythm-vertical-16 flex-grow scroll-auto'>
+                                <FormItem label='Title *'>
+                                    <TextField
+                                        required={true}
+                                        value={createTagTitleObservable}
+                                        onChange={(e, newValue) => {
+                                            createTagTitleObservable.value =
+                                                newValue;
+                                            this.setState({
+                                                createTagTitle:
+                                                    createTagTitleObservable.value,
+                                            });
+                                        }}
+                                        style={TextFieldStyle.normal}
+                                    />
+                                </FormItem>
+                                <FormItem label='Description *'>
+                                    <TextField
+                                        required={true}
+                                        value={createTagDescriptionObservable}
+                                        onChange={(e, newValue) => {
+                                            createTagDescriptionObservable.value =
+                                                newValue;
+                                            this.setState({
+                                                createTagDescription:
+                                                    createTagDescriptionObservable.value,
+                                            });
+                                        }}
+                                        multiline={true}
+                                        style={TextFieldStyle.normal}
+                                    />
+                                </FormItem>
+                            </Page>
+                        </Dialog>
+                    ) : null;
+                }}
+            </Observer>
+        );
+    }
+
+    private createTagAction(): void {
+        if (this.state.baseMasterMainBranch) {
+            const tag: any = {
+                taggedObject: {
+                    objectId: this.state.baseMasterMainBranch.objectId,
+                    objectType: GitObjectType.Commit,
+                },
+                objectId: this.state.baseMasterMainBranch.objectId,
+                name: this.state.createTagTitle,
+                message: this.state.createTagDescription,
+            };
+            getClient(GitRestClient)
+                .createAnnotatedTag(
+                    tag as GitAnnotatedTag,
+                    this.state.repositoryListSelectedItemObservable.value
+                        .project.id,
+                    this.state.repositoryListSelectedItemObservable.value.id
+                )
+                .then(async (result) => {
+                    this.globalMessagesSvc.addToast({
+                        duration: 5000,
+                        forceOverrideExisting: true,
+                        message: 'Tag creation started!',
+                    });
+                    await this.reloadComponent();
+                })
+                .catch((error: any) => {
+                    this.globalMessagesSvc.addToast({
+                        duration: 5000,
+                        forceOverrideExisting: true,
+                        message: 'Tag creation failed!' + error,
+                    });
+                });
+        }
+
+        isCreatePullRequestDialogOpenObservable.value = false;
+    }
+
+    private onDismissCreateTagActionModal(): void {
+        createTagTitleObservable.value = '';
+        createTagDescriptionObservable.value = '';
+        this.setState({
+            createTagTitle: createTagTitleObservable.value,
+            createTagDescription: createTagDescriptionObservable.value,
+        });
+        isCreateTagDialogOpenObservable.value = false;
+    }
+
     public render(): JSX.Element {
         return (
             <Observer
@@ -1440,10 +1618,11 @@ export default class SprintlyPostRelease extends React.Component<
                                         this.renderDetailPageContent
                                     }
                                 />
-                                {this.renderTagsModalActionButton()}
-                                {this.renderPRCreatePanelActionButton()}
-                                {this.renderDeleteBranchConfirmAction()}
-                                {this.renderCompletePullRequestConfirmAction()}
+                                {this.renderViewTagsModal()}
+                                {this.renderCreatePullRequestActionModal()}
+                                {this.renderDeleteBranchActionModal()}
+                                {this.renderCompletePullRequestActionModal()}
+                                {this.renderCreateTagActionModal()}
                             </div>
                         );
                     }
