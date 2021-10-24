@@ -218,6 +218,70 @@ export async function getRepositoryInfo(repoId: string): Promise<GitRef[]> {
     );
 }
 
+export async function isBranchAheadOfDevelop(
+    branchName: string,
+    repositoryId: string
+): Promise<boolean> {
+    const developBranchDescriptor: GitBaseVersionDescriptor = {
+        baseVersion: 'develop',
+        baseVersionOptions: 0,
+        baseVersionType: 0,
+        version: 'develop',
+        versionOptions: 0,
+        versionType: 0,
+    };
+    const releaseBranchDescriptor: GitTargetVersionDescriptor = {
+        targetVersion: branchName,
+        targetVersionOptions: 0,
+        targetVersionType: 0,
+        version: branchName,
+        versionOptions: 0,
+        versionType: 0,
+    };
+
+    const developCommitsDiff: GitCommitDiffs = await getCommitDiffs(
+        repositoryId,
+        developBranchDescriptor,
+        releaseBranchDescriptor
+    );
+
+    return codeChangesInCommitDiffs(developCommitsDiff);
+}
+
+export async function isBranchAheadOMasterMain(
+    repositoryBranchInfo: IRepositoryBranchInfo,
+    branchName: string,
+    repositoryId: string
+): Promise<boolean> {
+    const masterMainBranchDescriptor: GitBaseVersionDescriptor = {
+        baseVersion: repositoryBranchInfo.hasMasterBranch
+            ? 'master'
+            : 'main',
+        baseVersionOptions: 0,
+        baseVersionType: 0,
+        version: repositoryBranchInfo.hasMasterBranch ? 'master' : 'main',
+        versionOptions: 0,
+        versionType: 0,
+    };
+    const releaseBranchDescriptor: GitTargetVersionDescriptor = {
+        targetVersion: branchName,
+        targetVersionOptions: 0,
+        targetVersionType: 0,
+        version: branchName,
+        versionOptions: 0,
+        versionType: 0,
+    };
+
+    const masterMainCommitsDiff: GitCommitDiffs =
+        await getCommitDiffs(
+            repositoryId,
+            masterMainBranchDescriptor,
+            releaseBranchDescriptor
+        );
+
+    return codeChangesInCommitDiffs(masterMainCommitsDiff);
+}
+
 export async function getCommitDiffs(
     repoId: string,
     baseVersion: GitBaseVersionDescriptor,

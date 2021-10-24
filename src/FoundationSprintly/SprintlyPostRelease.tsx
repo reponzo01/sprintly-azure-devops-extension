@@ -313,12 +313,12 @@ export default class SprintlyPostRelease extends React.Component<
                         const branchInfo: Common.IReleaseBranchInfo = {
                             targetBranch: releaseBranch,
                             repositoryId: repo.id,
-                            aheadOfDevelop: await this.isBranchAheadOfDevelop(
+                            aheadOfDevelop: await Common.isBranchAheadOfDevelop(
                                 releaseBranchName,
                                 repo.id
                             ),
                             aheadOfMasterMain:
-                                await this.isBranchAheadOMasterMain(
+                                await Common.isBranchAheadOMasterMain(
                                     repositoryBranchInfo,
                                     releaseBranchName,
                                     repo.id
@@ -392,70 +392,6 @@ export default class SprintlyPostRelease extends React.Component<
                     .repositoryListSelectedItemObservable as ObservableValue<Common.IGitRepositoryExtended>
             );
         }
-    }
-
-    private async isBranchAheadOfDevelop(
-        branchName: string,
-        repositoryId: string
-    ): Promise<boolean> {
-        const developBranchDescriptor: GitBaseVersionDescriptor = {
-            baseVersion: 'develop',
-            baseVersionOptions: 0,
-            baseVersionType: 0,
-            version: 'develop',
-            versionOptions: 0,
-            versionType: 0,
-        };
-        const releaseBranchDescriptor: GitTargetVersionDescriptor = {
-            targetVersion: branchName,
-            targetVersionOptions: 0,
-            targetVersionType: 0,
-            version: branchName,
-            versionOptions: 0,
-            versionType: 0,
-        };
-
-        const developCommitsDiff: GitCommitDiffs = await Common.getCommitDiffs(
-            repositoryId,
-            developBranchDescriptor,
-            releaseBranchDescriptor
-        );
-
-        return Common.codeChangesInCommitDiffs(developCommitsDiff);
-    }
-
-    private async isBranchAheadOMasterMain(
-        repositoryBranchInfo: Common.IRepositoryBranchInfo,
-        branchName: string,
-        repositoryId: string
-    ): Promise<boolean> {
-        const masterMainBranchDescriptor: GitBaseVersionDescriptor = {
-            baseVersion: repositoryBranchInfo.hasMasterBranch
-                ? 'master'
-                : 'main',
-            baseVersionOptions: 0,
-            baseVersionType: 0,
-            version: repositoryBranchInfo.hasMasterBranch ? 'master' : 'main',
-            versionOptions: 0,
-            versionType: 0,
-        };
-        const releaseBranchDescriptor: GitTargetVersionDescriptor = {
-            targetVersion: branchName,
-            targetVersionOptions: 0,
-            targetVersionType: 0,
-            version: branchName,
-            versionOptions: 0,
-            versionType: 0,
-        };
-
-        const masterMainCommitsDiff: GitCommitDiffs =
-            await Common.getCommitDiffs(
-                repositoryId,
-                masterMainBranchDescriptor,
-                releaseBranchDescriptor
-            );
-
-        return Common.codeChangesInCommitDiffs(masterMainCommitsDiff);
     }
 
     private async selectRepository(): Promise<void> {
@@ -676,7 +612,7 @@ export default class SprintlyPostRelease extends React.Component<
                         iconProps: {
                             iconName: 'Tag',
                         },
-                        id: 'testSave',
+                        id: 'viewtags',
                         important: true,
                         text: 'View Tags',
                         onActivate: () => {

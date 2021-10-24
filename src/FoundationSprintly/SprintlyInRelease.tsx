@@ -54,12 +54,14 @@ import { Dialog } from 'azure-devops-ui/Dialog';
 
 export interface ISprintlyInReleaseState {
     releaseBranchDeployItemProvider: ITreeItemProvider<IReleaseBranchDeployTableItem>;
-    clickedDeployEnvironmentStatus?: EnvironmentStatus;
+    allBranchesReleaseInfo: Common.IReleaseInfo[];
     ready: boolean;
+    clickedDeployEnvironmentStatus?: EnvironmentStatus;
 }
 
 export interface IReleaseBranchDeployTableItem {
     name: string;
+    id: string;
     webUrl?: string;
     releaseInfo?: Common.IReleaseInfo;
     projectId?: string;
@@ -120,6 +122,7 @@ export default class SprintlyInRelease extends React.Component<
         this.renderBranchColumn = this.renderBranchColumn.bind(this);
         this.renderDeployStatusColumn =
             this.renderDeployStatusColumn.bind(this);
+        this.exportToCsvAction = this.exportToCsvAction.bind(this);
 
         this.releaseBranchDeployTreeColumns = [
             {
@@ -141,6 +144,7 @@ export default class SprintlyInRelease extends React.Component<
         this.state = {
             releaseBranchDeployItemProvider:
                 new TreeItemProvider<IReleaseBranchDeployTableItem>([]),
+            allBranchesReleaseInfo: [],
             ready: true,
         };
 
@@ -230,6 +234,7 @@ export default class SprintlyInRelease extends React.Component<
                         childItems: [],
                         data: {
                             name: repo.name,
+                            id: repo.id,
                             isRepositoryItem: true,
                         },
                         expanded: true,
@@ -248,11 +253,13 @@ export default class SprintlyInRelease extends React.Component<
                             this.accessToken
                         );
                     }
+
                     releaseBranchDeployTableItem.childItems!.push({
                         data: {
                             name: Common.getBranchShortName(
                                 releaseBranch.targetBranch.name
                             ),
+                            id: releaseBranch.targetBranch.objectId,
                             webUrl: repo.webUrl,
                             releaseInfo:
                                 allBranchesReleaseInfoObservable.value.find(
@@ -274,6 +281,7 @@ export default class SprintlyInRelease extends React.Component<
                 releaseBranchDeployItemProvider: new TreeItemProvider(
                     releaseBranchRootItems
                 ),
+                allBranchesReleaseInfo: allBranchesReleaseInfoObservable.value,
             });
 
             totalRepositoriesToProcessObservable.value = filteredRepos.length;
@@ -615,6 +623,60 @@ export default class SprintlyInRelease extends React.Component<
         ).value = width;
     }
 
+    private exportToCsvAction(): void {
+        let data = '';
+        const now: Date = new Date();
+        data += `Release Candidate builds as of ${now.toString()}\r\n`;
+        data += 'Repository,Version,Release Artifact\r\n';
+
+        let projectId: string = '';
+        let repoName: string = '';
+        let version: string = '';
+        let releaseArtifact: string = '';
+
+        for (const repo of repositoriesToProcess) {
+            for (const repoInfo of this.state.releaseBranchDeployItemProvider
+                .value) {
+                if (repoInfo.underlyingItem.data.id === repo) {
+                    repoName = repoInfo.underlyingItem.data.name;
+                    projectId = repoInfo.underlyingItem.data.projectId!;
+                }
+            }
+            const repoReleaseBranchesInfo: Common.IReleaseInfo[] = [];
+            for (const relInfo of this.state.allBranchesReleaseInfo) {
+                if (relInfo.repositoryId === repo) {
+                    repoReleaseBranchesInfo.push(relInfo);
+                }
+            }
+            if (repoReleaseBranchesInfo && repoReleaseBranchesInfo.length > 0) {
+                for (const releaseBranchInfo of repoReleaseBranchesInfo) {
+                    version = Common.getBranchShortName(
+                        releaseBranchInfo.releaseBranch.targetBranch.name
+                    );
+                    const mostRecentRelease: Release | undefined =
+                        Common.getMostRecentReleaseForBranch(
+                            releaseBranchInfo.releaseBranch,
+                            this.state.allBranchesReleaseInfo
+                        );
+                    if (mostRecentRelease) {
+                        releaseArtifact = `https://dev.azure.com/${this.organizationName}/${projectId}/_releaseProgress?_a=release-pipeline-progress&releaseId=${mostRecentRelease.id}`;
+                    }
+
+                    data += `${repoName},${version},${releaseArtifact}\r\n`;
+                }
+            }
+        }
+
+        var hiddenElement = document.createElement('a');
+        hiddenElement.setAttribute(
+            'href',
+            'data:text/csv;base64,' + window.btoa(data)
+        );
+        hiddenElement.target = '_blank';
+        hiddenElement.download = `Release_Candidates_as_of_${now.getMonth()}-${now.getDate()}-${now.getFullYear()}.csv`;
+        hiddenElement.click();
+    }
+
     public render(): JSX.Element {
         return this.state.ready ? (
             <Observer
@@ -648,7 +710,7 @@ export default class SprintlyInRelease extends React.Component<
                                                 id: 'export',
                                                 text: 'Export to CSV',
                                                 onActivate: () => {
-                                                    alert('Example text');
+                                                    this.exportToCsvAction();
                                                 },
                                                 iconProps: {
                                                     iconName: 'Download',

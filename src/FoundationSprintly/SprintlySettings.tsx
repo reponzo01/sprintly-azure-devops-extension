@@ -19,6 +19,10 @@ import { DropdownMultiSelection } from 'azure-devops-ui/Utilities/DropdownSelect
 import { ISelectionRange } from 'azure-devops-ui/Utilities/Selection';
 
 import * as Common from './SprintlyCommon';
+import { Card } from 'azure-devops-ui/Card';
+import { Page } from 'azure-devops-ui/Page';
+import { Header, TitleSize, CustomHeader } from 'azure-devops-ui/Header';
+import { HeaderCommandBar } from 'azure-devops-ui/HeaderCommandBar';
 
 const allowedUserGroupsKey: string = 'allowed-user-groups';
 const allowedUsersKey: string = 'allowed-users';
@@ -313,7 +317,7 @@ export default class SprintlySettings extends React.Component<
 
     private renderUserGroupsDropdown(): JSX.Element {
         return (
-            <div className='flex-column'>
+            <div className='page-content'>
                 <Observer selection={this.userGroupsSelection}>
                     {() => {
                         return (
@@ -351,7 +355,7 @@ export default class SprintlySettings extends React.Component<
 
     private renderUsersDropdown(): JSX.Element {
         return (
-            <div className='flex-column'>
+            <div className='page-content'>
                 <Observer selection={this.usersSelection}>
                     {() => {
                         return (
@@ -389,7 +393,7 @@ export default class SprintlySettings extends React.Component<
 
     private renderRepositoriesDropdown(): JSX.Element {
         return (
-            <div className='flex-column'>
+            <div className='page-content'>
                 <Observer selection={this.repositoriesToProcessSelection}>
                     {() => {
                         return (
@@ -439,38 +443,73 @@ export default class SprintlySettings extends React.Component<
 
     public render(): JSX.Element {
         return (
-            <div className='page-content page-content-top flex-column rhythm-vertical-16'>
-                <div>
-                    By default the Azure groups{' '}
-                    <u>
-                        <code>Dev Team Leads</code>
-                    </u>{' '}
-                    and{' '}
-                    <u>
-                        <code>DevOps</code>
-                    </u>{' '}
-                    have access to this extension. Use the dropdowns to add more{' '}
-                    groups or individual users. These two settings are global{' '}
-                    settings.
-                </div>
-                {this.renderUserGroupsDropdown()}
-                {this.renderUsersDropdown()}
-                <div>
-                    Select the repositories you want to process. This is a{' '}
-                    user-based setting. Everyone with access to this extension{' '}
-                    can select a different list.
-                </div>
-                {this.renderRepositoriesDropdown()}
+            <Page>
+                <Header commandBarItems={[
+                            {
+                                iconProps: {
+                                    iconName: 'Save',
+                                },
+                                id: 'savesettings',
+                                important: true,
+                                text: 'Save Settings',
+                                isPrimary: true,
+                                onActivate: this.onSaveData,
+                                disabled: !this.state.ready
+                            },
+                        ]}>
+                    </Header>
+                <div className='page-content page-content-top flex-column rhythm-vertical-16'>
+                    <Card className='bolt-card-white'>
+                        <Page className='sprintly-width-100'>
+                            <Header
+                                title='Permissions'
+                                titleSize={TitleSize.Medium}
+                                titleIconProps={{ iconName: 'People' }}
+                            />
+                            <div className='page-content page-content-top'>
+                                By default the Azure groups{' '}
+                                <u>
+                                    <code>Dev Team Leads</code>
+                                </u>{' '}
+                                and{' '}
+                                <u>
+                                    <code>DevOps</code>
+                                </u>{' '}
+                                have access to this extension. Use the dropdowns
+                                to add more groups or individual users. These
+                                two settings are global settings.
+                            </div>
+                            {this.renderUserGroupsDropdown()}
+                            {this.renderUsersDropdown()}
+                        </Page>
+                    </Card>
+                    <Card className='bolt-card-white'>
+                        <Page className='sprintly-width-100'>
+                            <Header
+                                title='My Repositories'
+                                titleSize={TitleSize.Medium}
+                                titleIconProps={{ iconName: 'Contact' }}
+                            />
+                            <div className='page-content page-content-top'>
+                                Select the repositories you want to process.
+                                This is a user-based setting. Everyone with
+                                access to this extension can select a different
+                                list.
+                            </div>
+                            {this.renderRepositoriesDropdown()}
+                        </Page>
+                    </Card>
 
-                <div className='bolt-button-group flex-row rhythm-horizontal-8'>
-                    <Button
-                        text='Save Settings'
-                        primary={true}
-                        onClick={this.onSaveData}
-                        disabled={!this.state.ready}
-                    />
+                    {/* <div className='bolt-button-group flex-row rhythm-horizontal-8'>
+                        <Button
+                            text='Save Settings'
+                            primary={true}
+                            onClick={this.onSaveData}
+                            disabled={!this.state.ready}
+                        />
+                    </div> */}
                 </div>
-            </div>
+            </Page>
         );
     }
 }
