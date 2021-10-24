@@ -444,20 +444,21 @@ export default class SprintlySettings extends React.Component<
     public render(): JSX.Element {
         return (
             <Page>
-                <Header commandBarItems={[
-                            {
-                                iconProps: {
-                                    iconName: 'Save',
-                                },
-                                id: 'savesettings',
-                                important: true,
-                                text: 'Save Settings',
-                                isPrimary: true,
-                                onActivate: this.onSaveData,
-                                disabled: !this.state.ready
+                <Header
+                    commandBarItems={[
+                        {
+                            iconProps: {
+                                iconName: 'Save',
                             },
-                        ]}>
-                    </Header>
+                            id: 'savesettings',
+                            important: true,
+                            text: 'Save Settings',
+                            isPrimary: true,
+                            onActivate: this.onSaveData,
+                            disabled: !this.state.ready,
+                        },
+                    ]}
+                ></Header>
                 <div className='page-content page-content-top flex-column rhythm-vertical-16'>
                     <Card className='bolt-card-white'>
                         <Page className='sprintly-width-100'>
@@ -499,15 +500,6 @@ export default class SprintlySettings extends React.Component<
                             {this.renderRepositoriesDropdown()}
                         </Page>
                     </Card>
-
-                    {/* <div className='bolt-button-group flex-row rhythm-horizontal-8'>
-                        <Button
-                            text='Save Settings'
-                            primary={true}
-                            onClick={this.onSaveData}
-                            disabled={!this.state.ready}
-                        />
-                    </div> */}
                 </div>
             </Page>
         );
