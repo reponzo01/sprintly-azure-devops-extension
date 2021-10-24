@@ -11,6 +11,7 @@ import { GitRepository } from 'azure-devops-extension-api/Git';
 import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
     EnvironmentStatus,
+    ProjectReference,
     Release,
     ReleaseDefinition,
     ReleaseEnvironment,
@@ -53,6 +54,7 @@ import { Dialog } from 'azure-devops-ui/Dialog';
 
 export interface ISprintlyInReleaseState {
     releaseBranchDeployItemProvider: ITreeItemProvider<IReleaseBranchDeployTableItem>;
+    clickedDeployEnvironmentStatus?: EnvironmentStatus;
     ready: boolean;
 }
 
@@ -60,6 +62,7 @@ export interface IReleaseBranchDeployTableItem {
     name: string;
     webUrl?: string;
     releaseInfo?: Common.IReleaseInfo;
+    projectId?: string;
     isRepositoryItem: boolean;
 }
 
@@ -70,18 +73,14 @@ const allBranchesReleaseInfoObservable: ObservableArray<Common.IReleaseInfo> =
     new ObservableArray<Common.IReleaseInfo>();
 const isDeployDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
-const clickedDeployEnvironmentNameObservable: ObservableValue<string> =
-    new ObservableValue<string>('');
-const clickedDeployEnvironmentIdObservable: ObservableValue<number> =
-    new ObservableValue<number>(0);
+const clickedDeployEnvironmentObservable: ObservableValue<ReleaseEnvironment> =
+    new ObservableValue<any>({});
 const clickedDeployBranchNameObservable: ObservableValue<string> =
     new ObservableValue<string>('');
 const clickedDeployReleaseIdObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
-const clickedDeployProjectIdObservable: ObservableValue<string> =
-    new ObservableValue<string>('');
-const clickedDeployProjectNameObservable: ObservableValue<string> =
-    new ObservableValue<string>('');
+const clickedDeployProjectReferenceObservable: ObservableValue<ProjectReference> =
+    new ObservableValue<any>({});
 
 const nameColumnWidthObservable: ObservableValue<number> =
     new ObservableValue<number>(-30);
@@ -118,6 +117,9 @@ export default class SprintlyInRelease extends React.Component<
 
         this.onSize = this.onSize.bind(this);
         this.deployAction = this.deployAction.bind(this);
+        this.renderBranchColumn = this.renderBranchColumn.bind(this);
+        this.renderDeployStatusColumn =
+            this.renderDeployStatusColumn.bind(this);
 
         this.releaseBranchDeployTreeColumns = [
             {
@@ -259,6 +261,7 @@ export default class SprintlyInRelease extends React.Component<
                                         ri.releaseBranch.targetBranch.name ===
                                             releaseBranch.targetBranch.name
                                 ),
+                            projectId: repo.project.id,
                             isRepositoryItem: false,
                         },
                     });
@@ -283,6 +286,27 @@ export default class SprintlyInRelease extends React.Component<
         treeColumn: ITreeColumn<IReleaseBranchDeployTableItem>,
         treeItem: ITreeItemEx<IReleaseBranchDeployTableItem>
     ): JSX.Element {
+        let releaseUrl: string = `https://dev.azure.com/${this.organizationName}/${treeItem.underlyingItem.data.projectId}/_releaseProgress?_a=release-pipeline-progress&releaseId=`;
+
+        if (!treeItem.underlyingItem.data.isRepositoryItem) {
+            if (treeItem.underlyingItem.data.releaseInfo) {
+                const mostRecentRelease: Release | undefined =
+                    Common.getMostRecentReleaseForBranch(
+                        {
+                            repositoryId:
+                                treeItem.underlyingItem.data.releaseInfo
+                                    .releaseBranch.repositoryId,
+                            targetBranch:
+                                treeItem.underlyingItem.data.releaseInfo
+                                    .releaseBranch.targetBranch,
+                        },
+                        allBranchesReleaseInfoObservable.value
+                    );
+                if (mostRecentRelease) {
+                    releaseUrl += mostRecentRelease.id;
+                }
+            }
+        }
         return (
             <SimpleTableCell
                 key={columnIndex}
@@ -323,12 +347,19 @@ export default class SprintlyInRelease extends React.Component<
                                     className='icon-margin'
                                 ></Icon>
                                 <u>
-                                    {Common.branchLinkJsxElement(
-                                        columnIndex.toString(),
-                                        treeItem.underlyingItem.data.webUrl ??
-                                            '#',
-                                        treeItem.underlyingItem.data.name,
-                                        'bolt-table-link bolt-table-inline-link'
+                                    {!treeItem.underlyingItem.data
+                                        .releaseInfo ? (
+                                        <span className='bolt-table-link bolt-table-inline-link'>
+                                            {treeItem.underlyingItem.data.name}
+                                        </span>
+                                    ) : (
+                                        Common.branchLinkJsxElement(
+                                            columnIndex.toString(),
+                                            releaseUrl,
+                                            treeItem.underlyingItem.data.name,
+                                            'bolt-table-link bolt-table-inline-link',
+                                            true
+                                        )
                                     )}
                                 </u>
                             </>
@@ -382,18 +413,25 @@ export default class SprintlyInRelease extends React.Component<
                                         Common.getSingleEnvironmentStatusPillJsxElement(
                                             environment,
                                             () => {
-                                                clickedDeployEnvironmentNameObservable.value =
-                                                    environment.name;
-                                                clickedDeployEnvironmentIdObservable.value =
-                                                    environment.id;
+                                                clickedDeployEnvironmentObservable.value =
+                                                    environment;
                                                 clickedDeployBranchNameObservable.value =
                                                     treeItem.underlyingItem.data.name;
                                                 clickedDeployReleaseIdObservable.value =
                                                     mostRecentRelease.id;
-                                                clickedDeployProjectIdObservable.value =
-                                                    mostRecentRelease.projectReference.id;
-                                                clickedDeployProjectNameObservable.value =
-                                                    mostRecentRelease.projectReference.name;
+                                                clickedDeployProjectReferenceObservable.value =
+                                                    {
+                                                        id: mostRecentRelease
+                                                            .projectReference
+                                                            .id,
+                                                        name: mostRecentRelease
+                                                            .projectReference
+                                                            .name,
+                                                    };
+                                                this.setState({
+                                                    clickedDeployEnvironmentStatus:
+                                                        environment.status,
+                                                });
                                                 isDeployDialogOpenObservable.value =
                                                     true;
                                             }
@@ -410,48 +448,133 @@ export default class SprintlyInRelease extends React.Component<
     }
 
     private renderDeployConfirmAction(): JSX.Element {
+        let envStatusEnumValue: string = '';
+
+        if (this.state.clickedDeployEnvironmentStatus) {
+            for (const idx in EnvironmentStatus) {
+                if (
+                    idx.toLowerCase() ===
+                    this.state.clickedDeployEnvironmentStatus
+                        .toString()
+                        .toLowerCase()
+                ) {
+                    envStatusEnumValue = EnvironmentStatus[idx];
+                }
+            }
+        }
+
         return (
             <Observer isDeployDialogOpen={isDeployDialogOpenObservable}>
                 {(props: { isDeployDialogOpen: boolean }) => {
                     return props.isDeployDialogOpen ? (
-                        <Dialog
-                            titleProps={{
-                                text: `Deploy to ${clickedDeployEnvironmentNameObservable.value}?`,
-                            }}
-                            footerButtonProps={[
-                                {
-                                    text: 'Cancel',
-                                    onClick: this.onDismissDeployActionModal,
-                                },
-                                {
-                                    text: 'Refresh Data',
-                                    iconProps: {
-                                        iconName: 'Refresh',
+                        parseInt(envStatusEnumValue) ===
+                            EnvironmentStatus.InProgress ||
+                        parseInt(envStatusEnumValue) ===
+                            EnvironmentStatus.Queued ? (
+                            <Dialog
+                                titleProps={{
+                                    text: `Release in progress!`,
+                                }}
+                                footerButtonProps={[
+                                    {
+                                        text: 'Close',
+                                        onClick:
+                                            this.onDismissDeployActionModal,
                                     },
-                                    onClick: async () => {
-                                        isDeployDialogOpenObservable.value =
-                                            false;
-                                        await this.reloadComponent(false);
+                                    {
+                                        text: 'Refresh Data',
+                                        iconProps: {
+                                            iconName: 'Refresh',
+                                        },
+                                        onClick: async () => {
+                                            isDeployDialogOpenObservable.value =
+                                                false;
+                                            await this.reloadComponent(false);
+                                        },
                                     },
-                                },
-                                {
-                                    text: 'Deploy',
-                                    onClick: this.deployAction,
-                                    primary: true,
-                                },
-                            ]}
-                            onDismiss={this.onDismissDeployActionModal}
-                        >
-                            You are about to deploy release #
-                            {clickedDeployReleaseIdObservable.value} for branch{' '}
-                            {clickedDeployBranchNameObservable.value} to{' '}
-                            {clickedDeployEnvironmentNameObservable.value}
-                            . Are you sure?
-                            <Icon ariaLabel='Warning' iconName='Warning' />{' '}
-                            Note: Please ensure you have refreshed the data on
-                            this page to avoid deploying a potentially obsolete
-                            release.
-                        </Dialog>
+                                    {
+                                        text: 'View Logs',
+                                        href: `https://dev.azure.com/${this.organizationName}/${clickedDeployProjectReferenceObservable.value.id}/_releaseProgress?_a=release-environment-logs&releaseId=${clickedDeployReleaseIdObservable.value}&environmentId=${clickedDeployEnvironmentObservable.value.id}`,
+                                        onClick: () =>
+                                            (isDeployDialogOpenObservable.value =
+                                                false),
+                                        target: '_blank',
+                                        primary: true,
+                                    },
+                                ]}
+                                onDismiss={this.onDismissDeployActionModal}
+                            >
+                                <Icon
+                                    ariaLabel='Warning'
+                                    iconName='Warning'
+                                    style={{ color: 'orange' }}
+                                />{' '}
+                                Note: A release is in progress but you can
+                                reload the data to get its latest status.
+                            </Dialog>
+                        ) : (
+                            <Dialog
+                                titleProps={{
+                                    text: `${
+                                        parseInt(envStatusEnumValue) ===
+                                        EnvironmentStatus.Succeeded
+                                            ? 'Redeploy'
+                                            : 'Deploy'
+                                    } to ${
+                                        clickedDeployEnvironmentObservable.value
+                                            .name
+                                    }?`,
+                                }}
+                                footerButtonProps={[
+                                    {
+                                        text: 'Cancel',
+                                        onClick:
+                                            this.onDismissDeployActionModal,
+                                    },
+                                    {
+                                        text: 'Refresh Data',
+                                        iconProps: {
+                                            iconName: 'Refresh',
+                                        },
+                                        onClick: async () => {
+                                            isDeployDialogOpenObservable.value =
+                                                false;
+                                            await this.reloadComponent(false);
+                                        },
+                                    },
+                                    {
+                                        text:
+                                            parseInt(envStatusEnumValue) ===
+                                            EnvironmentStatus.Succeeded
+                                                ? 'Redeploy'
+                                                : 'Deploy',
+                                        onClick: this.deployAction,
+                                        primary: true,
+                                    },
+                                ]}
+                                onDismiss={this.onDismissDeployActionModal}
+                            >
+                                You are about to{' '}
+                                {parseInt(envStatusEnumValue) ===
+                                EnvironmentStatus.Succeeded
+                                    ? 'redeploy'
+                                    : 'deploy'}{' '}
+                                release #
+                                {clickedDeployReleaseIdObservable.value} for
+                                branch {clickedDeployBranchNameObservable.value}{' '}
+                                to{' '}
+                                {clickedDeployEnvironmentObservable.value.name}
+                                . Are you sure?
+                                <Icon
+                                    ariaLabel='Warning'
+                                    iconName='Warning'
+                                    style={{ color: 'orange' }}
+                                />{' '}
+                                Note: Please ensure you have refreshed the data
+                                on this page to avoid deploying a potentially
+                                obsolete release.
+                            </Dialog>
+                        )
                     ) : null;
                 }}
             </Observer>
@@ -466,9 +589,9 @@ export default class SprintlyInRelease extends React.Component<
         getClient(ReleaseRestClient)
             .updateReleaseEnvironment(
                 environmentUpdateData,
-                clickedDeployProjectIdObservable.value,
+                clickedDeployProjectReferenceObservable.value.id,
                 clickedDeployReleaseIdObservable.value,
-                clickedDeployEnvironmentIdObservable.value
+                clickedDeployEnvironmentObservable.value.id
             )
             .then(async (result: ReleaseEnvironment) => {
                 this.globalMessagesSvc.addToast({
@@ -478,6 +601,7 @@ export default class SprintlyInRelease extends React.Component<
                 });
                 await this.reloadComponent(true);
             });
+        isDeployDialogOpenObservable.value = false;
     }
 
     private onDismissDeployActionModal(): void {

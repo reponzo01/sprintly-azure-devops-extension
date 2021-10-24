@@ -513,13 +513,14 @@ export function branchLinkJsxElement(
     key: string,
     webUrl: string,
     branchName: string,
-    className: string
+    className: string,
+    isReleaseLink: boolean = false
 ): JSX.Element {
     return (
         <Link
             key={key}
             excludeTabStop
-            href={webUrl + '?version=GB' + encodeURI(branchName)}
+            href={webUrl + (isReleaseLink ? '' : ('?version=GB' + encodeURI(branchName)))}
             target='_blank'
             className={className}
         >
@@ -565,38 +566,38 @@ export function getSingleEnvironmentStatusPillJsxElement(
     environment: ReleaseEnvironment,
     onClickAction?: () => void
 ): JSX.Element {
-    let envStatusEnumString: string = '';
+    let envStatusEnumValue: string = '';
     let statusIconName: string = 'Cancel';
     let divTextClassName: string = 'sprintly-text-white';
     for (const idx in EnvironmentStatus) {
         if (idx.toLowerCase() === environment.status.toString().toLowerCase()) {
-            envStatusEnumString = EnvironmentStatus[idx];
+            envStatusEnumValue = EnvironmentStatus[idx];
         }
     }
-    switch (parseInt(envStatusEnumString)) {
-        case parseInt(EnvironmentStatus.NotStarted.toString()):
+    switch (parseInt(envStatusEnumValue)) {
+        case EnvironmentStatus.NotStarted:
             statusIconName = 'CircleRing';
             divTextClassName = '';
             break;
-        case parseInt(EnvironmentStatus.InProgress.toString()):
+        case EnvironmentStatus.InProgress:
             statusIconName = 'UseRunningStatus';
             divTextClassName = '';
             break;
-        case parseInt(EnvironmentStatus.Queued.toString()):
+        case EnvironmentStatus.Queued:
             statusIconName = 'UseRunningStatus';
             divTextClassName = '';
             break;
-        case parseInt(EnvironmentStatus.Scheduled.toString()):
+        case EnvironmentStatus.Scheduled:
             statusIconName = 'UseRunningStatus';
             divTextClassName = '';
             break;
-        case parseInt(EnvironmentStatus.Succeeded.toString()):
+        case EnvironmentStatus.Succeeded:
             statusIconName = 'Accept';
             break;
     }
     return environmentStatusPillJsxElement(
         environment,
-        envStatusEnumString,
+        envStatusEnumValue,
         divTextClassName,
         statusIconName,
         onClickAction
