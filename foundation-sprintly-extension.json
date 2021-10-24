@@ -10,12 +10,10 @@
         "vso.identity",
         "vso.tokens",
         "vso.project",
-        "vso.release",
+        "vso.release_manage",
         "vso.build"
     ],
-    "categories": [
-        "Azure Repos"
-    ],
+    "categories": ["Azure Repos"],
     "branding": {
         "color": "rgb(34, 34, 34)",
         "theme": "dark"

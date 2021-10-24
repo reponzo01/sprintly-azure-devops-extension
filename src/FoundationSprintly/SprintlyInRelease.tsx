@@ -9,7 +9,14 @@ import {
 } from 'azure-devops-extension-api';
 import { GitRepository } from 'azure-devops-extension-api/Git';
 import { TeamProjectReference } from 'azure-devops-extension-api/Core';
-import { Release, ReleaseDefinition } from 'azure-devops-extension-api/Release';
+import {
+    EnvironmentStatus,
+    Release,
+    ReleaseDefinition,
+    ReleaseEnvironment,
+    ReleaseEnvironmentUpdateMetadata,
+    ReleaseRestClient,
+} from 'azure-devops-extension-api/Release';
 import { BuildDefinition } from 'azure-devops-extension-api/Build';
 
 import {
@@ -46,6 +53,7 @@ import { Dialog } from 'azure-devops-ui/Dialog';
 
 export interface ISprintlyInReleaseState {
     releaseBranchDeployItemProvider: ITreeItemProvider<IReleaseBranchDeployTableItem>;
+    ready: boolean;
 }
 
 export interface IReleaseBranchDeployTableItem {
@@ -62,12 +70,18 @@ const allBranchesReleaseInfoObservable: ObservableArray<Common.IReleaseInfo> =
     new ObservableArray<Common.IReleaseInfo>();
 const isDeployDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
-const clickedDeployEnvironmentObservable: ObservableValue<string> =
+const clickedDeployEnvironmentNameObservable: ObservableValue<string> =
     new ObservableValue<string>('');
+const clickedDeployEnvironmentIdObservable: ObservableValue<number> =
+    new ObservableValue<number>(0);
 const clickedDeployBranchNameObservable: ObservableValue<string> =
     new ObservableValue<string>('');
 const clickedDeployReleaseIdObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
+const clickedDeployProjectIdObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
+const clickedDeployProjectNameObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
 
 const nameColumnWidthObservable: ObservableValue<number> =
     new ObservableValue<number>(-30);
@@ -81,11 +95,13 @@ let repositoriesToProcess: string[] = [];
 export default class SprintlyInRelease extends React.Component<
     {
         organizationName: string;
+        globalMessagesSvc: IGlobalMessagesService;
         dataManager: IExtensionDataManager;
     },
     ISprintlyInReleaseState
 > {
     private dataManager: IExtensionDataManager;
+    private globalMessagesSvc: IGlobalMessagesService;
     private accessToken: string = '';
     private organizationName: string;
 
@@ -95,11 +111,13 @@ export default class SprintlyInRelease extends React.Component<
 
     constructor(props: {
         organizationName: string;
+        globalMessagesSvc: IGlobalMessagesService;
         dataManager: IExtensionDataManager;
     }) {
         super(props);
 
         this.onSize = this.onSize.bind(this);
+        this.deployAction = this.deployAction.bind(this);
 
         this.releaseBranchDeployTreeColumns = [
             {
@@ -121,9 +139,11 @@ export default class SprintlyInRelease extends React.Component<
         this.state = {
             releaseBranchDeployItemProvider:
                 new TreeItemProvider<IReleaseBranchDeployTableItem>([]),
+            ready: true,
         };
 
         this.organizationName = props.organizationName;
+        this.globalMessagesSvc = props.globalMessagesSvc;
         this.dataManager = props.dataManager;
     }
 
@@ -156,6 +176,18 @@ export default class SprintlyInRelease extends React.Component<
             );
             await this.loadRepositoriesDisplayState(filteredProjects);
         }
+    }
+
+    private async reloadComponent(silentRefresh: boolean): Promise<void> {
+        this.setState({
+            ready: silentRefresh,
+        });
+        await this.initializeComponent();
+        this.setState({
+            ready: true,
+        });
+        this.setState(this.state);
+        this.forceUpdate();
     }
 
     private async loadRepositoriesDisplayState(
@@ -350,12 +382,18 @@ export default class SprintlyInRelease extends React.Component<
                                         Common.getSingleEnvironmentStatusPillJsxElement(
                                             environment,
                                             () => {
-                                                clickedDeployEnvironmentObservable.value =
+                                                clickedDeployEnvironmentNameObservable.value =
                                                     environment.name;
+                                                clickedDeployEnvironmentIdObservable.value =
+                                                    environment.id;
                                                 clickedDeployBranchNameObservable.value =
                                                     treeItem.underlyingItem.data.name;
                                                 clickedDeployReleaseIdObservable.value =
                                                     mostRecentRelease.id;
+                                                clickedDeployProjectIdObservable.value =
+                                                    mostRecentRelease.projectReference.id;
+                                                clickedDeployProjectNameObservable.value =
+                                                    mostRecentRelease.projectReference.name;
                                                 isDeployDialogOpenObservable.value =
                                                     true;
                                             }
@@ -378,7 +416,7 @@ export default class SprintlyInRelease extends React.Component<
                     return props.isDeployDialogOpen ? (
                         <Dialog
                             titleProps={{
-                                text: `Deploy to ${clickedDeployEnvironmentObservable.value}?`,
+                                text: `Deploy to ${clickedDeployEnvironmentNameObservable.value}?`,
                             }}
                             footerButtonProps={[
                                 {
@@ -390,13 +428,15 @@ export default class SprintlyInRelease extends React.Component<
                                     iconProps: {
                                         iconName: 'Refresh',
                                     },
-                                    onClick: () => {
-                                        window.location.reload();
+                                    onClick: async () => {
+                                        isDeployDialogOpenObservable.value =
+                                            false;
+                                        await this.reloadComponent(false);
                                     },
                                 },
                                 {
                                     text: 'Deploy',
-                                    onClick: this.onDismissDeployActionModal,
+                                    onClick: this.deployAction,
                                     primary: true,
                                 },
                             ]}
@@ -405,7 +445,7 @@ export default class SprintlyInRelease extends React.Component<
                             You are about to deploy release #
                             {clickedDeployReleaseIdObservable.value} for branch{' '}
                             {clickedDeployBranchNameObservable.value} to{' '}
-                            {clickedDeployEnvironmentObservable.value}
+                            {clickedDeployEnvironmentNameObservable.value}
                             . Are you sure?
                             <Icon ariaLabel='Warning' iconName='Warning' />{' '}
                             Note: Please ensure you have refreshed the data on
@@ -416,6 +456,28 @@ export default class SprintlyInRelease extends React.Component<
                 }}
             </Observer>
         );
+    }
+
+    private deployAction(): void {
+        const environmentUpdateData: any = {
+            comment: '',
+            status: EnvironmentStatus.InProgress,
+        };
+        getClient(ReleaseRestClient)
+            .updateReleaseEnvironment(
+                environmentUpdateData,
+                clickedDeployProjectIdObservable.value,
+                clickedDeployReleaseIdObservable.value,
+                clickedDeployEnvironmentIdObservable.value
+            )
+            .then(async (result: ReleaseEnvironment) => {
+                this.globalMessagesSvc.addToast({
+                    duration: 5000,
+                    forceOverrideExisting: true,
+                    message: 'Deploy started!',
+                });
+                await this.reloadComponent(true);
+            });
     }
 
     private onDismissDeployActionModal(): void {
@@ -430,7 +492,7 @@ export default class SprintlyInRelease extends React.Component<
     }
 
     public render(): JSX.Element {
-        return (
+        return this.state.ready ? (
             <Observer
                 totalRepositoriesToProcess={
                     totalRepositoriesToProcessObservable
@@ -511,6 +573,10 @@ export default class SprintlyInRelease extends React.Component<
                     );
                 }}
             </Observer>
+        ) : (
+            <div className='page-content-top'>
+                <Spinner label='loading' />
+            </div>
         );
     }
 }

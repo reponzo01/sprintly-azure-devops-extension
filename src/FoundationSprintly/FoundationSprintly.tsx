@@ -240,6 +240,7 @@ export default class FoundationSprintly extends React.Component<
                 return (
                     <SprintlyInRelease
                         organizationName={organizationNameObservable.value}
+                        globalMessagesSvc={this.globalMessagesSvc}
                         dataManager={this.dataManager}
                     />
                 );
