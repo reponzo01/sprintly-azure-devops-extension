@@ -29,18 +29,12 @@ import {
     SplitterElementPosition,
 } from 'azure-devops-ui/Splitter';
 
-const allowedUserGroupsKey: string = 'allowed-user-groups';
-const allowedUsersKey: string = 'allowed-users';
-const repositoriesToProcessKey: string = 'repositories-to-process';
+const userSettingsDataManagerKey: string = 'user-settings';
+const systemSettingsDataManagerKey: string = 'system-settings';
 
 export interface ISprintlySettingsState {
-    dataAllowedUserGroups?: Common.IAllowedEntity[];
-    dataAllowedUsers?: Common.IAllowedEntity[];
-    dataRepositoriesToProcess?: Common.IAllowedEntity[];
-
-    persistedAllowedUserGroups?: Common.IAllowedEntity[];
-    persistedAllowedUsers?: Common.IAllowedEntity[];
-    persistedRepositoriesToProcess?: Common.IAllowedEntity[];
+    userSettings?: Common.IUserSettings;
+    systemSettings?: Common.ISystemSettings;
 
     ready?: boolean;
 }
@@ -52,6 +46,7 @@ export interface ISprintlySettingsState {
 export default class SprintlySettings extends React.Component<
     {
         organizationName: string;
+        globalMessagesSvc: IGlobalMessagesService;
         dataManager?: IExtensionDataManager;
     },
     ISprintlySettingsState
@@ -68,11 +63,13 @@ export default class SprintlySettings extends React.Component<
     private allRepositories: Common.IAllowedEntity[] = [];
 
     private dataManager: IExtensionDataManager;
+    private globalMessagesSvc: IGlobalMessagesService;
     private accessToken: string = '';
     private organizationName: string;
 
     constructor(props: {
         organizationName: string;
+        globalMessagesSvc: IGlobalMessagesService;
         dataManager: IExtensionDataManager;
     }) {
         super(props);
@@ -80,9 +77,10 @@ export default class SprintlySettings extends React.Component<
         this.state = {};
 
         this.renderUserSettings = this.renderUserSettings.bind(this);
-        this.renderGlobalSettings = this.renderGlobalSettings.bind(this);
+        this.renderSystemSettings = this.renderSystemSettings.bind(this);
 
         this.organizationName = props.organizationName;
+        this.globalMessagesSvc = props.globalMessagesSvc;
         this.dataManager = props.dataManager;
     }
 
@@ -97,7 +95,22 @@ export default class SprintlySettings extends React.Component<
         await this.loadUsers();
         await this.loadRepositories();
 
-        this.setState({ ready: true });
+        const userSettings: Common.IUserSettings | undefined =
+            await Common.getUserSettings(
+                this.dataManager,
+                userSettingsDataManagerKey
+            );
+        const systemSettings: Common.ISystemSettings | undefined =
+            await Common.getSystemSettings(
+                this.dataManager,
+                systemSettingsDataManagerKey
+            );
+
+        this.setState({
+            userSettings: userSettings,
+            systemSettings: systemSettings,
+            ready: true,
+        });
 
         this.loadAllowedUserGroupsUsers();
         this.loadAllowedUsers();
@@ -164,78 +177,50 @@ export default class SprintlySettings extends React.Component<
     }
 
     private loadAllowedUserGroupsUsers(): void {
-        this.dataManager!.getValue<Common.IAllowedEntity[]>(
-            allowedUserGroupsKey
-        ).then(
-            (userGroups: Common.IAllowedEntity[]) => {
-                this.userGroupsSelection.clear();
-                if (userGroups) {
-                    for (const selectedUserGroup of userGroups) {
-                        const idx: number = this.allUserGroups.findIndex(
-                            (item: Common.IAllowedEntity) =>
-                                item.originId === selectedUserGroup.originId
-                        );
-                        if (idx >= 0) {
-                            this.userGroupsSelection.select(idx);
-                        }
-                    }
-                    this.setState({
-                        dataAllowedUserGroups: userGroups,
-                        persistedAllowedUserGroups: userGroups,
-                        ready: true,
-                    });
+        const userGroups: Common.IAllowedEntity[] | undefined =
+            this.state.systemSettings?.allowedUserGroups;
+        this.userGroupsSelection.clear();
+        if (userGroups) {
+            for (const selectedUserGroup of userGroups) {
+                const idx: number = this.allUserGroups.findIndex(
+                    (item: Common.IAllowedEntity) =>
+                        item.originId === selectedUserGroup.originId
+                );
+                if (idx >= 0) {
+                    this.userGroupsSelection.select(idx);
                 }
-            },
-            () => {
-                this.setState({
-                    dataAllowedUserGroups: [],
-                    ready: true,
-                });
             }
-        );
+        }
+        this.setState({
+            ready: true,
+        });
     }
 
     private loadAllowedUsers(): void {
-        this.dataManager!.getValue<Common.IAllowedEntity[]>(
-            allowedUsersKey
-        ).then(
-            (users: Common.IAllowedEntity[]) => {
-                this.usersSelection.clear();
-                if (users) {
-                    for (const selectedUser of users) {
-                        const idx: number = this.allUsers.findIndex(
-                            (user: Common.IAllowedEntity) =>
-                                user.originId === selectedUser.originId
-                        );
-                        if (idx >= 0) {
-                            this.usersSelection.select(idx);
-                        }
-                    }
-                    this.setState({
-                        dataAllowedUsers: users,
-                        persistedAllowedUsers: users,
-                        ready: true,
-                    });
+        const users: Common.IAllowedEntity[] | undefined =
+            this.state.systemSettings?.allowedUsers;
+        this.usersSelection.clear();
+        if (users) {
+            for (const selectedUser of users) {
+                const idx: number = this.allUsers.findIndex(
+                    (user: Common.IAllowedEntity) =>
+                        user.originId === selectedUser.originId
+                );
+                if (idx >= 0) {
+                    this.usersSelection.select(idx);
                 }
-            },
-            () => {
-                this.setState({
-                    dataAllowedUsers: [],
-                    ready: true,
-                });
             }
-        );
+        }
+        this.setState({
+            ready: true,
+        });
     }
 
-    private async loadRepositoriesToProcess(): Promise<void> {
-        const repositories: Common.IAllowedEntity[] =
-            await Common.getSavedRepositoriesToProcess(
-                this.dataManager,
-                repositoriesToProcessKey
-            );
+    private loadRepositoriesToProcess(): void {
         this.repositoriesToProcessSelection.clear();
-        if (repositories) {
-            for (const selectedRepository of repositories) {
+        if (this.state.userSettings?.myRepositories) {
+            for (const selectedRepository of this.state.userSettings
+                .myRepositories) {
                 const idx: number = this.allRepositories.findIndex(
                     (repository: Common.IAllowedEntity) =>
                         repository.originId === selectedRepository.originId
@@ -244,70 +229,93 @@ export default class SprintlySettings extends React.Component<
                     this.repositoriesToProcessSelection.select(idx);
                 }
             }
-            this.setState({
-                dataRepositoriesToProcess: repositories,
-                persistedRepositoriesToProcess: repositories,
-                ready: true,
-            });
-        } else {
-            this.setState({
-                dataRepositoriesToProcess: [],
-                ready: true,
-            });
         }
+        this.setState({
+            ready: true,
+        });
     }
 
-    private onSaveData = (): void => {
+    private onSaveUserSettingsData = (): void => {
         this.setState({ ready: false });
 
-        const userGroupsSelectedArray: Common.IAllowedEntity[] =
-            this.setSelectionRange(
-                this.userGroupsSelection.value,
-                this.allUserGroups
-            );
-        const usersSelectedArray: Common.IAllowedEntity[] =
-            this.setSelectionRange(this.usersSelection.value, this.allUsers);
         const repositoriesSelectedArray: Common.IAllowedEntity[] =
-            this.setSelectionRange(
+            this.getSelectedRange(
                 this.repositoriesToProcessSelection.value,
                 this.allRepositories
             );
 
-        this.dataManager!.setValue<Common.IAllowedEntity[]>(
-            allowedUserGroupsKey,
-            userGroupsSelectedArray || []
+        let userSettings: Common.IUserSettings;
+
+        if (this.state.userSettings) {
+            userSettings = this.state.userSettings;
+            userSettings.myRepositories = repositoriesSelectedArray;
+        } else {
+            userSettings = {
+                myRepositories: repositoriesSelectedArray,
+                projectRepositoriesKey: '',
+            };
+        }
+
+        this.dataManager!.setValue<Common.IUserSettings>(
+            userSettingsDataManagerKey,
+            userSettings,
+            { scopeType: 'User' }
         ).then(() => {
-            this.dataManager!.setValue<Common.IAllowedEntity[]>(
-                allowedUsersKey,
-                usersSelectedArray || []
-            ).then(() => {
-                this.dataManager!.setValue<Common.IAllowedEntity[]>(
-                    repositoriesToProcessKey,
-                    repositoriesSelectedArray || [],
-                    { scopeType: 'User' }
-                ).then(async () => {
-                    this.setState({
-                        ready: true,
-                        persistedRepositoriesToProcess:
-                            repositoriesSelectedArray,
-                        persistedAllowedUsers: usersSelectedArray,
-                        persistedAllowedUserGroups: userGroupsSelectedArray,
-                    });
-                    const globalMessagesSvc: IGlobalMessagesService =
-                        await SDK.getService<IGlobalMessagesService>(
-                            CommonServiceIds.GlobalMessagesService
-                        );
-                    globalMessagesSvc.addToast({
-                        duration: 3000,
-                        forceOverrideExisting: true,
-                        message: 'Settings saved successfully!',
-                    });
-                });
+            this.setState({
+                userSettings: userSettings,
+                ready: true,
+            });
+            this.globalMessagesSvc.addToast({
+                duration: 3000,
+                forceOverrideExisting: true,
+                message: 'User Settings saved successfully!',
             });
         });
     };
 
-    private setSelectionRange(
+    private onSaveSystemSettingsData = (): void => {
+        this.setState({ ready: false });
+
+        const userGroupsSelectedArray: Common.IAllowedEntity[] =
+            this.getSelectedRange(
+                this.userGroupsSelection.value,
+                this.allUserGroups
+            );
+        const usersSelectedArray: Common.IAllowedEntity[] =
+            this.getSelectedRange(this.usersSelection.value, this.allUsers);
+
+        let systemSettings: Common.ISystemSettings;
+
+        if (this.state.systemSettings) {
+            systemSettings = this.state.systemSettings;
+            systemSettings.allowedUserGroups = userGroupsSelectedArray;
+            systemSettings.allowedUsers = usersSelectedArray;
+            systemSettings.projectRepositories = []; // TODO: blank for now but will save this once I create this setting
+        } else {
+            systemSettings = {
+                allowedUserGroups: userGroupsSelectedArray,
+                allowedUsers: usersSelectedArray,
+                projectRepositories: [], // TODO: blank for now but will save this once I create this setting
+            };
+        }
+
+        this.dataManager!.setValue<Common.ISystemSettings>(
+            systemSettingsDataManagerKey,
+            systemSettings
+        ).then(() => {
+            this.setState({
+                systemSettings: systemSettings,
+                ready: true,
+            });
+            this.globalMessagesSvc.addToast({
+                duration: 3000,
+                forceOverrideExisting: true,
+                message: 'System Settings saved successfully!',
+            });
+        });
+    };
+
+    private getSelectedRange(
         selectionRange: ISelectionRange[],
         dataArray: Common.IAllowedEntity[]
     ): Common.IAllowedEntity[] {
@@ -471,7 +479,7 @@ export default class SprintlySettings extends React.Component<
                             important: true,
                             text: 'Save User Settings',
                             isPrimary: true,
-                            onActivate: this.onSaveData,
+                            onActivate: this.onSaveUserSettingsData,
                             disabled: !this.state.ready,
                         },
                     ]}
@@ -497,11 +505,11 @@ export default class SprintlySettings extends React.Component<
         );
     }
 
-    private renderGlobalSettings(): JSX.Element {
+    private renderSystemSettings(): JSX.Element {
         return (
             <Page>
                 <Header
-                    title='Global Settings'
+                    title='System Settings'
                     titleSize={TitleSize.Medium}
                     titleIconProps={{
                         iconName: 'People',
@@ -514,11 +522,11 @@ export default class SprintlySettings extends React.Component<
                             iconProps: {
                                 iconName: 'Save',
                             },
-                            id: 'savesglobalettings',
+                            id: 'savessystemettings',
                             important: true,
-                            text: 'Save Global Settings',
+                            text: 'Save System Settings',
                             isPrimary: true,
-                            onActivate: this.onSaveData,
+                            onActivate: this.onSaveSystemSettingsData,
                             disabled: !this.state.ready,
                         },
                     ]}
@@ -540,8 +548,7 @@ export default class SprintlySettings extends React.Component<
                                     <code>DevOps</code>
                                 </u>{' '}
                                 have access to this extension. Use the dropdowns
-                                to add more groups or individual users. These
-                                two settings are global settings.
+                                to add more groups or individual users.
                             </div>
                             {this.renderUserGroupsDropdown()}
                             {this.renderUsersDropdown()}
@@ -562,7 +569,7 @@ export default class SprintlySettings extends React.Component<
                         nearElementClassName='v-scroll-auto custom-scrollbar'
                         farElementClassName='v-scroll-auto custom-scrollbar'
                         onRenderNearElement={this.renderUserSettings}
-                        onRenderFarElement={this.renderGlobalSettings}
+                        onRenderFarElement={this.renderSystemSettings}
                     />
                 </div>
             </Page>

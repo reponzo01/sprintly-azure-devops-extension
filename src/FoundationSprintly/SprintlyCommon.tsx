@@ -119,9 +119,27 @@ export interface IReleaseInfo {
 export interface IGitRepositoryExtended extends GitRepository {
     hasExistingRelease: boolean;
     hasMainBranch: boolean;
+    baseDevelopBranch?: GitRef;
+    baseMasterMainBranch?: GitRef;
     existingReleaseBranches: IReleaseBranchInfo[];
     createRelease: boolean;
     branchesAndTags: GitRef[];
+}
+
+export interface IProjectRepositories {
+    key: string;
+    repositories: IAllowedEntity[];
+}
+
+export interface IUserSettings {
+    myRepositories: IAllowedEntity[];
+    projectRepositoriesKey: string;
+}
+
+export interface ISystemSettings {
+    projectRepositories: IProjectRepositories[];
+    allowedUserGroups: IAllowedEntity[];
+    allowedUsers: IAllowedEntity[];
 }
 
 export async function getOrRefreshToken(token: string): Promise<string> {
@@ -158,20 +176,26 @@ export async function initializeDataManager(
     );
 }
 
-export async function getSavedRepositoriesToProcess(
+export async function getUserSettings(
     dataManager: IExtensionDataManager,
-    repositoriesToProcessKey: string
-): Promise<IAllowedEntity[]> {
-    let repositoriesToProcess: IAllowedEntity[] = [];
-    const savedRepositories: IAllowedEntity[] = await dataManager!.getValue<
-        IAllowedEntity[]
-    >(repositoriesToProcessKey, {
-        scopeType: 'User',
-    });
-    if (savedRepositories) {
-        repositoriesToProcess = repositoriesToProcess.concat(savedRepositories);
-    }
-    return repositoriesToProcess;
+    userSettingsDataManagerKey: string
+): Promise<IUserSettings | undefined> {
+    const userSettings: IUserSettings =
+        await dataManager!.getValue<IUserSettings>(userSettingsDataManagerKey, {
+            scopeType: 'User',
+        });
+    return userSettings;
+}
+
+export async function getSystemSettings(
+    dataManager: IExtensionDataManager,
+    systemSettingsDataManagerKey: string
+): Promise<ISystemSettings | undefined> {
+    const systemSettings: ISystemSettings =
+        await dataManager!.getValue<ISystemSettings>(
+            systemSettingsDataManagerKey
+        );
+    return systemSettings;
 }
 
 export async function getFilteredProjects(): Promise<TeamProjectReference[]> {
@@ -254,9 +278,7 @@ export async function isBranchAheadOMasterMain(
     repositoryId: string
 ): Promise<boolean> {
     const masterMainBranchDescriptor: GitBaseVersionDescriptor = {
-        baseVersion: repositoryBranchInfo.hasMasterBranch
-            ? 'master'
-            : 'main',
+        baseVersion: repositoryBranchInfo.hasMasterBranch ? 'master' : 'main',
         baseVersionOptions: 0,
         baseVersionType: 0,
         version: repositoryBranchInfo.hasMasterBranch ? 'master' : 'main',
@@ -272,12 +294,11 @@ export async function isBranchAheadOMasterMain(
         versionType: 0,
     };
 
-    const masterMainCommitsDiff: GitCommitDiffs =
-        await getCommitDiffs(
-            repositoryId,
-            masterMainBranchDescriptor,
-            releaseBranchDescriptor
-        );
+    const masterMainCommitsDiff: GitCommitDiffs = await getCommitDiffs(
+        repositoryId,
+        masterMainBranchDescriptor,
+        releaseBranchDescriptor
+    );
 
     return codeChangesInCommitDiffs(masterMainCommitsDiff);
 }
@@ -584,7 +605,10 @@ export function branchLinkJsxElement(
         <Link
             key={key}
             excludeTabStop
-            href={webUrl + (isReleaseLink ? '' : ('?version=GB' + encodeURI(branchName)))}
+            href={
+                webUrl +
+                (isReleaseLink ? '' : '?version=GB' + encodeURI(branchName))
+            }
             target='_blank'
             className={className}
         >

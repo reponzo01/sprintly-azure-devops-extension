@@ -88,6 +88,7 @@ import { FormItem } from 'azure-devops-ui/FormItem';
 
 // TODO: Instead of a state, consider just global observables
 export interface ISprintlyPostReleaseState {
+    userSettings?: Common.IUserSettings;
     repositories: ArrayItemProvider<Common.IGitRepositoryExtended>;
     pullRequests: GitPullRequest[];
     repositoryListSelection: ListSelection;
@@ -139,7 +140,7 @@ const createTagDescriptionObservable: ObservableValue<string> =
     new ObservableValue<string>('');
 //#endregion "Observables"
 
-const repositoriesToProcessKey: string = 'repositories-to-process';
+const userSettingsDataManagerKey: string = 'user-settings';
 let repositoriesToProcess: string[] = [];
 
 // TODO: Clean up arrow functions for the cases in which I thought I
@@ -218,12 +219,22 @@ export default class SprintlyPostRelease extends React.Component<
         if (this._isMounted) {
             this.accessToken = await SDK.getAccessToken();
 
-            repositoriesToProcess = (
-                await Common.getSavedRepositoriesToProcess(
+            const userSettings: Common.IUserSettings | undefined =
+                await Common.getUserSettings(
                     this.dataManager,
-                    repositoriesToProcessKey
-                )
-            ).map((item: Common.IAllowedEntity) => item.originId);
+                    userSettingsDataManagerKey
+                );
+
+            this.setState({
+                userSettings: userSettings,
+            });
+
+            repositoriesToProcess = !this.state.userSettings
+                ? []
+                : this.state.userSettings.myRepositories.map(
+                      (item: Common.IAllowedEntity) => item.originId
+                  );
+
             totalRepositoriesToProcessObservable.value =
                 repositoriesToProcess.length;
             if (repositoriesToProcess.length > 0) {
@@ -804,7 +815,6 @@ export default class SprintlyPostRelease extends React.Component<
         let actionButtons: JSX.Element = <></>;
         if (aheadOfStatus && aheadOfStatus.valueOf()) {
             if (pullRequest) {
-                console.log(pullRequest.mergeStatus);
                 const mergeConflict: boolean =
                     pullRequest.mergeStatus ===
                     PullRequestAsyncStatus.Conflicts;
@@ -1595,82 +1605,3 @@ export default class SprintlyPostRelease extends React.Component<
         );
     }
 }
-
-// The following code would go on the onclick of a merge button
-/*
-const createRefOptions: GitRefUpdate[] = [];
-const developBranch = await getClient(
-    GitRestClient
-).getBranch(tableItem.id, 'develop');
-
-// new test code
-const mainBranch = await getClient(
-    GitRestClient
-).getBranch(tableItem.id, 'main');
-
-console.log;
-
-//TODO: Try this page: https://docs.microsoft.com/en-us/rest/api/azure/devops/git/merges/create?view=azure-devops-rest-6.0 And try using regular axios instead of the api.
-
-const newMainObjectId = mainBranch.commit.commitId;
-const newDevObjectId =
-    developBranch.commit.commitId;
-console.log(mainBranch);
-const gitMergeParams: GitMergeParameters = {
-    comment: 'Merging dev to main hopefully',
-    parents: [newMainObjectId, newDevObjectId],
-};
-//POST https://dev.azure.com/{organization}/{project}/_apis/git/repositories/{repositoryNameOrId}/merges?api-version=6.0-preview.1
-
-const mergeRequest: GitMerge = await getClient(
-    GitRestClient
-).createMergeRequest(
-    gitMergeParams,
-    tableItem.project.id,
-    tableItem.id
-);
-console.log(mergeRequest);
-
-let mergeCommitId = '';
-const mergeCheckInterval = setInterval(async () => {
-    const mergeRequestStatus: GitMerge =
-        await getClient(
-            GitRestClient
-        ).getMergeRequest(
-            tableItem.project.id,
-            tableItem.id,
-            mergeRequest.mergeOperationId
-        );
-    console.log(mergeRequestStatus);
-    // TODO: check for other errors (detailedStatus has failure message)
-    if (
-        mergeRequestStatus.status ===
-        GitAsyncOperationStatus.Completed
-    ) {
-        clearInterval(mergeCheckInterval);
-        mergeCommitId =
-            mergeRequestStatus.detailedStatus
-                .mergeCommitId;
-
-        // TODO: This is ugly. this is inside a set interval
-        createRefOptions.push({
-            repositoryId: tableItem.id,
-            name: 'refs/heads/main',
-            isLocked: false,
-            newObjectId: mergeCommitId,
-            oldObjectId: newMainObjectId,
-        });
-        const createRef = await getClient(
-            GitRestClient
-        ).updateRefs(
-            createRefOptions,
-            tableItem.id
-        );
-    }
-}, 500);
-// This is async. Need a callback above.
-console.log(
-    'outside the interval, merge commit id: ',
-    mergeCommitId
-);
-*/

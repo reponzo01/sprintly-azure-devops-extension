@@ -44,6 +44,7 @@ import { TagsModal, ITagsModalContent, getTagsModalContent } from './TagsModal';
 import { Card } from 'azure-devops-ui/Card';
 
 export interface ISprintlyPageState {
+    userSettings?: Common.IUserSettings;
     repositories?: ArrayItemProvider<Common.IGitRepositoryExtended>;
 }
 
@@ -71,7 +72,8 @@ const createReleaseBranchColumnWidthObservable: ObservableValue<number> =
     new ObservableValue<number>(-40);
 //#endregion "Observables"
 
-const repositoriesToProcessKey: string = 'repositories-to-process';
+const userSettingsDataManagerKey: string = 'user-settings';
+
 let repositoriesToProcess: string[] = [];
 
 // TODO: Clean up arrow functions for the cases in which I thought I
@@ -140,12 +142,22 @@ export default class SprintlyPage extends React.Component<
     }
 
     private async initializeComponent(): Promise<void> {
-        repositoriesToProcess = (
-            await Common.getSavedRepositoriesToProcess(
+        const userSettings: Common.IUserSettings | undefined =
+            await Common.getUserSettings(
                 this.dataManager,
-                repositoriesToProcessKey
-            )
-        ).map((item: Common.IAllowedEntity) => item.originId);
+                userSettingsDataManagerKey
+            );
+
+        this.setState({
+            userSettings: userSettings,
+        });
+
+        repositoriesToProcess = !this.state.userSettings
+            ? []
+            : this.state.userSettings.myRepositories.map(
+                  (item: Common.IAllowedEntity) => item.originId
+              );
+
         totalRepositoriesToProcessObservable.value =
             repositoriesToProcess.length;
         if (repositoriesToProcess.length > 0) {

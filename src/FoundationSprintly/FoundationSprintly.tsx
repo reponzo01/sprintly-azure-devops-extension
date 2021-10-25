@@ -24,8 +24,8 @@ import * as Common from './SprintlyCommon';
 import { showRootComponent } from '../Common';
 
 const selectedTabKey: string = 'selected-tab';
-const allowedUserGroupsKey: string = 'allowed-user-groups';
-const allowedUsersKey: string = 'allowed-users';
+const userSettingsDataManagerKey: string = 'user-settings';
+const systemSettingsDataManagerKey: string = 'system-settings';
 const sprintlyPageTabKey: string = 'sprintly-page';
 const sprintlyPageTabName: string = 'Sprintly';
 const sprintlyInReleaseTabKey: string = 'sprintly-in-release';
@@ -45,6 +45,7 @@ const organizationNameObservable: ObservableValue<string> =
     new ObservableValue<string>('');
 
 export interface IFoundationSprintlyState {
+    systemSettings?: Common.ISystemSettings;
     allAllowedUsersDescriptors: string[];
 }
 
@@ -110,93 +111,83 @@ export default class FoundationSprintly extends React.Component<
 
         selectedTabIdObservable.value = getUserSelectedTab();
 
-        this.loadAllowedUserGroupsUsers();
-        this.loadAllowedUsers();
+        const systemSettings: Common.ISystemSettings | undefined =
+            await Common.getSystemSettings(
+                this.dataManager,
+                systemSettingsDataManagerKey
+            );
+
+        this.setState({
+            systemSettings: systemSettings
+        });
+
+        await this.loadAllowedUserGroupsUsers();
+        await this.loadAllowedUsers();
     }
 
-    private loadAllowedUserGroupsUsers(): void {
-        this.dataManager!.getValue<Common.IAllowedEntity[]>(
-            allowedUserGroupsKey
-        ).then(
-            async (userGroups: Common.IAllowedEntity[]) => {
-                if (!userGroups) {
-                    userGroups = this.alwaysAllowedGroups;
-                } else {
-                    userGroups = userGroups.concat(this.alwaysAllowedGroups);
-                }
-                if (userGroups) {
-                    for (const group of userGroups) {
-                        this.accessToken = await Common.getOrRefreshToken(
-                            this.accessToken
-                        );
-                        axios
-                            .get(
-                                `https://vsaex.dev.azure.com/${organizationNameObservable.value}/_apis/GroupEntitlements/${group.originId}/members`,
-                                {
-                                    headers: {
-                                        Authorization: `Bearer ${this.accessToken}`,
-                                    },
-                                }
-                            )
-                            .then((res: any) => {
-                                const allAllowedUsersDescriptors: string[] =
-                                    res.data['members'].map(
-                                        (item: any) =>
-                                            item['user']['descriptor']
-                                    );
-                                this.setState({
-                                    allAllowedUsersDescriptors:
-                                        allAllowedUsersDescriptors.concat(
-                                            this.state
-                                                .allAllowedUsersDescriptors
-                                        ),
-                                });
-                                userIsAllowedObservable.value =
-                                    this.state.allAllowedUsersDescriptors.includes(
-                                        loggedInUserDescriptorObservable.value
-                                    );
-                            })
-                            .catch((error: any) => {
-                                console.error(error);
-                            });
-                    }
-                }
-            },
-            () => {
-                this.setState({
-                    allAllowedUsersDescriptors: [],
-                });
+    private async loadAllowedUserGroupsUsers(): Promise<void> {
+            let userGroups: Common.IAllowedEntity[] | undefined = this.state.systemSettings?.allowedUserGroups;
+            if (!userGroups) {
+                userGroups = this.alwaysAllowedGroups;
+            } else {
+                userGroups = userGroups.concat(this.alwaysAllowedGroups);
             }
-        );
+            if (userGroups) {
+                for (const group of userGroups) {
+                    this.accessToken = await Common.getOrRefreshToken(
+                        this.accessToken
+                    );
+                    axios
+                        .get(
+                            `https://vsaex.dev.azure.com/${organizationNameObservable.value}/_apis/GroupEntitlements/${group.originId}/members`,
+                            {
+                                headers: {
+                                    Authorization: `Bearer ${this.accessToken}`,
+                                },
+                            }
+                        )
+                        .then((res: any) => {
+                            const allAllowedUsersDescriptors: string[] =
+                                res.data['members'].map(
+                                    (item: any) =>
+                                        item['user']['descriptor']
+                                );
+                            this.setState({
+                                allAllowedUsersDescriptors:
+                                    allAllowedUsersDescriptors.concat(
+                                        this.state
+                                            .allAllowedUsersDescriptors
+                                    ),
+                            });
+                            userIsAllowedObservable.value =
+                                this.state.allAllowedUsersDescriptors.includes(
+                                    loggedInUserDescriptorObservable.value
+                                );
+                        })
+                        .catch((error: any) => {
+                            console.error(error);
+                        });
+                }
+            }
     }
 
     private loadAllowedUsers(): void {
-        this.dataManager!.getValue<Common.IAllowedEntity[]>(
-            allowedUsersKey
-        ).then(
-            (users: Common.IAllowedEntity[]) => {
-                if (users) {
-                    const allAllowedUsersDescriptors: string[] = users.map(
-                        (user: Common.IAllowedEntity) => user.descriptor || ''
-                    );
-                    this.setState({
-                        allAllowedUsersDescriptors:
-                            allAllowedUsersDescriptors.concat(
-                                this.state.allAllowedUsersDescriptors
-                            ),
-                    });
-                    userIsAllowedObservable.value =
-                        this.state.allAllowedUsersDescriptors.includes(
-                            loggedInUserDescriptorObservable.value
-                        );
-                }
-            },
-            () => {
+            let users: Common.IAllowedEntity[] | undefined = this.state.systemSettings?.allowedUsers;
+            if (users) {
+                const allAllowedUsersDescriptors: string[] = users.map(
+                    (user: Common.IAllowedEntity) => user.descriptor || ''
+                );
                 this.setState({
-                    allAllowedUsersDescriptors: [],
+                    allAllowedUsersDescriptors:
+                        allAllowedUsersDescriptors.concat(
+                            this.state.allAllowedUsersDescriptors
+                        ),
                 });
+                userIsAllowedObservable.value =
+                    this.state.allAllowedUsersDescriptors.includes(
+                        loggedInUserDescriptorObservable.value
+                    );
             }
-        );
     }
 
     private getCommandBarItems(): IHeaderCommandBarItem[] {
@@ -233,6 +224,7 @@ export default class FoundationSprintly extends React.Component<
                 return (
                     <SprintlySettings
                         organizationName={organizationNameObservable.value}
+                        globalMessagesSvc={this.globalMessagesSvc}
                         dataManager={this.dataManager}
                     />
                 );

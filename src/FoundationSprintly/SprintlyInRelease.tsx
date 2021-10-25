@@ -53,10 +53,11 @@ import { Link } from 'azure-devops-ui/Link';
 import { Dialog } from 'azure-devops-ui/Dialog';
 
 export interface ISprintlyInReleaseState {
+    userSettings?: Common.IUserSettings;
     releaseBranchDeployItemProvider: ITreeItemProvider<IReleaseBranchDeployTableItem>;
     allBranchesReleaseInfo: Common.IReleaseInfo[];
-    ready: boolean;
     clickedDeployEnvironmentStatus?: EnvironmentStatus;
+    ready: boolean;
 }
 
 export interface IReleaseBranchDeployTableItem {
@@ -90,7 +91,7 @@ const deployColumnWidthObservable: ObservableValue<number> =
     new ObservableValue<number>(-80);
 //#endregion "Observables"
 
-const repositoriesToProcessKey: string = 'repositories-to-process';
+const userSettingsDataManagerKey: string = 'user-settings';
 let repositoriesToProcess: string[] = [];
 
 export default class SprintlyInRelease extends React.Component<
@@ -159,12 +160,23 @@ export default class SprintlyInRelease extends React.Component<
 
     private async initializeComponent(): Promise<void> {
         this.accessToken = await SDK.getAccessToken();
-        repositoriesToProcess = (
-            await Common.getSavedRepositoriesToProcess(
+
+        const userSettings: Common.IUserSettings | undefined =
+            await Common.getUserSettings(
                 this.dataManager,
-                repositoriesToProcessKey
-            )
-        ).map((item: Common.IAllowedEntity) => item.originId);
+                userSettingsDataManagerKey
+            );
+
+        this.setState({
+            userSettings: userSettings,
+        });
+
+        repositoriesToProcess = !this.state.userSettings
+            ? []
+            : this.state.userSettings.myRepositories.map(
+                  (item: Common.IAllowedEntity) => item.originId
+              );
+
         totalRepositoriesToProcessObservable.value =
             repositoriesToProcess.length;
         if (repositoriesToProcess.length > 0) {
