@@ -103,6 +103,8 @@ export interface ISprintlyPostReleaseState {
     pullRequestToComplete?: GitPullRequest;
     createTagTitle?: string;
     createTagDescription?: string;
+    createPullRequestTitle?: string;
+    createPullRequestDescription?: string;
 }
 
 //#region "Observables"
@@ -254,7 +256,6 @@ export default class SprintlyPostRelease extends React.Component<
         this.state.repositoryListSelection.clear();
         await this.initializeComponent();
         this.setState(this.state);
-        this.forceUpdate();
         this.state.repositoryListSelection.select(
             repoSelectionIndex[0].beginIndex
         );
@@ -300,10 +301,6 @@ export default class SprintlyPostRelease extends React.Component<
                             : repositoryBranchInfo.allBranchesAndTags.find(
                                   (branch) => branch.name === 'refs/heads/main'
                               );
-                    this.setState({
-                        baseDevelopBranch: baseDevelopBranch,
-                        baseMasterMainBranch: baseMasterMainBranch,
-                    });
                     const existingReleaseBranches: Common.IReleaseBranchInfo[] =
                         [];
                     for (const releaseBranch of repositoryBranchInfo.releaseBranches) {
@@ -372,6 +369,8 @@ export default class SprintlyPostRelease extends React.Component<
                         hasExistingRelease:
                             repositoryBranchInfo.releaseBranches.length > 0,
                         hasMainBranch: repositoryBranchInfo.hasMainBranch,
+                        baseDevelopBranch,
+                        baseMasterMainBranch,
                         existingReleaseBranches,
                         branchesAndTags:
                             repositoryBranchInfo.allBranchesAndTags,
@@ -396,11 +395,13 @@ export default class SprintlyPostRelease extends React.Component<
 
     private async selectRepository(): Promise<void> {
         this.state.releaseBranchListSelection.clear();
+        this.state.releaseBranchListSelectedItemObservable.value = {} as any;
+        const repositoryInfo: Common.IGitRepositoryExtended =
+            this.state.repositoryListSelectedItemObservable.value;
         const buildDefinitionForRepo: BuildDefinition | undefined =
             this.buildDefinitions.find(
                 (buildDef: BuildDefinition) =>
-                    buildDef.repository.id ===
-                    this.state.repositoryListSelectedItemObservable.value.id
+                    buildDef.repository.id === repositoryInfo.id
             );
 
         for (const releaseBranch of this.state
@@ -412,9 +413,8 @@ export default class SprintlyPostRelease extends React.Component<
                     buildDefinitionForRepo,
                     this.releaseDefinitions,
                     releaseBranch,
-                    this.state.repositoryListSelectedItemObservable.value
-                        .project.id,
-                    this.state.repositoryListSelectedItemObservable.value.id,
+                    repositoryInfo.project.id,
+                    repositoryInfo.id,
                     this.organizationName,
                     this.accessToken
                 );
@@ -429,6 +429,10 @@ export default class SprintlyPostRelease extends React.Component<
             this.state
                 .releaseBranchListSelectedItemObservable as ObservableValue<Common.IReleaseBranchInfo>
         );
+        this.setState({
+            baseDevelopBranch: repositoryInfo.baseDevelopBranch,
+            baseMasterMainBranch: repositoryInfo.baseMasterMainBranch,
+        });
 
         this.setState({
             selectedRepositoryWebUrl:
@@ -630,6 +634,18 @@ export default class SprintlyPostRelease extends React.Component<
                             tagsObservable.value = modalContent.modalValues;
                         },
                     },
+                    {
+                        iconProps: {
+                            iconName: 'Add',
+                        },
+                        id: 'createtag',
+                        important: true,
+                        text: 'Create Tag',
+                        isPrimary: true,
+                        onActivate: () => {
+                            isCreateTagDialogOpenObservable.value = true;
+                        },
+                    },
                 ]}
             />
         );
@@ -748,37 +764,24 @@ export default class SprintlyPostRelease extends React.Component<
                                     </Card>
                                 </div>
                                 <div className='page-content-top'>
-                                    <ButtonGroup>
-                                        <Button
-                                            text='Create Tag'
-                                            iconProps={{ iconName: 'Tag' }}
-                                            onClick={() => {
-                                                isCreateTagDialogOpenObservable.value =
-                                                    true;
-                                            }}
-                                            primary={true}
-                                        />
-                                        <Button
-                                            text='Delete branch'
-                                            iconProps={{ iconName: 'Delete' }}
-                                            onClick={() => {
-                                                isDeleteBranchDialogOpenObservable.value =
-                                                    true;
-                                                this.setState({
-                                                    releaseBranchSafeToDelete:
-                                                        (!observerProps
-                                                            .selectedItem
-                                                            .aheadOfDevelop ||
-                                                            !observerProps.selectedItem.aheadOfDevelop.valueOf()) &&
-                                                        (!observerProps
-                                                            .selectedItem
-                                                            .aheadOfMasterMain ||
-                                                            !observerProps.selectedItem.aheadOfMasterMain.valueOf()),
-                                                });
-                                            }}
-                                            danger={true}
-                                        />
-                                    </ButtonGroup>
+                                    <Button
+                                        text='Delete branch'
+                                        iconProps={{ iconName: 'Delete' }}
+                                        onClick={() => {
+                                            isDeleteBranchDialogOpenObservable.value =
+                                                true;
+                                            this.setState({
+                                                releaseBranchSafeToDelete:
+                                                    (!observerProps.selectedItem
+                                                        .aheadOfDevelop ||
+                                                        !observerProps.selectedItem.aheadOfDevelop.valueOf()) &&
+                                                    (!observerProps.selectedItem
+                                                        .aheadOfMasterMain ||
+                                                        !observerProps.selectedItem.aheadOfMasterMain.valueOf()),
+                                            });
+                                        }}
+                                        danger={true}
+                                    />
                                 </div>
                             </div>
                         </Page>
@@ -801,6 +804,7 @@ export default class SprintlyPostRelease extends React.Component<
         let actionButtons: JSX.Element = <></>;
         if (aheadOfStatus && aheadOfStatus.valueOf()) {
             if (pullRequest) {
+                console.log(pullRequest.mergeStatus);
                 const mergeConflict: boolean =
                     pullRequest.mergeStatus ===
                     PullRequestAsyncStatus.Conflicts;
@@ -815,6 +819,9 @@ export default class SprintlyPostRelease extends React.Component<
                     : statusText;
                 statusText = mergeFailed
                     ? `${statusText} There are merge failures.`
+                    : statusText;
+                statusText = mergeQueued
+                    ? `${statusText} The initial creation pre-merge is queued.`
                     : statusText;
                 status =
                     mergeConflict || mergeFailed
@@ -1066,7 +1073,7 @@ export default class SprintlyPostRelease extends React.Component<
                                         this.state
                                             .releaseBranchListSelectedItemObservable
                                             .value.targetBranch.name
-                                    )}
+                                    )}{' '}
                                     will be permanently deleted. Are you sure
                                     you want to proceed?
                                 </>
@@ -1198,10 +1205,14 @@ export default class SprintlyPostRelease extends React.Component<
                                     <TextField
                                         required={true}
                                         value={createPullRequestTitleObservable}
-                                        onChange={(e, newValue) =>
-                                            (createPullRequestTitleObservable.value =
-                                                newValue)
-                                        }
+                                        onChange={(e, newValue) => {
+                                            createPullRequestTitleObservable.value =
+                                                newValue;
+                                            this.setState({
+                                                createPullRequestTitle:
+                                                    createPullRequestTitleObservable.value,
+                                            });
+                                        }}
                                         style={TextFieldStyle.normal}
                                     />
                                 </FormItem>
@@ -1211,10 +1222,14 @@ export default class SprintlyPostRelease extends React.Component<
                                         value={
                                             createPullRequestDescriptionObservable
                                         }
-                                        onChange={(e, newValue) =>
-                                            (createPullRequestDescriptionObservable.value =
-                                                newValue)
-                                        }
+                                        onChange={(e, newValue) => {
+                                            createPullRequestDescriptionObservable.value =
+                                                newValue;
+                                            this.setState({
+                                                createPullRequestDescription:
+                                                    createPullRequestDescriptionObservable.value,
+                                            });
+                                        }}
                                         multiline={true}
                                         style={TextFieldStyle.normal}
                                     />
@@ -1229,8 +1244,8 @@ export default class SprintlyPostRelease extends React.Component<
 
     private createPullRequestAction(): void {
         const pullRequest: any = {
-            title: createPullRequestTitleObservable.value,
-            description: createPullRequestDescriptionObservable.value,
+            title: this.state.createPullRequestTitle,
+            description: this.state.createPullRequestDescription,
             isDraft: false,
             labels: [],
             reviewers: [],

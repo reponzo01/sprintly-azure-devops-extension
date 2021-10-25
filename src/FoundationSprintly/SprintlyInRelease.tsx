@@ -193,7 +193,6 @@ export default class SprintlyInRelease extends React.Component<
             ready: true,
         });
         this.setState(this.state);
-        this.forceUpdate();
     }
 
     private async loadRepositoriesDisplayState(
