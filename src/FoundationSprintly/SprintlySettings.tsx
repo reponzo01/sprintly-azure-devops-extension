@@ -23,6 +23,11 @@ import { Card } from 'azure-devops-ui/Card';
 import { Page } from 'azure-devops-ui/Page';
 import { Header, TitleSize, CustomHeader } from 'azure-devops-ui/Header';
 import { HeaderCommandBar } from 'azure-devops-ui/HeaderCommandBar';
+import {
+    Splitter,
+    SplitterDirection,
+    SplitterElementPosition,
+} from 'azure-devops-ui/Splitter';
 
 const allowedUserGroupsKey: string = 'allowed-user-groups';
 const allowedUsersKey: string = 'allowed-users';
@@ -73,6 +78,10 @@ export default class SprintlySettings extends React.Component<
         super(props);
 
         this.state = {};
+
+        this.renderUserSettings = this.renderUserSettings.bind(this);
+        this.renderGlobalSettings = this.renderGlobalSettings.bind(this);
+
         this.organizationName = props.organizationName;
         this.dataManager = props.dataManager;
     }
@@ -441,31 +450,85 @@ export default class SprintlySettings extends React.Component<
         );
     }
 
-    public render(): JSX.Element {
+    private renderUserSettings(): JSX.Element {
         return (
             <Page>
                 <Header
+                    title='User Settings'
+                    titleSize={TitleSize.Medium}
+                    titleIconProps={{
+                        iconName: 'Contact',
+                        tooltipProps: {
+                            text: 'These settings affect just you ',
+                        },
+                    }}
                     commandBarItems={[
                         {
                             iconProps: {
                                 iconName: 'Save',
                             },
-                            id: 'savesettings',
+                            id: 'savesuserettings',
                             important: true,
-                            text: 'Save Settings',
+                            text: 'Save User Settings',
                             isPrimary: true,
                             onActivate: this.onSaveData,
                             disabled: !this.state.ready,
                         },
                     ]}
-                ></Header>
-                <div className='page-content page-content-top flex-column rhythm-vertical-16'>
+                />
+                <div className='page-content page-content-top'>
+                    <Card className='bolt-card-white'>
+                        <Page className='sprintly-width-100'>
+                            <Header
+                                title='My Repositories'
+                                titleSize={TitleSize.Medium}
+                            />
+                            <div className='page-content page-content-top'>
+                                Select the repositories you want to process.
+                                This is a user-based setting. Everyone with
+                                access to this extension can select a different
+                                list.
+                            </div>
+                            {this.renderRepositoriesDropdown()}
+                        </Page>
+                    </Card>
+                </div>
+            </Page>
+        );
+    }
+
+    private renderGlobalSettings(): JSX.Element {
+        return (
+            <Page>
+                <Header
+                    title='Global Settings'
+                    titleSize={TitleSize.Medium}
+                    titleIconProps={{
+                        iconName: 'People',
+                        tooltipProps: {
+                            text: 'These settings affect all users',
+                        },
+                    }}
+                    commandBarItems={[
+                        {
+                            iconProps: {
+                                iconName: 'Save',
+                            },
+                            id: 'savesglobalettings',
+                            important: true,
+                            text: 'Save Global Settings',
+                            isPrimary: true,
+                            onActivate: this.onSaveData,
+                            disabled: !this.state.ready,
+                        },
+                    ]}
+                />
+                <div className='page-content page-content-top'>
                     <Card className='bolt-card-white'>
                         <Page className='sprintly-width-100'>
                             <Header
                                 title='Permissions'
                                 titleSize={TitleSize.Medium}
-                                titleIconProps={{ iconName: 'People' }}
                             />
                             <div className='page-content page-content-top'>
                                 By default the Azure groups{' '}
@@ -484,22 +547,23 @@ export default class SprintlySettings extends React.Component<
                             {this.renderUsersDropdown()}
                         </Page>
                     </Card>
-                    <Card className='bolt-card-white'>
-                        <Page className='sprintly-width-100'>
-                            <Header
-                                title='My Repositories'
-                                titleSize={TitleSize.Medium}
-                                titleIconProps={{ iconName: 'Contact' }}
-                            />
-                            <div className='page-content page-content-top'>
-                                Select the repositories you want to process.
-                                This is a user-based setting. Everyone with
-                                access to this extension can select a different
-                                list.
-                            </div>
-                            {this.renderRepositoriesDropdown()}
-                        </Page>
-                    </Card>
+                </div>
+            </Page>
+        );
+    }
+
+    public render(): JSX.Element {
+        return (
+            <Page>
+                <div className='page-content page-content-top flex-column rhythm-vertical-16'>
+                    <Splitter
+                        fixedElement={SplitterElementPosition.Near}
+                        splitterDirection={SplitterDirection.Vertical}
+                        nearElementClassName='v-scroll-auto custom-scrollbar'
+                        farElementClassName='v-scroll-auto custom-scrollbar'
+                        onRenderNearElement={this.renderUserSettings}
+                        onRenderFarElement={this.renderGlobalSettings}
+                    />
                 </div>
             </Page>
         );
