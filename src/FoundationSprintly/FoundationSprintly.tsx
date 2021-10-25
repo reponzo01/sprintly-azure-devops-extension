@@ -265,25 +265,26 @@ export default class FoundationSprintly extends React.Component<
     }
 
     private selectRepositoriesAction(projectRepositoriesId: string): void {
-        let userSettings = this.state.userSettings;
-        if (!userSettings) {
-            userSettings = {
-                myRepositories: [],
-                projectRepositoriesId: projectRepositoriesId,
-            };
-        } else {
-            userSettings.projectRepositoriesId = projectRepositoriesId;
-        }
+        Common.getUserSettings(
+            this.dataManager,
+            userSettingsDataManagerKey
+        ).then((userSettings) => {
+            if (!userSettings) {
+                userSettings = {
+                    myRepositories: [],
+                    projectRepositoriesId: projectRepositoriesId,
+                };
+            } else {
+                userSettings.projectRepositoriesId = projectRepositoriesId;
+            }
 
-        this.dataManager!.setValue<Common.IUserSettings>(
-            userSettingsDataManagerKey,
-            userSettings,
-            { scopeType: 'User' }
-        ).then(() => {
-            this.setState({
-                userSettings: userSettings,
+            this.dataManager!.setValue<Common.IUserSettings>(
+                userSettingsDataManagerKey,
+                userSettings,
+                { scopeType: 'User' }
+            ).then(() => {
+                window.location.reload();
             });
-            window.location.reload();
         });
     }
 
@@ -335,7 +336,12 @@ export default class FoundationSprintly extends React.Component<
                 if (!this.state.systemSettings?.projectRepositories) {
                     title += ' (My Repositories)';
                 } else {
-                    const projectRepo = this.state.systemSettings?.projectRepositories.find((item) => item.id === this.state.userSettings!.projectRepositoriesId);
+                    const projectRepo =
+                        this.state.systemSettings?.projectRepositories.find(
+                            (item) =>
+                                item.id ===
+                                this.state.userSettings!.projectRepositoriesId
+                        );
                     if (!projectRepo) {
                         title += ' (My Repositories)';
                     } else {

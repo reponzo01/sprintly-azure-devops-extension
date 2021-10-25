@@ -51,14 +51,6 @@
     white-space: normal;
 }
 
-.light-grey {
-    background-color: $neutral-alpha-4;
-}
-
-tr.master-row.border-bottom > td.bolt-list-cell {
-    border-bottom: 1px solid $neutral-alpha-6;
-}
-
 tr.selected > td.bolt-list-cell {
     border-left: 5px solid #045B9E;
 }

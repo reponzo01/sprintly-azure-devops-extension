@@ -1578,7 +1578,7 @@ export default class SprintlyPostRelease extends React.Component<
                                     }
                                     initialFixedSize={450}
                                     minFixedSize={100}
-                                    nearElementClassName='v-scroll-auto custom-scrollbar light-grey'
+                                    nearElementClassName='v-scroll-auto custom-scrollbar'
                                     farElementClassName='v-scroll-auto custom-scrollbar'
                                     onRenderNearElement={
                                         this.renderRepositoryMasterPageList
