@@ -22,6 +22,7 @@ import SprintlyPostRelease from './SprintlyPostRelease';
 import SprintlySettings from './SprintlySettings';
 import * as Common from './SprintlyCommon';
 import { showRootComponent } from '../Common';
+import { IMenuItem } from 'azure-devops-ui/Menu';
 
 const selectedTabKey: string = 'selected-tab';
 const userSettingsDataManagerKey: string = 'user-settings';
@@ -45,6 +46,7 @@ const organizationNameObservable: ObservableValue<string> =
     new ObservableValue<string>('');
 
 export interface IFoundationSprintlyState {
+    userSettings?: Common.IUserSettings;
     systemSettings?: Common.ISystemSettings;
     allAllowedUsersDescriptors: string[];
 }
@@ -87,6 +89,11 @@ export default class FoundationSprintly extends React.Component<
         this.state = {
             allAllowedUsersDescriptors: [],
         };
+
+        this.selectViewRepositoriesCommandBarItem =
+            this.selectViewRepositoriesCommandBarItem.bind(this);
+        this.selectRepositoriesAction =
+            this.selectRepositoriesAction.bind(this);
     }
 
     public async componentDidMount(): Promise<void> {
@@ -111,6 +118,11 @@ export default class FoundationSprintly extends React.Component<
 
         selectedTabIdObservable.value = getUserSelectedTab();
 
+        const userSettings: Common.IUserSettings | undefined =
+            await Common.getUserSettings(
+                this.dataManager,
+                userSettingsDataManagerKey
+            );
         const systemSettings: Common.ISystemSettings | undefined =
             await Common.getSystemSettings(
                 this.dataManager,
@@ -118,83 +130,90 @@ export default class FoundationSprintly extends React.Component<
             );
 
         this.setState({
-            systemSettings: systemSettings
+            userSettings: userSettings,
+            systemSettings: systemSettings,
         });
 
         await this.loadAllowedUserGroupsUsers();
-        await this.loadAllowedUsers();
+        this.loadAllowedUsers();
     }
 
     private async loadAllowedUserGroupsUsers(): Promise<void> {
-            let userGroups: Common.IAllowedEntity[] | undefined = this.state.systemSettings?.allowedUserGroups;
-            if (!userGroups) {
-                userGroups = this.alwaysAllowedGroups;
-            } else {
-                userGroups = userGroups.concat(this.alwaysAllowedGroups);
-            }
-            if (userGroups) {
-                for (const group of userGroups) {
-                    this.accessToken = await Common.getOrRefreshToken(
-                        this.accessToken
-                    );
-                    axios
-                        .get(
-                            `https://vsaex.dev.azure.com/${organizationNameObservable.value}/_apis/GroupEntitlements/${group.originId}/members`,
-                            {
-                                headers: {
-                                    Authorization: `Bearer ${this.accessToken}`,
-                                },
-                            }
-                        )
-                        .then((res: any) => {
-                            const allAllowedUsersDescriptors: string[] =
-                                res.data['members'].map(
-                                    (item: any) =>
-                                        item['user']['descriptor']
-                                );
-                            this.setState({
-                                allAllowedUsersDescriptors:
-                                    allAllowedUsersDescriptors.concat(
-                                        this.state
-                                            .allAllowedUsersDescriptors
-                                    ),
-                            });
-                            userIsAllowedObservable.value =
-                                this.state.allAllowedUsersDescriptors.includes(
-                                    loggedInUserDescriptorObservable.value
-                                );
-                        })
-                        .catch((error: any) => {
-                            console.error(error);
+        let userGroups: Common.IAllowedEntity[] | undefined =
+            this.state.systemSettings?.allowedUserGroups;
+        if (!userGroups) {
+            userGroups = this.alwaysAllowedGroups;
+        } else {
+            userGroups = userGroups.concat(this.alwaysAllowedGroups);
+        }
+        if (userGroups) {
+            for (const group of userGroups) {
+                this.accessToken = await Common.getOrRefreshToken(
+                    this.accessToken
+                );
+                axios
+                    .get(
+                        `https://vsaex.dev.azure.com/${organizationNameObservable.value}/_apis/GroupEntitlements/${group.originId}/members`,
+                        {
+                            headers: {
+                                Authorization: `Bearer ${this.accessToken}`,
+                            },
+                        }
+                    )
+                    .then((res: any) => {
+                        const allAllowedUsersDescriptors: string[] = res.data[
+                            'members'
+                        ].map((item: any) => item['user']['descriptor']);
+                        this.setState({
+                            allAllowedUsersDescriptors:
+                                allAllowedUsersDescriptors.concat(
+                                    this.state.allAllowedUsersDescriptors
+                                ),
                         });
-                }
+                        userIsAllowedObservable.value =
+                            this.state.allAllowedUsersDescriptors.includes(
+                                loggedInUserDescriptorObservable.value
+                            );
+                    })
+                    .catch((error: any) => {
+                        console.error(error);
+                    });
             }
+        }
     }
 
     private loadAllowedUsers(): void {
-            let users: Common.IAllowedEntity[] | undefined = this.state.systemSettings?.allowedUsers;
-            if (users) {
-                const allAllowedUsersDescriptors: string[] = users.map(
-                    (user: Common.IAllowedEntity) => user.descriptor || ''
+        let users: Common.IAllowedEntity[] | undefined =
+            this.state.systemSettings?.allowedUsers;
+        if (users) {
+            const allAllowedUsersDescriptors: string[] = users.map(
+                (user: Common.IAllowedEntity) => user.descriptor || ''
+            );
+            this.setState({
+                allAllowedUsersDescriptors: allAllowedUsersDescriptors.concat(
+                    this.state.allAllowedUsersDescriptors
+                ),
+            });
+            userIsAllowedObservable.value =
+                this.state.allAllowedUsersDescriptors.includes(
+                    loggedInUserDescriptorObservable.value
                 );
-                this.setState({
-                    allAllowedUsersDescriptors:
-                        allAllowedUsersDescriptors.concat(
-                            this.state.allAllowedUsersDescriptors
-                        ),
-                });
-                userIsAllowedObservable.value =
-                    this.state.allAllowedUsersDescriptors.includes(
-                        loggedInUserDescriptorObservable.value
-                    );
-            }
+        }
     }
 
     private getCommandBarItems(): IHeaderCommandBarItem[] {
-        return [this.refreshButtonCommanBarItem()];
+        const items: IHeaderCommandBarItem[] = [];
+        items.push(this.refreshButtonCommandBarItem());
+        if (
+            this.state.systemSettings?.projectRepositories &&
+            this.state.systemSettings.projectRepositories.length > 0
+        ) {
+            items.push(this.selectViewRepositoriesCommandBarItem());
+        }
+        return items;
     }
 
-    private refreshButtonCommanBarItem(): IHeaderCommandBarItem {
+    private refreshButtonCommandBarItem(): IHeaderCommandBarItem {
         return {
             id: 'refresh',
             text: 'Refresh Data',
@@ -208,6 +227,64 @@ export default class FoundationSprintly extends React.Component<
                 text: 'Refresh the data on the page',
             },
         };
+    }
+
+    // TODO: Extract this into two buttons and show one or the other
+    private selectViewRepositoriesCommandBarItem(): IHeaderCommandBarItem {
+        const subMenuItems: IMenuItem[] = [];
+        subMenuItems.push({
+            id: '0',
+            text: ' My Repositories',
+            onActivate: (item) => {
+                this.selectRepositoriesAction('');
+            },
+        });
+        if (this.state.systemSettings?.projectRepositories) {
+            for (const projectRepository of this.state.systemSettings
+                .projectRepositories) {
+                subMenuItems.push({
+                    id: projectRepository.id,
+                    text: projectRepository.label,
+                    onActivate: (item) => {
+                        this.selectRepositoriesAction(item.id);
+                    },
+                });
+            }
+        }
+        return {
+            id: 'selectViewProjectRepositories',
+            text: 'View Project Repositories',
+            iconProps: {
+                iconName: 'Repo',
+            },
+            subMenuProps: {
+                id: 'submenu',
+                items: subMenuItems,
+            },
+        };
+    }
+
+    private selectRepositoriesAction(projectRepositoriesId: string): void {
+        let userSettings = this.state.userSettings;
+        if (!userSettings) {
+            userSettings = {
+                myRepositories: [],
+                projectRepositoriesId: projectRepositoriesId,
+            };
+        } else {
+            userSettings.projectRepositoriesId = projectRepositoriesId;
+        }
+
+        this.dataManager!.setValue<Common.IUserSettings>(
+            userSettingsDataManagerKey,
+            userSettings,
+            { scopeType: 'User' }
+        ).then(() => {
+            this.setState({
+                userSettings: userSettings,
+            });
+            window.location.reload();
+        });
     }
 
     private renderSelectedTabPage(): JSX.Element {
@@ -250,10 +327,27 @@ export default class FoundationSprintly extends React.Component<
     }
 
     public render(): JSX.Element {
+        let title: string = 'Foundation Sprintly';
+        if (this.state.userSettings) {
+            if (this.state.userSettings.projectRepositoriesId.trim() === '') {
+                title += ' (My Repositories)';
+            } else {
+                if (!this.state.systemSettings?.projectRepositories) {
+                    title += ' (My Repositories)';
+                } else {
+                    const projectRepo = this.state.systemSettings?.projectRepositories.find((item) => item.id === this.state.userSettings!.projectRepositoriesId);
+                    if (!projectRepo) {
+                        title += ' (My Repositories)';
+                    } else {
+                        title += ` (${projectRepo.label})`;
+                    }
+                }
+            }
+        }
         return (
             <Page className='flex-grow foundation-sprintly'>
                 <Header
-                    title='Foundation Sprintly'
+                    title={title}
                     commandBarItems={this.getCommandBarItems()}
                     titleSize={TitleSize.Large}
                 />

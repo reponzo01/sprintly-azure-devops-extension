@@ -334,7 +334,7 @@ export default class SprintlySettings extends React.Component<
         } else {
             userSettings = {
                 myRepositories: repositoriesSelectedArray,
-                projectRepositoriesKey: '',
+                projectRepositoriesId: '',
             };
         }
 
@@ -640,6 +640,8 @@ export default class SprintlySettings extends React.Component<
         this.setState({
             systemSettings: systemSettings,
         });
+
+        addProjectRepositoriesLabelObservable.value = '';
     }
 
     private renderUserSettings(): JSX.Element {

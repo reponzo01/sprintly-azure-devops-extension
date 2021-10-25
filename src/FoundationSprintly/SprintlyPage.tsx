@@ -45,6 +45,7 @@ import { Card } from 'azure-devops-ui/Card';
 
 export interface ISprintlyPageState {
     userSettings?: Common.IUserSettings;
+    systemSettings?: Common.ISystemSettings;
     repositories?: ArrayItemProvider<Common.IGitRepositoryExtended>;
 }
 
@@ -73,6 +74,7 @@ const createReleaseBranchColumnWidthObservable: ObservableValue<number> =
 //#endregion "Observables"
 
 const userSettingsDataManagerKey: string = 'user-settings';
+const systemSettingsDataManagerKey: string = 'system-settings';
 
 let repositoriesToProcess: string[] = [];
 
@@ -147,16 +149,21 @@ export default class SprintlyPage extends React.Component<
                 this.dataManager,
                 userSettingsDataManagerKey
             );
+        const systemSettings: Common.ISystemSettings | undefined =
+            await Common.getSystemSettings(
+                this.dataManager,
+                systemSettingsDataManagerKey
+            );
 
         this.setState({
             userSettings: userSettings,
+            systemSettings: systemSettings
         });
 
-        repositoriesToProcess = !this.state.userSettings
-            ? []
-            : this.state.userSettings.myRepositories.map(
-                  (item: Common.IAllowedEntity) => item.originId
-              );
+        repositoriesToProcess = Common.getSavedRepositoriesToView(
+            this.state.userSettings,
+            this.state.systemSettings
+        );
 
         totalRepositoriesToProcessObservable.value =
             repositoriesToProcess.length;

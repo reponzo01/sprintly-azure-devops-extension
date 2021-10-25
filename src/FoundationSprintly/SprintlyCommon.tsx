@@ -136,7 +136,7 @@ export interface IProjectRepositories {
 
 export interface IUserSettings {
     myRepositories: IAllowedEntity[];
-    projectRepositoriesKey: string;
+    projectRepositoriesId: string;
 }
 
 export interface ISystemSettings {
@@ -199,6 +199,38 @@ export async function getSystemSettings(
             systemSettingsDataManagerKey
         );
     return systemSettings;
+}
+
+export function getSavedRepositoriesToView(
+    userSettings?: IUserSettings,
+    systemSettings?: ISystemSettings
+): string[] {
+    let allowedRepositories: IAllowedEntity[] = [];
+    if (!userSettings) {
+        return [];
+    } else {
+        if (userSettings.projectRepositoriesId.trim() === '') {
+            allowedRepositories = userSettings.myRepositories;
+        } else {
+            if (!systemSettings?.projectRepositories) {
+                allowedRepositories = userSettings.myRepositories;
+            } else {
+                const projectRepoIdx =
+                    systemSettings.projectRepositories.findIndex(
+                        (item) => item.id === userSettings.projectRepositoriesId
+                    );
+                if (projectRepoIdx > -1) {
+                    allowedRepositories =
+                        systemSettings.projectRepositories[projectRepoIdx]
+                            .repositories;
+                } else {
+                    allowedRepositories = userSettings.myRepositories;
+                }
+            }
+        }
+    }
+
+    return allowedRepositories.map((item: IAllowedEntity) => item.originId);
 }
 
 export async function getFilteredProjects(): Promise<TeamProjectReference[]> {
