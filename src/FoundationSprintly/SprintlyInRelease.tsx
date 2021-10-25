@@ -254,6 +254,7 @@ export default class SprintlyInRelease extends React.Component<
                         data: {
                             name: repo.name,
                             id: repo.id,
+                            projectId: repo.project.id,
                             isRepositoryItem: true,
                         },
                         expanded: true,
