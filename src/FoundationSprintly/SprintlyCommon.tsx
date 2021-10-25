@@ -37,6 +37,7 @@ import { Link } from 'azure-devops-ui/Link';
 import { Icon, IconSize } from 'azure-devops-ui/Icon';
 import { Pill, PillSize, PillVariant } from 'azure-devops-ui/Pill';
 import { Status, Statuses, StatusSize } from 'azure-devops-ui/Status';
+import { DropdownMultiSelection } from 'azure-devops-ui/Utilities/DropdownSelection';
 
 export const primaryColor: IColor = {
     red: 0,
@@ -127,7 +128,9 @@ export interface IGitRepositoryExtended extends GitRepository {
 }
 
 export interface IProjectRepositories {
-    key: string;
+    id: string;
+    label: string;
+    selections: DropdownMultiSelection;
     repositories: IAllowedEntity[];
 }
 

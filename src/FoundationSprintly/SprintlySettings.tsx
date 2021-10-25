@@ -1,4 +1,5 @@
 import * as React from 'react';
+
 import axios, { AxiosResponse } from 'axios';
 
 import * as SDK from 'azure-devops-extension-sdk';
@@ -28,16 +29,37 @@ import {
     SplitterDirection,
     SplitterElementPosition,
 } from 'azure-devops-ui/Splitter';
-
-const userSettingsDataManagerKey: string = 'user-settings';
-const systemSettingsDataManagerKey: string = 'system-settings';
+import { ObservableValue } from 'azure-devops-ui/Core/Observable';
+import { FormItem } from 'azure-devops-ui/FormItem';
+import { TextField, TextFieldStyle } from 'azure-devops-ui/TextField';
+import {
+    ISimpleTableCell,
+    ITableColumn,
+    renderSimpleCell,
+    SimpleTableCell,
+    Table,
+    TableColumnLayout,
+} from 'azure-devops-ui/Table';
+import { ISimpleListCell } from 'azure-devops-ui/List';
+import { ArrayItemProvider } from 'azure-devops-ui/Utilities/Provider';
+import { Dialog } from 'azure-devops-ui/Dialog';
 
 export interface ISprintlySettingsState {
     userSettings?: Common.IUserSettings;
     systemSettings?: Common.ISystemSettings;
+    addProjectRepositoriesLabel?: string;
+    projectLabelIdToDelete?: string;
 
     ready?: boolean;
 }
+
+const addProjectRepositoriesLabelObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
+const isDeleteProjectLabelDialogOpenObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(false);
+
+const userSettingsDataManagerKey: string = 'user-settings';
+const systemSettingsDataManagerKey: string = 'system-settings';
 
 // TODO: Clean up arrow functions for the cases in which I thought I
 // couldn't use regular functions because the this.* was undefined errors.
@@ -67,6 +89,8 @@ export default class SprintlySettings extends React.Component<
     private accessToken: string = '';
     private organizationName: string;
 
+    private projectRepositoriesTableColumns: any = [];
+
     constructor(props: {
         organizationName: string;
         globalMessagesSvc: IGlobalMessagesService;
@@ -78,10 +102,39 @@ export default class SprintlySettings extends React.Component<
 
         this.renderUserSettings = this.renderUserSettings.bind(this);
         this.renderSystemSettings = this.renderSystemSettings.bind(this);
+        this.renderProjectRepositoriesTableRepositoriesCell =
+            this.renderProjectRepositoriesTableRepositoriesCell.bind(this);
+        this.renderProjectRepositoriesTableDeleteCell =
+            this.renderProjectRepositoriesTableDeleteCell.bind(this);
+        this.addProjectRepositoriesLabelAction =
+            this.addProjectRepositoriesLabelAction.bind(this);
+        this.deleteProjectLabelAction =
+            this.deleteProjectLabelAction.bind(this);
 
         this.organizationName = props.organizationName;
         this.globalMessagesSvc = props.globalMessagesSvc;
         this.dataManager = props.dataManager;
+
+        this.projectRepositoriesTableColumns = [
+            {
+                id: 'delete',
+                name: 'Delete',
+                renderCell: this.renderProjectRepositoriesTableDeleteCell,
+                width: new ObservableValue(-10),
+            },
+            {
+                id: 'projectLabel',
+                name: 'Project Label',
+                renderCell: this.renderProjectRepositoriesTableLabelCell,
+                width: new ObservableValue(-20),
+            },
+            {
+                id: 'repositories',
+                name: 'Repositories',
+                renderCell: this.renderProjectRepositoriesTableRepositoriesCell,
+                width: new ObservableValue(-50),
+            },
+        ];
     }
 
     public async componentDidMount(): Promise<void> {
@@ -105,6 +158,11 @@ export default class SprintlySettings extends React.Component<
                 this.dataManager,
                 systemSettingsDataManagerKey
             );
+        if (systemSettings && systemSettings.projectRepositories) {
+            for (const item of systemSettings.projectRepositories) {
+                item.selections = new DropdownMultiSelection();
+            }
+        }
 
         this.setState({
             userSettings: userSettings,
@@ -112,9 +170,12 @@ export default class SprintlySettings extends React.Component<
             ready: true,
         });
 
-        this.loadAllowedUserGroupsUsers();
-        this.loadAllowedUsers();
-        this.loadRepositoriesToProcess();
+        this.loadSystemSettingsValues();
+        this.loadUserSettingsValues();
+
+        this.setState({
+            ready: true,
+        });
     }
 
     private async getGraphResource(resouce: string): Promise<any> {
@@ -176,6 +237,16 @@ export default class SprintlySettings extends React.Component<
         }
     }
 
+    private loadSystemSettingsValues(): void {
+        this.loadAllowedUserGroupsUsers();
+        this.loadAllowedUsers();
+        this.loadProjectRepositories();
+    }
+
+    private loadUserSettingsValues(): void {
+        this.loadRepositoriesToProcess();
+    }
+
     private loadAllowedUserGroupsUsers(): void {
         const userGroups: Common.IAllowedEntity[] | undefined =
             this.state.systemSettings?.allowedUserGroups;
@@ -186,14 +257,11 @@ export default class SprintlySettings extends React.Component<
                     (item: Common.IAllowedEntity) =>
                         item.originId === selectedUserGroup.originId
                 );
-                if (idx >= 0) {
+                if (idx > -1) {
                     this.userGroupsSelection.select(idx);
                 }
             }
         }
-        this.setState({
-            ready: true,
-        });
     }
 
     private loadAllowedUsers(): void {
@@ -206,14 +274,31 @@ export default class SprintlySettings extends React.Component<
                     (user: Common.IAllowedEntity) =>
                         user.originId === selectedUser.originId
                 );
-                if (idx >= 0) {
+                if (idx > -1) {
                     this.usersSelection.select(idx);
                 }
             }
         }
-        this.setState({
-            ready: true,
-        });
+    }
+
+    private loadProjectRepositories(): void {
+        if (this.state.systemSettings?.projectRepositories) {
+            const systemSettings = this.state.systemSettings;
+            for (const projectRepository of systemSettings.projectRepositories) {
+                for (const selectedRepository of projectRepository.repositories) {
+                    const idx: number = this.allRepositories.findIndex(
+                        (repository: Common.IAllowedEntity) =>
+                            repository.originId === selectedRepository.originId
+                    );
+                    if (idx > -1) {
+                        projectRepository.selections.select(idx);
+                    }
+                }
+            }
+            this.setState({
+                systemSettings: systemSettings,
+            });
+        }
     }
 
     private loadRepositoriesToProcess(): void {
@@ -225,14 +310,11 @@ export default class SprintlySettings extends React.Component<
                     (repository: Common.IAllowedEntity) =>
                         repository.originId === selectedRepository.originId
                 );
-                if (idx >= 0) {
+                if (idx > -1) {
                     this.repositoriesToProcessSelection.select(idx);
                 }
             }
         }
-        this.setState({
-            ready: true,
-        });
     }
 
     private onSaveUserSettingsData = (): void => {
@@ -290,12 +372,23 @@ export default class SprintlySettings extends React.Component<
             systemSettings = this.state.systemSettings;
             systemSettings.allowedUserGroups = userGroupsSelectedArray;
             systemSettings.allowedUsers = usersSelectedArray;
-            systemSettings.projectRepositories = []; // TODO: blank for now but will save this once I create this setting
+
+            const projectRepos: Common.IProjectRepositories[] =
+                this.state.systemSettings.projectRepositories;
+            for (const projectRepo of projectRepos) {
+                const projectRepoSelectedArray: Common.IAllowedEntity[] =
+                    this.getSelectedRange(
+                        projectRepo.selections.value,
+                        this.allRepositories
+                    );
+                projectRepo.repositories = projectRepoSelectedArray;
+            }
+            systemSettings.projectRepositories = projectRepos;
         } else {
             systemSettings = {
                 allowedUserGroups: userGroupsSelectedArray,
                 allowedUsers: usersSelectedArray,
-                projectRepositories: [], // TODO: blank for now but will save this once I create this setting
+                projectRepositories: [],
             };
         }
 
@@ -354,7 +447,7 @@ export default class SprintlySettings extends React.Component<
                                         },
                                     },
                                 ]}
-                                className='example-dropdown flex-column'
+                                className='flex-column'
                                 items={this.allUserGroups.map(
                                     (item: Common.IAllowedEntity) =>
                                         item.displayName
@@ -392,7 +485,7 @@ export default class SprintlySettings extends React.Component<
                                         },
                                     },
                                 ]}
-                                className='example-dropdown flex-column'
+                                className='flex-column'
                                 items={this.allUsers.map(
                                     (item: Common.IAllowedEntity) =>
                                         item.displayName
@@ -408,7 +501,7 @@ export default class SprintlySettings extends React.Component<
         );
     }
 
-    private renderRepositoriesDropdown(): JSX.Element {
+    private renderMyRepositoriesDropdown(): JSX.Element {
         return (
             <div className='page-content'>
                 <Observer selection={this.repositoriesToProcessSelection}>
@@ -442,7 +535,7 @@ export default class SprintlySettings extends React.Component<
                                         },
                                     },
                                 ]}
-                                className='example-dropdown flex-column'
+                                className='flex-column'
                                 items={this.allRepositories.map(
                                     (item: Common.IAllowedEntity) =>
                                         item.displayName
@@ -456,6 +549,97 @@ export default class SprintlySettings extends React.Component<
                 </Observer>
             </div>
         );
+    }
+
+    private renderAddProjectRepositoriesLabel(): JSX.Element {
+        return (
+            <div className='page-content'>
+                <Observer
+                    addProjectRepositoriesKey={
+                        addProjectRepositoriesLabelObservable
+                    }
+                >
+                    {(observerProps: { addProjectRepositoriesKey: string }) => {
+                        return (
+                            <>
+                                <FormItem label='Project Label *'>
+                                    <div className='flex-row rhythm-horizontal-16'>
+                                        <TextField
+                                            required={true}
+                                            value={
+                                                addProjectRepositoriesLabelObservable
+                                            }
+                                            onChange={(e, newValue) => {
+                                                addProjectRepositoriesLabelObservable.value =
+                                                    newValue;
+                                                this.setState({
+                                                    addProjectRepositoriesLabel:
+                                                        addProjectRepositoriesLabelObservable.value,
+                                                });
+                                            }}
+                                            style={TextFieldStyle.normal}
+                                        />
+                                        <Button
+                                            text='Add Project Label'
+                                            iconProps={{ iconName: 'Add' }}
+                                            primary={true}
+                                            disabled={
+                                                addProjectRepositoriesLabelObservable.value.trim() ===
+                                                ''
+                                            }
+                                            onClick={
+                                                this
+                                                    .addProjectRepositoriesLabelAction
+                                            }
+                                        />
+                                    </div>
+                                </FormItem>
+                                {this.state.systemSettings &&
+                                    this.state.systemSettings
+                                        .projectRepositories.length > 0 && (
+                                        <Table
+                                            ariaLabel='Project Repositories'
+                                            columns={
+                                                this
+                                                    .projectRepositoriesTableColumns
+                                            }
+                                            itemProvider={
+                                                new ArrayItemProvider<Common.IProjectRepositories>(
+                                                    this.state.systemSettings.projectRepositories
+                                                )
+                                            }
+                                            role='table'
+                                            containerClassName='h-scroll-auto'
+                                        />
+                                    )}
+                            </>
+                        );
+                    }}
+                </Observer>
+            </div>
+        );
+    }
+
+    private addProjectRepositoriesLabelAction(): void {
+        let systemSettings: Common.ISystemSettings | undefined =
+            this.state.systemSettings;
+        if (!systemSettings) {
+            systemSettings = {
+                allowedUserGroups: [],
+                allowedUsers: [],
+                projectRepositories: [],
+            };
+        }
+        systemSettings.projectRepositories.push({
+            id: new Date().getTime().toString(),
+            label: this.state.addProjectRepositoriesLabel ?? '',
+            selections: new DropdownMultiSelection(),
+            repositories: [],
+        });
+
+        this.setState({
+            systemSettings: systemSettings,
+        });
     }
 
     private renderUserSettings(): JSX.Element {
@@ -490,14 +674,13 @@ export default class SprintlySettings extends React.Component<
                             <Header
                                 title='My Repositories'
                                 titleSize={TitleSize.Medium}
+                                titleIconProps={{ iconName: 'Repo' }}
                             />
                             <div className='page-content page-content-top'>
-                                Select the repositories you want to process.
-                                This is a user-based setting. Everyone with
-                                access to this extension can select a different
-                                list.
+                                Select the repositories you want to view and
+                                process.
                             </div>
-                            {this.renderRepositoriesDropdown()}
+                            {this.renderMyRepositoriesDropdown()}
                         </Page>
                     </Card>
                 </div>
@@ -537,6 +720,7 @@ export default class SprintlySettings extends React.Component<
                             <Header
                                 title='Permissions'
                                 titleSize={TitleSize.Medium}
+                                titleIconProps={{ iconName: 'Permissions' }}
                             />
                             <div className='page-content page-content-top'>
                                 By default the Azure groups{' '}
@@ -555,7 +739,229 @@ export default class SprintlySettings extends React.Component<
                         </Page>
                     </Card>
                 </div>
+                <div className='page-content'>
+                    <Card className='bolt-card-white'>
+                        <Page className='sprintly-width-100'>
+                            <Header
+                                title='Project Repositories'
+                                titleSize={TitleSize.Medium}
+                                titleIconProps={{ iconName: 'Repo' }}
+                            />
+                            <div className='page-content page-content-top'>
+                                Select predefined lists of repositories for
+                                projects/teams to help quickly identify which
+                                repositories are needed for a release.
+                            </div>
+                            {this.renderAddProjectRepositoriesLabel()}
+                        </Page>
+                    </Card>
+                </div>
             </Page>
+        );
+    }
+
+    private renderProjectRepositoriesTableDeleteCell(
+        rowIndex: number,
+        columnIndex: number,
+        tableColumn: ITableColumn<Common.IProjectRepositories>,
+        tableItem: Common.IProjectRepositories
+    ): JSX.Element {
+        return (
+            <SimpleTableCell
+                key={'col-' + columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={tableColumn}
+                children={
+                    <>
+                        <Button
+                            iconProps={{
+                                iconName: 'Delete',
+                            }}
+                            tooltipProps={{ text: 'Delete Project Label' }}
+                            subtle={true}
+                            onClick={() => {
+                                this.setState({
+                                    projectLabelIdToDelete: tableItem.id,
+                                });
+                                isDeleteProjectLabelDialogOpenObservable.value =
+                                    true;
+                            }}
+                        />
+                    </>
+                }
+            ></SimpleTableCell>
+        );
+    }
+
+    private renderDeleteProjectRepositoriesAction(): JSX.Element {
+        return (
+            <Observer
+                isDeleteProjectLabelDialogOpen={
+                    isDeleteProjectLabelDialogOpenObservable
+                }
+            >
+                {(observerProps: {
+                    isDeleteProjectLabelDialogOpen: boolean;
+                }) => {
+                    return observerProps.isDeleteProjectLabelDialogOpen ? (
+                        <Dialog
+                            titleProps={{ text: 'Delete Project Label' }}
+                            footerButtonProps={[
+                                {
+                                    text: 'Cancel',
+                                    onClick:
+                                        this
+                                            .onDismissDeleteProjectLabelActionModal,
+                                },
+                                {
+                                    text: 'Delete',
+                                    onClick: this.deleteProjectLabelAction,
+                                    danger: true,
+                                },
+                            ]}
+                            onDismiss={
+                                this.onDismissDeleteProjectLabelActionModal
+                            }
+                        >
+                            This is a safe operation. Only the label and its
+                            predefined list of repositories for viewing will be
+                            removed. Deletion will not persist until Save System
+                            Settings is clicked.
+                        </Dialog>
+                    ) : null;
+                }}
+            </Observer>
+        );
+    }
+
+    private onDismissDeleteProjectLabelActionModal(): void {
+        isDeleteProjectLabelDialogOpenObservable.value = false;
+    }
+
+    private deleteProjectLabelAction(): void {
+        if (this.state.systemSettings?.projectRepositories) {
+            const systemSettings = this.state.systemSettings;
+            const projectRepositories = systemSettings.projectRepositories;
+            const projectLabelIdx = projectRepositories.findIndex(
+                (item) => item.id === this.state.projectLabelIdToDelete!
+            );
+            if (projectLabelIdx > -1) {
+                projectRepositories.splice(projectLabelIdx, 1);
+            }
+            systemSettings.projectRepositories = projectRepositories;
+            this.setState({
+                systemSettings: systemSettings,
+            });
+        }
+        this.onDismissDeleteProjectLabelActionModal();
+    }
+
+    private renderProjectRepositoriesTableLabelCell(
+        rowIndex: number,
+        columnIndex: number,
+        tableColumn: ITableColumn<Common.IProjectRepositories>,
+        tableItem: Common.IProjectRepositories
+    ): JSX.Element {
+        return (
+            <SimpleTableCell
+                key={'col-' + columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={tableColumn}
+                children={<>{tableItem.label}</>}
+            ></SimpleTableCell>
+        );
+    }
+
+    private renderProjectRepositoriesTableRepositoriesCell(
+        rowIndex: number,
+        columnIndex: number,
+        tableColumn: ITableColumn<Common.IProjectRepositories>,
+        tableItem: Common.IProjectRepositories
+    ): JSX.Element {
+        return (
+            <SimpleTableCell
+                key={'col-' + columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={tableColumn}
+                children={
+                    <>
+                        <Observer selection={tableItem.selections}>
+                            {() => {
+                                return (
+                                    <Dropdown
+                                        ariaLabel='Multiselect'
+                                        actions={[
+                                            {
+                                                className:
+                                                    'bolt-dropdown-action-right-button',
+                                                iconProps: {
+                                                    iconName: 'Accept',
+                                                },
+                                                text: 'Select All',
+                                                onClick: () => {
+                                                    tableItem.selections.select(
+                                                        0,
+                                                        this.allRepositories
+                                                            .length
+                                                    );
+                                                },
+                                            },
+                                            {
+                                                className:
+                                                    'bolt-dropdown-action-right-button',
+                                                disabled:
+                                                    tableItem.selections
+                                                        .selectedCount === 0,
+                                                iconProps: {
+                                                    iconName: 'Clear',
+                                                },
+                                                text: 'Clear',
+                                                onClick: () => {
+                                                    tableItem.selections.clear();
+                                                },
+                                            },
+                                        ]}
+                                        className='sprintly-dropdown-width-100'
+                                        items={this.allRepositories.map(
+                                            (item: Common.IAllowedEntity) =>
+                                                item.displayName
+                                        )}
+                                        selection={tableItem.selections}
+                                        placeholder='Select Individual Repositories'
+                                        showFilterBox={true}
+                                        onSelect={() => {
+                                            let systemSettings =
+                                                this.state.systemSettings!;
+                                            const projectRepoIdx: number =
+                                                systemSettings.projectRepositories.findIndex(
+                                                    (item) =>
+                                                        item.id === tableItem.id
+                                                );
+                                            if (projectRepoIdx > -1) {
+                                                const projectRepo: Common.IProjectRepositories =
+                                                    systemSettings
+                                                        .projectRepositories[
+                                                        projectRepoIdx
+                                                    ];
+                                                projectRepo.selections =
+                                                    tableItem.selections;
+                                                systemSettings.projectRepositories.splice(
+                                                    projectRepoIdx,
+                                                    1,
+                                                    projectRepo
+                                                );
+                                            }
+                                            this.setState({
+                                                systemSettings: systemSettings,
+                                            });
+                                        }}
+                                    />
+                                );
+                            }}
+                        </Observer>
+                    </>
+                }
+            ></SimpleTableCell>
         );
     }
 
@@ -571,6 +977,7 @@ export default class SprintlySettings extends React.Component<
                         onRenderNearElement={this.renderUserSettings}
                         onRenderFarElement={this.renderSystemSettings}
                     />
+                    {this.renderDeleteProjectRepositoriesAction()}
                 </div>
             </Page>
         );
