@@ -157,7 +157,7 @@ export default class SprintlyPage extends React.Component<
 
         this.setState({
             userSettings: userSettings,
-            systemSettings: systemSettings
+            systemSettings: systemSettings,
         });
 
         repositoriesToProcess = Common.getSavedRepositoriesToView(
@@ -472,59 +472,85 @@ export default class SprintlyPage extends React.Component<
                             }
                         />
                         &nbsp;
-                        <Button
-                            text='Create Branch'
-                            iconProps={{ iconName: 'OpenSource' }}
-                            primary={true}
-                            onClick={async () => {
-                                const createRefOptions: GitRefUpdate[] = [];
-                                const developBranch: GitBranchStats =
-                                    await getClient(GitRestClient).getBranch(
-                                        tableItem.id,
-                                        'develop'
-                                    );
+                        <Observer
+                            enteredValue={
+                                newReleaseBranchNamesObservable[rowIndex]
+                            }
+                        >
+                            {() => {
+                                return (
+                                    <Button
+                                        disabled={
+                                            newReleaseBranchNamesObservable[
+                                                rowIndex
+                                            ].value.trim() === ''
+                                        }
+                                        text='Create Branch'
+                                        iconProps={{ iconName: 'OpenSource' }}
+                                        primary={true}
+                                        onClick={async () => {
+                                            const createRefOptions: GitRefUpdate[] =
+                                                [];
+                                            const developBranch: GitBranchStats =
+                                                await getClient(
+                                                    GitRestClient
+                                                ).getBranch(
+                                                    tableItem.id,
+                                                    'develop'
+                                                );
 
-                                const newDevObjectId: string =
-                                    developBranch.commit.commitId;
+                                            const newDevObjectId: string =
+                                                developBranch.commit.commitId;
 
-                                createRefOptions.push({
-                                    repositoryId: tableItem.id,
-                                    name:
-                                        'refs/heads/release/' +
-                                        newReleaseBranchNamesObservable[
-                                            rowIndex
-                                        ].value,
-                                    isLocked: false,
-                                    newObjectId: newDevObjectId,
-                                    oldObjectId:
-                                        '0000000000000000000000000000000000000000',
-                                });
-                                const createRef: GitRefUpdateResult[] =
-                                    await getClient(GitRestClient).updateRefs(
-                                        createRefOptions,
-                                        tableItem.id
-                                    );
+                                            createRefOptions.push({
+                                                repositoryId: tableItem.id,
+                                                name:
+                                                    'refs/heads/release/' +
+                                                    newReleaseBranchNamesObservable[
+                                                        rowIndex
+                                                    ].value,
+                                                isLocked: false,
+                                                newObjectId: newDevObjectId,
+                                                oldObjectId:
+                                                    '0000000000000000000000000000000000000000',
+                                            });
+                                            const createRef: GitRefUpdateResult[] =
+                                                await getClient(
+                                                    GitRestClient
+                                                ).updateRefs(
+                                                    createRefOptions,
+                                                    tableItem.id
+                                                );
 
-                                newReleaseBranchNamesObservable[
-                                    rowIndex
-                                ].value = '';
-                                createRef.forEach(
-                                    async (ref: GitRefUpdateResult) => {
-                                        this.globalMessagesSvc.addToast({
-                                            duration: 5000,
-                                            forceOverrideExisting: true,
-                                            message: ref.success
-                                                ? 'Branch Created!'
-                                                : 'Error Creating Branch: ' +
-                                                  GitRefUpdateStatus[
-                                                      ref.updateStatus
-                                                  ],
-                                        });
-                                        await this.initializeComponent();
-                                    }
+                                            newReleaseBranchNamesObservable[
+                                                rowIndex
+                                            ].value = '';
+                                            createRef.forEach(
+                                                async (
+                                                    ref: GitRefUpdateResult
+                                                ) => {
+                                                    this.globalMessagesSvc.addToast(
+                                                        {
+                                                            duration: 5000,
+                                                            forceOverrideExisting:
+                                                                true,
+                                                            message: ref.success
+                                                                ? 'Branch Created!'
+                                                                : 'Error Creating Branch: ' +
+                                                                  GitRefUpdateStatus[
+                                                                      ref
+                                                                          .updateStatus
+                                                                  ],
+                                                        }
+                                                    );
+                                                    await this.initializeComponent();
+                                                }
+                                            );
+                                        }}
+                                    />
                                 );
                             }}
-                        />
+                        </Observer>
                     </>
                 }
             ></SimpleTableCell>
