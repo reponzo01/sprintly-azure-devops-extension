@@ -23,6 +23,8 @@ import SprintlySettings from './SprintlySettings';
 import * as Common from './SprintlyCommon';
 import { showRootComponent } from '../Common';
 import { IMenuItem } from 'azure-devops-ui/Menu';
+import { Link } from 'azure-devops-ui/Link';
+import { Icon, IconSize } from 'azure-devops-ui/Icon';
 
 const selectedTabKey: string = 'selected-tab';
 const userSettingsDataManagerKey: string = 'user-settings';
@@ -356,6 +358,23 @@ export default class FoundationSprintly extends React.Component<
                     title={title}
                     commandBarItems={this.getCommandBarItems()}
                     titleSize={TitleSize.Large}
+                    description={
+                        <>
+                            <Link
+                                href='#'
+                                tooltipProps={{
+                                    text: 'Repos without a develop or master/main branch will not be shown.',
+                                }}
+                            >
+                                Not seeing your repositories?{' '}
+                                <Icon
+                                    iconName='Info'
+                                    size={IconSize.medium}
+                                    className='sprintly-vertical-align-bottom'
+                                />
+                            </Link>
+                        </>
+                    }
                 />
                 <Observer userIsAllowedObservable={userIsAllowedObservable}>
                     {(props: {

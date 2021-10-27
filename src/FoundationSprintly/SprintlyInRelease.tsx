@@ -638,6 +638,7 @@ export default class SprintlyInRelease extends React.Component<
                 })
                 .catch((error: any) => {
                     if (error.response?.data?.message) {
+                        this.globalMessagesSvc.closeBanner();
                         this.globalMessagesSvc.addBanner({
                             dismissable: true,
                             level: MessageBannerLevel.error,

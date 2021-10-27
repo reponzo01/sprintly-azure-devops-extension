@@ -1157,6 +1157,7 @@ export default class SprintlyPostRelease extends React.Component<
             })
             .catch((error: any) => {
                 if (error.response?.data?.message) {
+                    this.globalMessagesSvc.closeBanner();
                     this.globalMessagesSvc.addBanner({
                         dismissable: true,
                         level: MessageBannerLevel.error,
@@ -1403,6 +1404,7 @@ export default class SprintlyPostRelease extends React.Component<
                 })
                 .catch((error: any) => {
                     if (error.response.status == 403) {
+                        this.globalMessagesSvc.closeBanner();
                         this.globalMessagesSvc.addBanner({
                             dismissable: true,
                             level: MessageBannerLevel.error,
