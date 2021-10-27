@@ -1,4 +1,5 @@
 import * as React from 'react';
+
 import axios, { AxiosResponse } from 'axios';
 
 import * as SDK from 'azure-devops-extension-sdk';
@@ -6,43 +7,69 @@ import {
     CommonServiceIds,
     getClient,
     IExtensionDataManager,
-    IExtensionDataService,
     IGlobalMessagesService,
 } from 'azure-devops-extension-api';
+
+import { TeamProjectReference } from 'azure-devops-extension-api/Core';
+import { GitRepository, GitRestClient } from 'azure-devops-extension-api/Git';
 
 import { Button } from 'azure-devops-ui/Button';
 import { Dropdown } from 'azure-devops-ui/Dropdown';
 import { Observer } from 'azure-devops-ui/Observer';
 import { DropdownMultiSelection } from 'azure-devops-ui/Utilities/DropdownSelection';
 import { ISelectionRange } from 'azure-devops-ui/Utilities/Selection';
+
+import * as Common from './SprintlyCommon';
+import { Card } from 'azure-devops-ui/Card';
+import { Page } from 'azure-devops-ui/Page';
+import { Header, TitleSize, CustomHeader } from 'azure-devops-ui/Header';
+import { HeaderCommandBar } from 'azure-devops-ui/HeaderCommandBar';
 import {
-    CoreRestClient,
-    TeamProjectReference,
-} from 'azure-devops-extension-api/Core';
-
-import { GitRepository, GitRestClient } from 'azure-devops-extension-api/Git';
-
-import { AllowedEntity } from './FoundationSprintly';
-
-const allowedUserGroupsKey: string = 'allowed-user-groups';
-const allowedUsersKey: string = 'allowed-users';
-const repositoriesToProcessKey: string = 'repositories-to-process';
+    Splitter,
+    SplitterDirection,
+    SplitterElementPosition,
+} from 'azure-devops-ui/Splitter';
+import { ObservableValue } from 'azure-devops-ui/Core/Observable';
+import { FormItem } from 'azure-devops-ui/FormItem';
+import { TextField, TextFieldStyle } from 'azure-devops-ui/TextField';
+import {
+    ISimpleTableCell,
+    ITableColumn,
+    renderSimpleCell,
+    SimpleTableCell,
+    Table,
+    TableColumnLayout,
+} from 'azure-devops-ui/Table';
+import { ISimpleListCell } from 'azure-devops-ui/List';
+import { ArrayItemProvider } from 'azure-devops-ui/Utilities/Provider';
+import { Dialog } from 'azure-devops-ui/Dialog';
 
 export interface ISprintlySettingsState {
-    dataAllowedUserGroups?: AllowedEntity[];
-    dataAllowedUsers?: AllowedEntity[];
-    dataRepositoriesToProcess?: AllowedEntity[];
-
-    persistedAllowedUserGroups?: AllowedEntity[];
-    persistedAllowedUsers?: AllowedEntity[];
-    persistedRepositoriesToProcess?: AllowedEntity[];
+    userSettings?: Common.IUserSettings;
+    systemSettings?: Common.ISystemSettings;
+    addProjectRepositoriesLabel?: string;
+    projectLabelIdToDelete?: string;
 
     ready?: boolean;
 }
 
+const addProjectRepositoriesLabelObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
+const isDeleteProjectLabelDialogOpenObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(false);
+
+const userSettingsDataManagerKey: string = 'user-settings';
+const systemSettingsDataManagerKey: string = 'system-settings';
+
+// TODO: Clean up arrow functions for the cases in which I thought I
+// couldn't use regular functions because the this.* was undefined errors.
+// The solution is to bind those functions to `this` in the constructor.
+// See SprintlyPostRelease as an example.
 export default class SprintlySettings extends React.Component<
     {
         organizationName: string;
+        globalMessagesSvc: IGlobalMessagesService;
+        dataManager?: IExtensionDataManager;
     },
     ISprintlySettingsState
 > {
@@ -53,63 +80,107 @@ export default class SprintlySettings extends React.Component<
     private repositoriesToProcessSelection: DropdownMultiSelection =
         new DropdownMultiSelection();
 
-    private allUserGroups: AllowedEntity[] = [];
-    private allUsers: AllowedEntity[] = [];
-    private allRepositories: AllowedEntity[] = [];
+    private allUserGroups: Common.IAllowedEntity[] = [];
+    private allUsers: Common.IAllowedEntity[] = [];
+    private allRepositories: Common.IAllowedEntity[] = [];
 
-    private _dataManager?: IExtensionDataManager;
+    private dataManager: IExtensionDataManager;
+    private globalMessagesSvc: IGlobalMessagesService;
     private accessToken: string = '';
     private organizationName: string;
 
-    constructor(props: { organizationName: string }) {
+    private projectRepositoriesTableColumns: any = [];
+
+    constructor(props: {
+        organizationName: string;
+        globalMessagesSvc: IGlobalMessagesService;
+        dataManager: IExtensionDataManager;
+    }) {
         super(props);
 
         this.state = {};
+
+        this.renderUserSettings = this.renderUserSettings.bind(this);
+        this.renderSystemSettings = this.renderSystemSettings.bind(this);
+        this.renderProjectRepositoriesTableRepositoriesCell =
+            this.renderProjectRepositoriesTableRepositoriesCell.bind(this);
+        this.renderProjectRepositoriesTableDeleteCell =
+            this.renderProjectRepositoriesTableDeleteCell.bind(this);
+        this.addProjectRepositoriesLabelAction =
+            this.addProjectRepositoriesLabelAction.bind(this);
+        this.deleteProjectLabelAction =
+            this.deleteProjectLabelAction.bind(this);
+
         this.organizationName = props.organizationName;
+        this.globalMessagesSvc = props.globalMessagesSvc;
+        this.dataManager = props.dataManager;
+
+        this.projectRepositoriesTableColumns = [
+            {
+                id: 'delete',
+                name: 'Delete',
+                renderCell: this.renderProjectRepositoriesTableDeleteCell,
+                width: new ObservableValue(-10),
+            },
+            {
+                id: 'projectLabel',
+                name: 'Project Label',
+                renderCell: this.renderProjectRepositoriesTableLabelCell,
+                width: new ObservableValue(-20),
+            },
+            {
+                id: 'repositories',
+                name: 'Repositories',
+                renderCell: this.renderProjectRepositoriesTableRepositoriesCell,
+                width: new ObservableValue(-50),
+            },
+        ];
     }
 
     public async componentDidMount(): Promise<void> {
-        await this.initializeSdk();
         await this.initializeComponent();
-    }
-
-    private async initializeSdk(): Promise<void> {
-        await SDK.init();
-        await SDK.ready();
     }
 
     private async initializeComponent(): Promise<void> {
         this.accessToken = await SDK.getAccessToken();
 
-        this._dataManager = await this.initializeDataManager();
+        await this.loadGroups();
+        await this.loadUsers();
+        await this.loadRepositories();
 
-        await this.getGroups();
-        await this.getUsers();
-        await this.getRepositories();
-
-        this.setState({ ready: true });
-
-        this.loadAllowedUserGroupsUsers();
-        this.loadAllowedUsers();
-        this.loadRepositoriesToProcess();
-    }
-
-    private async initializeDataManager(): Promise<IExtensionDataManager> {
-        const extDataService: IExtensionDataService =
-            await SDK.getService<IExtensionDataService>(
-                CommonServiceIds.ExtensionDataService
+        const userSettings: Common.IUserSettings | undefined =
+            await Common.getUserSettings(
+                this.dataManager,
+                userSettingsDataManagerKey
             );
-        return await extDataService.getExtensionDataManager(
-            SDK.getExtensionContext().id,
-            this.accessToken
-        );
+        const systemSettings: Common.ISystemSettings | undefined =
+            await Common.getSystemSettings(
+                this.dataManager,
+                systemSettingsDataManagerKey
+            );
+        if (systemSettings && systemSettings.projectRepositories) {
+            for (const item of systemSettings.projectRepositories) {
+                item.selections = new DropdownMultiSelection();
+            }
+        }
+
+        this.setState({
+            userSettings: userSettings,
+            systemSettings: systemSettings,
+            ready: true,
+        });
+
+        this.loadSystemSettingsValues();
+        this.loadUserSettingsValues();
+
+        this.setState({
+            ready: true,
+        });
     }
 
-    private async getGraphResource(
-        resouce: string,
-        callback: (data: any) => void
-    ): Promise<void> {
-        axios
+    private async getGraphResource(resouce: string): Promise<any> {
+        this.accessToken = await Common.getOrRefreshToken(this.accessToken);
+        const response: AxiosResponse<never> = await axios
             .get(
                 `https://vssps.dev.azure.com/${this.organizationName}/_apis/graph/${resouce}`,
                 {
@@ -118,232 +189,232 @@ export default class SprintlySettings extends React.Component<
                     },
                 }
             )
-            .then((res: AxiosResponse<never>) => {
-                callback(res.data);
-            })
             .catch((error: any) => {
                 console.error(error);
                 throw error;
             });
+        return response.data;
     }
 
-    private async getGroups(): Promise<void> {
-        return new Promise(
-            (resolve: (value: void | PromiseLike<void>) => void) => {
-                this.getGraphResource('groups', (data: any) => {
-                    this.allUserGroups = [];
-                    for (const group of data.value) {
-                        this.allUserGroups.push({
-                            displayName: group.displayName,
-                            originId: group.originId,
-                            descriptor: group.descriptor,
-                        });
-                    }
-                    resolve();
+    private async loadGroups(): Promise<void> {
+        this.allUserGroups = [];
+        const data: any = await this.getGraphResource('groups');
+        for (const group of data.value) {
+            this.allUserGroups.push({
+                displayName: group.displayName,
+                originId: group.originId,
+                descriptor: group.descriptor,
+            });
+        }
+    }
+
+    private async loadUsers(): Promise<void> {
+        this.allUsers = [];
+        const data: any = await this.getGraphResource('users');
+        for (const user of data.value) {
+            this.allUsers.push({
+                displayName: user.displayName,
+                originId: user.originId,
+                descriptor: user.descriptor,
+            });
+        }
+    }
+
+    private async loadRepositories(): Promise<void> {
+        this.allRepositories = [];
+        const filteredProjects: TeamProjectReference[] =
+            await Common.getFilteredProjects();
+        for (const project of filteredProjects) {
+            const repos: GitRepository[] = await getClient(
+                GitRestClient
+            ).getRepositories(project.id);
+            for (const repo of repos) {
+                this.allRepositories.push({
+                    originId: repo.id,
+                    displayName: repo.name,
                 });
             }
-        );
+        }
     }
 
-    private async getUsers(): Promise<void> {
-        return new Promise(
-            (resolve: (value: void | PromiseLike<void>) => void) => {
-                this.getGraphResource('users', (data: any) => {
-                    this.allUsers = [];
-                    for (const user of data.value) {
-                        this.allUsers.push({
-                            displayName: user.displayName,
-                            originId: user.originId,
-                            descriptor: user.descriptor,
-                        });
-                    }
-                    resolve();
-                });
-            }
-        );
+    private loadSystemSettingsValues(): void {
+        this.loadAllowedUserGroupsUsers();
+        this.loadAllowedUsers();
+        this.loadProjectRepositories();
     }
 
-    private async getRepositories(): Promise<void> {
-        return new Promise(
-            async (resolve: (value: void | PromiseLike<void>) => void) => {
-                this.allRepositories = [];
-                const projects: TeamProjectReference[] = await getClient(
-                    CoreRestClient
-                ).getProjects();
-                const filteredProjects: TeamProjectReference[] =
-                    projects.filter((project: TeamProjectReference) => {
-                        return (
-                            project.name === 'Portfolio' ||
-                            project.name === 'Sample Project'
-                        );
-                    });
-                for (const project of filteredProjects) {
-                    const repos: GitRepository[] = await getClient(
-                        GitRestClient
-                    ).getRepositories(project.id);
-                    repos.forEach((repo: GitRepository) => {
-                        this.allRepositories.push({
-                            originId: repo.id,
-                            displayName: repo.name,
-                        });
-                    });
-                }
-                resolve();
-            }
-        );
+    private loadUserSettingsValues(): void {
+        this.loadRepositoriesToProcess();
     }
 
     private loadAllowedUserGroupsUsers(): void {
-        this._dataManager!.getValue<AllowedEntity[]>(allowedUserGroupsKey).then(
-            (userGroups: AllowedEntity[]) => {
-                this.userGroupsSelection.clear();
-                if (userGroups) {
-                    for (const selectedUserGroup of userGroups) {
-                        const idx: number = this.allUserGroups.findIndex(
-                            (item: AllowedEntity) =>
-                                item.originId === selectedUserGroup.originId
-                        );
-                        if (idx >= 0) {
-                            this.userGroupsSelection.select(idx);
-                        }
-                    }
-                    this.setState({
-                        dataAllowedUserGroups: userGroups,
-                        persistedAllowedUserGroups: userGroups,
-                        ready: true,
-                    });
+        const userGroups: Common.IAllowedEntity[] | undefined =
+            this.state.systemSettings?.allowedUserGroups;
+        this.userGroupsSelection.clear();
+        if (userGroups) {
+            for (const selectedUserGroup of userGroups) {
+                const idx: number = this.allUserGroups.findIndex(
+                    (item: Common.IAllowedEntity) =>
+                        item.originId === selectedUserGroup.originId
+                );
+                if (idx > -1) {
+                    this.userGroupsSelection.select(idx);
                 }
-            },
-            () => {
-                this.setState({
-                    dataAllowedUserGroups: [],
-                    ready: true,
-                });
             }
-        );
+        }
     }
 
     private loadAllowedUsers(): void {
-        this._dataManager!.getValue<AllowedEntity[]>(allowedUsersKey).then(
-            (users: AllowedEntity[]) => {
-                this.usersSelection.clear();
-                if (users) {
-                    for (const selectedUser of users) {
-                        const idx: number = this.allUsers.findIndex(
-                            (user: AllowedEntity) =>
-                                user.originId === selectedUser.originId
-                        );
-                        if (idx >= 0) {
-                            this.usersSelection.select(idx);
-                        }
-                    }
-                    this.setState({
-                        dataAllowedUsers: users,
-                        persistedAllowedUsers: users,
-                        ready: true,
-                    });
+        const users: Common.IAllowedEntity[] | undefined =
+            this.state.systemSettings?.allowedUsers;
+        this.usersSelection.clear();
+        if (users) {
+            for (const selectedUser of users) {
+                const idx: number = this.allUsers.findIndex(
+                    (user: Common.IAllowedEntity) =>
+                        user.originId === selectedUser.originId
+                );
+                if (idx > -1) {
+                    this.usersSelection.select(idx);
                 }
-            },
-            () => {
-                this.setState({
-                    dataAllowedUsers: [],
-                    ready: true,
-                });
             }
-        );
+        }
+    }
+
+    private loadProjectRepositories(): void {
+        if (this.state.systemSettings?.projectRepositories) {
+            const systemSettings = this.state.systemSettings;
+            for (const projectRepository of systemSettings.projectRepositories) {
+                for (const selectedRepository of projectRepository.repositories) {
+                    const idx: number = this.allRepositories.findIndex(
+                        (repository: Common.IAllowedEntity) =>
+                            repository.originId === selectedRepository.originId
+                    );
+                    if (idx > -1) {
+                        projectRepository.selections.select(idx);
+                    }
+                }
+            }
+            this.setState({
+                systemSettings: systemSettings,
+            });
+        }
     }
 
     private loadRepositoriesToProcess(): void {
-        this._dataManager!.getValue<AllowedEntity[]>(repositoriesToProcessKey, {
-            scopeType: 'User',
-        }).then(
-            (repositories: AllowedEntity[]) => {
-                this.repositoriesToProcessSelection.clear();
-                if (repositories) {
-                    for (const selectedRepository of repositories) {
-                        const idx: number = this.allRepositories.findIndex(
-                            (repository: AllowedEntity) =>
-                                repository.originId ===
-                                selectedRepository.originId
-                        );
-                        if (idx >= 0) {
-                            this.repositoriesToProcessSelection.select(idx);
-                        }
-                    }
-                    this.setState({
-                        dataRepositoriesToProcess: repositories,
-                        persistedRepositoriesToProcess: repositories,
-                        ready: true,
-                    });
+        this.repositoriesToProcessSelection.clear();
+        if (this.state.userSettings?.myRepositories) {
+            for (const selectedRepository of this.state.userSettings
+                .myRepositories) {
+                const idx: number = this.allRepositories.findIndex(
+                    (repository: Common.IAllowedEntity) =>
+                        repository.originId === selectedRepository.originId
+                );
+                if (idx > -1) {
+                    this.repositoriesToProcessSelection.select(idx);
                 }
-            },
-            () => {
-                this.setState({
-                    dataRepositoriesToProcess: [],
-                    ready: true,
-                });
             }
-        );
+        }
     }
 
-    private onSaveData = (): void => {
+    private onSaveUserSettingsData = (): void => {
         this.setState({ ready: false });
 
-        const userGroupsSelectedArray: AllowedEntity[] = this.setSelectionRange(
-            this.userGroupsSelection.value,
-            this.allUserGroups
-        );
-        const usersSelectedArray: AllowedEntity[] = this.setSelectionRange(
-            this.usersSelection.value,
-            this.allUsers
-        );
-        const repositoriesSelectedArray: AllowedEntity[] =
-            this.setSelectionRange(
+        const repositoriesSelectedArray: Common.IAllowedEntity[] =
+            this.getSelectedRange(
                 this.repositoriesToProcessSelection.value,
                 this.allRepositories
             );
 
-        this._dataManager!.setValue<AllowedEntity[]>(
-            allowedUserGroupsKey,
-            userGroupsSelectedArray || []
+        let userSettings: Common.IUserSettings;
+
+        if (this.state.userSettings) {
+            userSettings = this.state.userSettings;
+            userSettings.myRepositories = repositoriesSelectedArray;
+        } else {
+            userSettings = {
+                myRepositories: repositoriesSelectedArray,
+                projectRepositoriesId: '',
+            };
+        }
+
+        this.dataManager!.setValue<Common.IUserSettings>(
+            userSettingsDataManagerKey,
+            userSettings,
+            { scopeType: 'User' }
         ).then(() => {
-            this._dataManager!.setValue<AllowedEntity[]>(
-                allowedUsersKey,
-                usersSelectedArray || []
-            ).then(() => {
-                this._dataManager!.setValue<AllowedEntity[]>(
-                    repositoriesToProcessKey,
-                    repositoriesSelectedArray || [],
-                    { scopeType: 'User' }
-                ).then(async () => {
-                    this.setState({
-                        ready: true,
-                        persistedRepositoriesToProcess:
-                            repositoriesSelectedArray,
-                        persistedAllowedUsers: usersSelectedArray,
-                        persistedAllowedUserGroups: userGroupsSelectedArray,
-                    });
-                    const globalMessagesSvc: IGlobalMessagesService =
-                        await SDK.getService<IGlobalMessagesService>(
-                            CommonServiceIds.GlobalMessagesService
-                        );
-                    globalMessagesSvc.addToast({
-                        duration: 3000,
-                        forceOverrideExisting: true,
-                        message: 'Settings saved successfully!',
-                    });
-                });
+            this.setState({
+                userSettings: userSettings,
+                ready: true,
+            });
+            this.globalMessagesSvc.addToast({
+                duration: 3000,
+                forceOverrideExisting: true,
+                message: 'User Settings saved successfully!',
             });
         });
     };
 
-    private setSelectionRange(
+    private onSaveSystemSettingsData = (): void => {
+        this.setState({ ready: false });
+
+        const userGroupsSelectedArray: Common.IAllowedEntity[] =
+            this.getSelectedRange(
+                this.userGroupsSelection.value,
+                this.allUserGroups
+            );
+        const usersSelectedArray: Common.IAllowedEntity[] =
+            this.getSelectedRange(this.usersSelection.value, this.allUsers);
+
+        let systemSettings: Common.ISystemSettings;
+
+        if (this.state.systemSettings) {
+            systemSettings = this.state.systemSettings;
+            systemSettings.allowedUserGroups = userGroupsSelectedArray;
+            systemSettings.allowedUsers = usersSelectedArray;
+
+            const projectRepos: Common.IProjectRepositories[] =
+                this.state.systemSettings.projectRepositories;
+            for (const projectRepo of projectRepos) {
+                const projectRepoSelectedArray: Common.IAllowedEntity[] =
+                    this.getSelectedRange(
+                        projectRepo.selections.value,
+                        this.allRepositories
+                    );
+                projectRepo.repositories = projectRepoSelectedArray;
+            }
+            systemSettings.projectRepositories = projectRepos;
+        } else {
+            systemSettings = {
+                allowedUserGroups: userGroupsSelectedArray,
+                allowedUsers: usersSelectedArray,
+                projectRepositories: [],
+            };
+        }
+
+        this.dataManager!.setValue<Common.ISystemSettings>(
+            systemSettingsDataManagerKey,
+            systemSettings
+        ).then(() => {
+            this.setState({
+                systemSettings: systemSettings,
+                ready: true,
+            });
+            this.globalMessagesSvc.addToast({
+                duration: 3000,
+                forceOverrideExisting: true,
+                message: 'System Settings saved successfully!',
+            });
+        });
+    };
+
+    private getSelectedRange(
         selectionRange: ISelectionRange[],
-        dataArray: AllowedEntity[]
-    ): AllowedEntity[] {
-        const selectedArray: AllowedEntity[] = [];
+        dataArray: Common.IAllowedEntity[]
+    ): Common.IAllowedEntity[] {
+        const selectedArray: Common.IAllowedEntity[] = [];
         for (const rng of selectionRange) {
-            const sliced: AllowedEntity[] = dataArray.slice(
+            const sliced: Common.IAllowedEntity[] = dataArray.slice(
                 rng.beginIndex,
                 rng.endIndex + 1
             );
@@ -356,13 +427,12 @@ export default class SprintlySettings extends React.Component<
 
     private renderUserGroupsDropdown(): JSX.Element {
         return (
-            /* tslint:disable */
-            <div className="flex-column">
+            <div className='page-content'>
                 <Observer selection={this.userGroupsSelection}>
                     {() => {
                         return (
                             <Dropdown
-                                ariaLabel="Multiselect"
+                                ariaLabel='Multiselect'
                                 actions={[
                                     {
                                         className:
@@ -377,31 +447,30 @@ export default class SprintlySettings extends React.Component<
                                         },
                                     },
                                 ]}
-                                className="example-dropdown flex-column"
+                                className='flex-column'
                                 items={this.allUserGroups.map(
-                                    (item) => item.displayName
+                                    (item: Common.IAllowedEntity) =>
+                                        item.displayName
                                 )}
                                 selection={this.userGroupsSelection}
-                                placeholder="Select User Groups"
+                                placeholder='Select User Groups'
                                 showFilterBox={true}
                             />
                         );
                     }}
                 </Observer>
             </div>
-            /* tslint:disable */
         );
     }
 
     private renderUsersDropdown(): JSX.Element {
         return (
-            /* tslint:disable */
-            <div className="flex-column">
+            <div className='page-content'>
                 <Observer selection={this.usersSelection}>
                     {() => {
                         return (
                             <Dropdown
-                                ariaLabel="Multiselect"
+                                ariaLabel='Multiselect'
                                 actions={[
                                     {
                                         className:
@@ -416,31 +485,30 @@ export default class SprintlySettings extends React.Component<
                                         },
                                     },
                                 ]}
-                                className="example-dropdown flex-column"
+                                className='flex-column'
                                 items={this.allUsers.map(
-                                    (item) => item.displayName
+                                    (item: Common.IAllowedEntity) =>
+                                        item.displayName
                                 )}
                                 selection={this.usersSelection}
-                                placeholder="Select Individual Users"
+                                placeholder='Select Individual Users'
                                 showFilterBox={true}
                             />
                         );
                     }}
                 </Observer>
             </div>
-            /* tslint:disable */
         );
     }
 
-    private renderRepositoriesDropdown(): JSX.Element {
+    private renderMyRepositoriesDropdown(): JSX.Element {
         return (
-            /* tslint:disable */
-            <div className="flex-column">
+            <div className='page-content'>
                 <Observer selection={this.repositoriesToProcessSelection}>
                     {() => {
                         return (
                             <Dropdown
-                                ariaLabel="Multiselect"
+                                ariaLabel='Multiselect'
                                 actions={[
                                     {
                                         className:
@@ -467,60 +535,453 @@ export default class SprintlySettings extends React.Component<
                                         },
                                     },
                                 ]}
-                                className="example-dropdown flex-column"
+                                className='flex-column'
                                 items={this.allRepositories.map(
-                                    (item) => item.displayName
+                                    (item: Common.IAllowedEntity) =>
+                                        item.displayName
                                 )}
                                 selection={this.repositoriesToProcessSelection}
-                                placeholder="Select Individual Repositories"
+                                placeholder='Select Individual Repositories'
                                 showFilterBox={true}
                             />
                         );
                     }}
                 </Observer>
             </div>
-            /* tslint:disable */
         );
     }
 
-    public render() {
-        const { ready } = this.state;
-
+    private renderAddProjectRepositoriesLabel(): JSX.Element {
         return (
-            /* tslint:disable */
-            <div className="page-content page-content-top flex-column rhythm-vertical-16">
-                <div>
-                    By default the Azure groups{' '}
-                    <u>
-                        <code>Dev Team Leads</code>
-                    </u>{' '}
-                    and{' '}
-                    <u>
-                        <code>DevOps</code>
-                    </u>{' '}
-                    have access to this extension. Use the dropdowns to add more{' '}
-                    groups or individual users. These two settings are global{' '}
-                    settings.
-                </div>
-                {this.renderUserGroupsDropdown()}
-                {this.renderUsersDropdown()}
-                <div>
-                    Select the repositories you want to process. This is a{' '}
-                    user-based setting. Everyone with access to this extension{' '}
-                    can select a different list.
-                </div>
-                {this.renderRepositoriesDropdown()}
-
-                <div className="bolt-button-group flex-row rhythm-horizontal-8">
-                    <Button
-                        text="Save Settings"
-                        primary={true}
-                        onClick={this.onSaveData}
-                        disabled={!ready}
-                    />
-                </div>
+            <div className='page-content'>
+                <Observer
+                    addProjectRepositoriesKey={
+                        addProjectRepositoriesLabelObservable
+                    }
+                >
+                    {(observerProps: { addProjectRepositoriesKey: string }) => {
+                        return (
+                            <>
+                                <FormItem label='Project Label *'>
+                                    <div className='flex-row rhythm-horizontal-16'>
+                                        <TextField
+                                            required={true}
+                                            value={
+                                                addProjectRepositoriesLabelObservable
+                                            }
+                                            onChange={(e, newValue) => {
+                                                addProjectRepositoriesLabelObservable.value =
+                                                    newValue;
+                                                this.setState({
+                                                    addProjectRepositoriesLabel:
+                                                        addProjectRepositoriesLabelObservable.value,
+                                                });
+                                            }}
+                                            style={TextFieldStyle.normal}
+                                        />
+                                        <Button
+                                            text='Add Project Label'
+                                            iconProps={{ iconName: 'Add' }}
+                                            primary={true}
+                                            disabled={
+                                                addProjectRepositoriesLabelObservable.value.trim() ===
+                                                ''
+                                            }
+                                            onClick={
+                                                this
+                                                    .addProjectRepositoriesLabelAction
+                                            }
+                                        />
+                                    </div>
+                                </FormItem>
+                                {this.state.systemSettings &&
+                                    this.state.systemSettings
+                                        .projectRepositories.length > 0 && (
+                                        <Table
+                                            ariaLabel='Project Repositories'
+                                            columns={
+                                                this
+                                                    .projectRepositoriesTableColumns
+                                            }
+                                            itemProvider={
+                                                new ArrayItemProvider<Common.IProjectRepositories>(
+                                                    this.state.systemSettings.projectRepositories
+                                                )
+                                            }
+                                            role='table'
+                                            containerClassName='h-scroll-auto'
+                                        />
+                                    )}
+                            </>
+                        );
+                    }}
+                </Observer>
             </div>
-            /* tslint:disable */
+        );
+    }
+
+    private addProjectRepositoriesLabelAction(): void {
+        let systemSettings: Common.ISystemSettings | undefined =
+            this.state.systemSettings;
+        if (!systemSettings) {
+            systemSettings = {
+                allowedUserGroups: [],
+                allowedUsers: [],
+                projectRepositories: [],
+            };
+        }
+        systemSettings.projectRepositories.push({
+            id: new Date().getTime().toString(),
+            label: this.state.addProjectRepositoriesLabel ?? '',
+            selections: new DropdownMultiSelection(),
+            repositories: [],
+        });
+
+        this.setState({
+            systemSettings: systemSettings,
+        });
+
+        addProjectRepositoriesLabelObservable.value = '';
+    }
+
+    private renderUserSettings(): JSX.Element {
+        return (
+            <Page>
+                <Header
+                    title='User Settings'
+                    titleSize={TitleSize.Medium}
+                    titleIconProps={{
+                        iconName: 'Contact',
+                        tooltipProps: {
+                            text: 'These settings affect just you ',
+                        },
+                    }}
+                    commandBarItems={[
+                        {
+                            iconProps: {
+                                iconName: 'Save',
+                            },
+                            id: 'savesuserettings',
+                            important: true,
+                            text: 'Save User Settings',
+                            isPrimary: true,
+                            onActivate: this.onSaveUserSettingsData,
+                            disabled: !this.state.ready,
+                        },
+                    ]}
+                />
+                <div className='page-content page-content-top'>
+                    <Card className='bolt-card-white'>
+                        <Page className='sprintly-width-100'>
+                            <Header
+                                title='My Repositories'
+                                titleSize={TitleSize.Medium}
+                                titleIconProps={{ iconName: 'Repo' }}
+                            />
+                            <div className='page-content page-content-top'>
+                                Select the repositories you want to view and
+                                process.
+                            </div>
+                            {this.renderMyRepositoriesDropdown()}
+                        </Page>
+                    </Card>
+                </div>
+            </Page>
+        );
+    }
+
+    private renderSystemSettings(): JSX.Element {
+        return (
+            <Page>
+                <Header
+                    title='System Settings'
+                    titleSize={TitleSize.Medium}
+                    titleIconProps={{
+                        iconName: 'People',
+                        tooltipProps: {
+                            text: 'These settings affect all users',
+                        },
+                    }}
+                    commandBarItems={[
+                        {
+                            iconProps: {
+                                iconName: 'Save',
+                            },
+                            id: 'savessystemettings',
+                            important: true,
+                            text: 'Save System Settings',
+                            isPrimary: true,
+                            onActivate: this.onSaveSystemSettingsData,
+                            disabled: !this.state.ready,
+                        },
+                    ]}
+                />
+                <div className='page-content page-content-top'>
+                    <Card className='bolt-card-white'>
+                        <Page className='sprintly-width-100'>
+                            <Header
+                                title='Permissions'
+                                titleSize={TitleSize.Medium}
+                                titleIconProps={{ iconName: 'Permissions' }}
+                            />
+                            <div className='page-content page-content-top'>
+                                By default the Azure groups{' '}
+                                <u>
+                                    <code>Dev Team Leads</code>
+                                </u>{' '}
+                                and{' '}
+                                <u>
+                                    <code>DevOps</code>
+                                </u>{' '}
+                                have access to this extension. Use the dropdowns
+                                to add more groups or individual users.
+                            </div>
+                            {this.renderUserGroupsDropdown()}
+                            {this.renderUsersDropdown()}
+                        </Page>
+                    </Card>
+                </div>
+                <div className='page-content'>
+                    <Card className='bolt-card-white'>
+                        <Page className='sprintly-width-100'>
+                            <Header
+                                title='Project Repositories'
+                                titleSize={TitleSize.Medium}
+                                titleIconProps={{ iconName: 'Repo' }}
+                            />
+                            <div className='page-content page-content-top'>
+                                Select predefined lists of repositories for
+                                projects/teams to help quickly identify which
+                                repositories are needed for a release.
+                            </div>
+                            {this.renderAddProjectRepositoriesLabel()}
+                        </Page>
+                    </Card>
+                </div>
+            </Page>
+        );
+    }
+
+    private renderProjectRepositoriesTableDeleteCell(
+        rowIndex: number,
+        columnIndex: number,
+        tableColumn: ITableColumn<Common.IProjectRepositories>,
+        tableItem: Common.IProjectRepositories
+    ): JSX.Element {
+        return (
+            <SimpleTableCell
+                key={'col-' + columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={tableColumn}
+                children={
+                    <>
+                        <Button
+                            iconProps={{
+                                iconName: 'Delete',
+                            }}
+                            tooltipProps={{ text: 'Delete Project Label' }}
+                            subtle={true}
+                            onClick={() => {
+                                this.setState({
+                                    projectLabelIdToDelete: tableItem.id,
+                                });
+                                isDeleteProjectLabelDialogOpenObservable.value =
+                                    true;
+                            }}
+                        />
+                    </>
+                }
+            ></SimpleTableCell>
+        );
+    }
+
+    private renderDeleteProjectRepositoriesAction(): JSX.Element {
+        return (
+            <Observer
+                isDeleteProjectLabelDialogOpen={
+                    isDeleteProjectLabelDialogOpenObservable
+                }
+            >
+                {(observerProps: {
+                    isDeleteProjectLabelDialogOpen: boolean;
+                }) => {
+                    return observerProps.isDeleteProjectLabelDialogOpen ? (
+                        <Dialog
+                            titleProps={{ text: 'Delete Project Label' }}
+                            footerButtonProps={[
+                                {
+                                    text: 'Cancel',
+                                    onClick:
+                                        this
+                                            .onDismissDeleteProjectLabelActionModal,
+                                },
+                                {
+                                    text: 'Delete',
+                                    onClick: this.deleteProjectLabelAction,
+                                    danger: true,
+                                },
+                            ]}
+                            onDismiss={
+                                this.onDismissDeleteProjectLabelActionModal
+                            }
+                        >
+                            This is a safe operation. Only the label and its
+                            predefined list of repositories for viewing will be
+                            removed. Deletion will not persist until Save System
+                            Settings is clicked.
+                        </Dialog>
+                    ) : null;
+                }}
+            </Observer>
+        );
+    }
+
+    private onDismissDeleteProjectLabelActionModal(): void {
+        isDeleteProjectLabelDialogOpenObservable.value = false;
+    }
+
+    private deleteProjectLabelAction(): void {
+        if (this.state.systemSettings?.projectRepositories) {
+            const systemSettings = this.state.systemSettings;
+            const projectRepositories = systemSettings.projectRepositories;
+            const projectLabelIdx = projectRepositories.findIndex(
+                (item) => item.id === this.state.projectLabelIdToDelete!
+            );
+            if (projectLabelIdx > -1) {
+                projectRepositories.splice(projectLabelIdx, 1);
+            }
+            systemSettings.projectRepositories = projectRepositories;
+            this.setState({
+                systemSettings: systemSettings,
+            });
+        }
+        this.onDismissDeleteProjectLabelActionModal();
+    }
+
+    private renderProjectRepositoriesTableLabelCell(
+        rowIndex: number,
+        columnIndex: number,
+        tableColumn: ITableColumn<Common.IProjectRepositories>,
+        tableItem: Common.IProjectRepositories
+    ): JSX.Element {
+        return (
+            <SimpleTableCell
+                key={'col-' + columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={tableColumn}
+                children={<>{tableItem.label}</>}
+            ></SimpleTableCell>
+        );
+    }
+
+    private renderProjectRepositoriesTableRepositoriesCell(
+        rowIndex: number,
+        columnIndex: number,
+        tableColumn: ITableColumn<Common.IProjectRepositories>,
+        tableItem: Common.IProjectRepositories
+    ): JSX.Element {
+        return (
+            <SimpleTableCell
+                key={'col-' + columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={tableColumn}
+                children={
+                    <>
+                        <Observer selection={tableItem.selections}>
+                            {() => {
+                                return (
+                                    <Dropdown
+                                        ariaLabel='Multiselect'
+                                        actions={[
+                                            {
+                                                className:
+                                                    'bolt-dropdown-action-right-button',
+                                                iconProps: {
+                                                    iconName: 'Accept',
+                                                },
+                                                text: 'Select All',
+                                                onClick: () => {
+                                                    tableItem.selections.select(
+                                                        0,
+                                                        this.allRepositories
+                                                            .length
+                                                    );
+                                                },
+                                            },
+                                            {
+                                                className:
+                                                    'bolt-dropdown-action-right-button',
+                                                disabled:
+                                                    tableItem.selections
+                                                        .selectedCount === 0,
+                                                iconProps: {
+                                                    iconName: 'Clear',
+                                                },
+                                                text: 'Clear',
+                                                onClick: () => {
+                                                    tableItem.selections.clear();
+                                                },
+                                            },
+                                        ]}
+                                        className='sprintly-dropdown-width-100'
+                                        items={this.allRepositories.map(
+                                            (item: Common.IAllowedEntity) =>
+                                                item.displayName
+                                        )}
+                                        selection={tableItem.selections}
+                                        placeholder='Select Individual Repositories'
+                                        showFilterBox={true}
+                                        onSelect={() => {
+                                            let systemSettings =
+                                                this.state.systemSettings!;
+                                            const projectRepoIdx: number =
+                                                systemSettings.projectRepositories.findIndex(
+                                                    (item) =>
+                                                        item.id === tableItem.id
+                                                );
+                                            if (projectRepoIdx > -1) {
+                                                const projectRepo: Common.IProjectRepositories =
+                                                    systemSettings
+                                                        .projectRepositories[
+                                                        projectRepoIdx
+                                                    ];
+                                                projectRepo.selections =
+                                                    tableItem.selections;
+                                                systemSettings.projectRepositories.splice(
+                                                    projectRepoIdx,
+                                                    1,
+                                                    projectRepo
+                                                );
+                                            }
+                                            this.setState({
+                                                systemSettings: systemSettings,
+                                            });
+                                        }}
+                                    />
+                                );
+                            }}
+                        </Observer>
+                    </>
+                }
+            ></SimpleTableCell>
+        );
+    }
+
+    public render(): JSX.Element {
+        return (
+            <Page>
+                <div className='page-content page-content-top flex-column rhythm-vertical-16'>
+                    <Splitter
+                        fixedElement={SplitterElementPosition.Near}
+                        splitterDirection={SplitterDirection.Vertical}
+                        nearElementClassName='v-scroll-auto custom-scrollbar'
+                        farElementClassName='v-scroll-auto custom-scrollbar'
+                        onRenderNearElement={this.renderUserSettings}
+                        onRenderFarElement={this.renderSystemSettings}
+                    />
+                    {this.renderDeleteProjectRepositoriesAction()}
+                </div>
+            </Page>
         );
     }
 }

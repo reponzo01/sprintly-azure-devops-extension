@@ -7,22 +7,20 @@ import {
     CommonServiceIds,
     getClient,
     IExtensionDataManager,
-    IExtensionDataService,
     IGlobalMessagesService,
 } from 'azure-devops-extension-api';
 
-import {
-    CoreRestClient,
-    TeamProjectReference,
-} from 'azure-devops-extension-api/Core';
+import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
     GitRestClient,
     GitBaseVersionDescriptor,
     GitTargetVersionDescriptor,
     GitRepository,
     GitRefUpdate,
-    GitRef,
     GitCommitDiffs,
+    GitRefUpdateStatus,
+    GitBranchStats,
+    GitRefUpdateResult,
 } from 'azure-devops-extension-api/Git';
 import {
     Table,
@@ -30,233 +28,189 @@ import {
     SimpleTableCell,
     TwoLineTableCell,
 } from 'azure-devops-ui/Table';
-import { Link } from 'azure-devops-ui/Link';
 import { Pill, PillVariant, PillSize } from 'azure-devops-ui/Pill';
 import { Button } from 'azure-devops-ui/Button';
 import { TextField } from 'azure-devops-ui/TextField';
 import { IColor } from 'azure-devops-ui/Utilities/Color';
 import { Spinner } from 'azure-devops-ui/Spinner';
-import { Icon } from 'azure-devops-ui/Icon';
+import { Icon, IconSize } from 'azure-devops-ui/Icon';
 import { ArrayItemProvider } from 'azure-devops-ui/Utilities/Provider';
 import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
-import { Dialog } from 'azure-devops-ui/Dialog';
-import { SimpleList } from 'azure-devops-ui/List';
-import { AllowedEntity } from './FoundationSprintly';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
 
+import * as Common from './SprintlyCommon';
+import { TagsModal, ITagsModalContent, getTagsModalContent } from './TagsModal';
+import { Card } from 'azure-devops-ui/Card';
+
 export interface ISprintlyPageState {
-    repositories?: ArrayItemProvider<GitRepositoryExtended>;
+    userSettings?: Common.IUserSettings;
+    systemSettings?: Common.ISystemSettings;
+    repositories?: ArrayItemProvider<Common.IGitRepositoryExtended>;
 }
 
-export interface GitRepositoryExtended extends GitRepository {
-    hasExistingRelease: boolean;
-    existingReleaseNames: string[];
-    createRelease: boolean;
-    refs: GitRef[];
-}
-
+//#region "Observables"
 const newReleaseBranchNamesObservable: Array<ObservableValue<string>> = [];
-const isTagsDialogOpen: ObservableValue<boolean> = new ObservableValue<boolean>(
-    false
+const tagsModalKeyObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
+const isTagsDialogOpenObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(false);
+const tagsRepoNameObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
+const tagsObservable: ObservableValue<string[]> = new ObservableValue<string[]>(
+    []
 );
-const tagsRepoName: ObservableValue<string> = new ObservableValue<string>('');
-const tags: ObservableValue<string[]> = new ObservableValue<string[]>([]);
-const totalRepositoriesToProcess: ObservableValue<number> =
+const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
 
-const columns: any = [
-    {
-        id: 'name',
-        name: 'Repository',
-        onSize,
-        renderCell: renderName,
-        width: new ObservableValue(-30),
-    },
-    {
-        id: 'releaseNeeded',
-        name: 'Release Needed?',
-        onSize,
-        renderCell: renderReleaseNeeded,
-        width: new ObservableValue(-30),
-    },
-    {
-        id: 'tags',
-        name: 'Tags',
-        onSize,
-        renderCell: renderTags,
-        width: new ObservableValue(-30),
-    },
-    {
-        id: 'createReleaseBranch',
-        name: 'Create Release Branch',
-        renderCell: renderCreateReleaseBranch,
-        width: new ObservableValue(-40),
-    },
-];
+const nameColumnWidthObservable: ObservableValue<number> =
+    new ObservableValue<number>(-30);
+const releaseNeededColumnWidthObservable: ObservableValue<number> =
+    new ObservableValue<number>(-30);
+const tagsColumnWidthObservable: ObservableValue<number> =
+    new ObservableValue<number>(-30);
+const createReleaseBranchColumnWidthObservable: ObservableValue<number> =
+    new ObservableValue<number>(-40);
+//#endregion "Observables"
 
-const useFilteredRepos: boolean = true;
-const repositoriesToProcessKey: string = 'repositories-to-process';
+const userSettingsDataManagerKey: string = 'user-settings';
+const systemSettingsDataManagerKey: string = 'system-settings';
+
 let repositoriesToProcess: string[] = [];
 
-export class SprintlyPage extends React.Component<{}, ISprintlyPageState> {
-    private _dataManager?: IExtensionDataManager;
-    private accessToken: string = '';
+// TODO: Clean up arrow functions for the cases in which I thought I
+// couldn't use regular functions because the this.* was undefined errors.
+// The solution is to bind those functions to `this` in the constructor.
+// See SprintlyPostRelease as an example.
+export default class SprintlyPage extends React.Component<
+    {
+        dataManager: IExtensionDataManager;
+        globalMessagesSvc: IGlobalMessagesService;
+    },
+    ISprintlyPageState
+> {
+    private dataManager: IExtensionDataManager;
+    private globalMessagesSvc: IGlobalMessagesService;
 
-    constructor(props: {}) {
+    private columns: any = [];
+
+    constructor(props: {
+        dataManager: IExtensionDataManager;
+        globalMessagesSvc: IGlobalMessagesService;
+    }) {
         super(props);
 
+        this.onSize = this.onSize.bind(this);
+        this.renderCreateReleaseBranchCell =
+            this.renderCreateReleaseBranchCell.bind(this);
+
+        this.columns = [
+            {
+                id: 'name',
+                name: 'Repository',
+                onSize: this.onSize,
+                renderCell: this.renderNameCell,
+                width: nameColumnWidthObservable,
+            },
+            {
+                id: 'releaseNeeded',
+                name: 'Release Needed?',
+                onSize: this.onSize,
+                renderCell: this.renderReleaseNeededCell,
+                width: releaseNeededColumnWidthObservable,
+            },
+            {
+                id: 'tags',
+                name: 'Tags',
+                onSize: this.onSize,
+                renderCell: this.renderTagsCell,
+                width: tagsColumnWidthObservable,
+            },
+            {
+                id: 'createReleaseBranch',
+                name: 'Create Release Branch',
+                renderCell: this.renderCreateReleaseBranchCell,
+                width: createReleaseBranchColumnWidthObservable,
+            },
+        ];
+
         this.state = {};
+        this.dataManager = props.dataManager;
+        this.globalMessagesSvc = props.globalMessagesSvc;
     }
 
     public async componentDidMount(): Promise<void> {
-        await this.initializeSdk();
         await this.initializeComponent();
     }
 
-    private async initializeSdk(): Promise<void> {
-        await SDK.init();
-        await SDK.ready();
-    }
-
     private async initializeComponent(): Promise<void> {
-        // TODO: Extract this into methods to make more readable
-        this.accessToken = await SDK.getAccessToken();
-
-        this._dataManager = await this.initializeDataManager();
-
-        this.loadRepositoriesToProcess();
-    }
-
-    private async initializeDataManager(): Promise<IExtensionDataManager> {
-        const extDataService: IExtensionDataService =
-            await SDK.getService<IExtensionDataService>(
-                CommonServiceIds.ExtensionDataService
+        const userSettings: Common.IUserSettings | undefined =
+            await Common.getUserSettings(
+                this.dataManager,
+                userSettingsDataManagerKey
             );
-        return await extDataService.getExtensionDataManager(
-            SDK.getExtensionContext().id,
-            this.accessToken
-        );
-    }
+        const systemSettings: Common.ISystemSettings | undefined =
+            await Common.getSystemSettings(
+                this.dataManager,
+                systemSettingsDataManagerKey
+            );
 
-    private loadRepositoriesToProcess(): void {
-        this._dataManager!.getValue<AllowedEntity[]>(repositoriesToProcessKey, {
-            scopeType: 'User',
-        }).then(async (repositories: AllowedEntity[]) => {
-            repositoriesToProcess = [];
-            if (repositories) {
-                for (const repository of repositories) {
-                    repositoriesToProcess.push(repository.originId);
-                }
-
-                if (repositoriesToProcess.length > 0) {
-                    const projects: TeamProjectReference[] = await getClient(
-                        CoreRestClient
-                    ).getProjects();
-
-                    const filteredProjects: TeamProjectReference[] =
-                        projects.filter((project: TeamProjectReference) => {
-                            return (
-                                project.name === 'Portfolio' ||
-                                project.name === 'Sample Project'
-                            );
-                        });
-                    this.loadRepositoriesDisplayState(filteredProjects);
-                }
-            }
+        this.setState({
+            userSettings: userSettings,
+            systemSettings: systemSettings,
         });
+
+        repositoriesToProcess = Common.getSavedRepositoriesToView(
+            this.state.userSettings,
+            this.state.systemSettings
+        );
+
+        totalRepositoriesToProcessObservable.value =
+            repositoriesToProcess.length;
+        if (repositoriesToProcess.length > 0) {
+            await this.loadRepositoriesDisplayState(
+                await Common.getFilteredProjects()
+            );
+        }
     }
 
-    private loadRepositoriesDisplayState(
+    private async loadRepositoriesDisplayState(
         projects: TeamProjectReference[]
-    ): void {
-        const reposExtended: GitRepositoryExtended[] = [];
-        projects.forEach(async (project: TeamProjectReference) => {
-            const repos: GitRepository[] = await getClient(
-                GitRestClient
-            ).getRepositories(project.id);
-            let filteredRepos: GitRepository[] = repos;
-            if (useFilteredRepos) {
-                filteredRepos = repos.filter((repo: GitRepository) =>
-                    repositoriesToProcess.includes(repo.id)
+    ): Promise<void> {
+        const reposExtended: Common.IGitRepositoryExtended[] = [];
+        for (const project of projects) {
+            const filteredRepos: GitRepository[] =
+                await Common.getFilteredProjectRepositories(
+                    project.id,
+                    repositoriesToProcess
                 );
-            }
 
-            totalRepositoriesToProcess.value = filteredRepos.length;
+            totalRepositoriesToProcessObservable.value = filteredRepos.length;
 
-            filteredRepos.forEach(async (repo: GitRepository) => {
-                const refs: GitRef[] = await getClient(GitRestClient).getRefs(
-                    repo.id,
-                    undefined,
-                    undefined,
-                    true,
-                    true,
-                    undefined,
-                    undefined,
-                    false,
-                    undefined
-                );
-                let hasDevelop: boolean = false;
-                let hasMaster: boolean = false;
-                let hasMain: boolean = false;
-
-                for (const ref of refs) {
-                    if (ref.name.includes('heads/develop')) {
-                        hasDevelop = true;
-                    } else if (ref.name.includes('heads/master')) {
-                        hasMaster = true;
-                    } else if (ref.name.includes('heads/main')) {
-                        hasMain = true;
-                    }
-                }
+            for (const repo of filteredRepos) {
+                const repositoryBranchInfo: Common.IRepositoryBranchInfo =
+                    await Common.getRepositoryBranchesInfo(repo.id);
 
                 const processRepo: boolean =
-                    hasDevelop && (hasMaster || hasMain);
+                    repositoryBranchInfo.hasDevelopBranch &&
+                    (repositoryBranchInfo.hasMasterBranch ||
+                        repositoryBranchInfo.hasMainBranch);
+
                 if (processRepo === true) {
-                    const baseVersion: GitBaseVersionDescriptor = {
-                        baseVersion: hasMaster ? 'master' : 'main',
-                        baseVersionOptions: 0,
-                        baseVersionType: 0,
-                        version: hasMaster ? 'master' : 'main',
-                        versionOptions: 0,
-                        versionType: 0,
-                    };
-                    const targetVersion: GitTargetVersionDescriptor = {
-                        targetVersion: 'develop',
-                        targetVersionOptions: 0,
-                        targetVersionType: 0,
-                        version: 'develop',
-                        versionOptions: 0,
-                        versionType: 0,
-                    };
+                    const createRelease: boolean =
+                        await this.isDevelopAheadOfMasterMain(
+                            repositoryBranchInfo,
+                            repo.id
+                        );
 
-                    const commitsDiff: GitCommitDiffs = await getClient(
-                        GitRestClient
-                    ).getCommitDiffs(
-                        repo.id,
-                        undefined,
-                        undefined,
-                        1000,
-                        0,
-                        baseVersion,
-                        targetVersion
-                    );
-
-                    let createRelease: boolean = true;
-                    if (!this.codeChangesInCommitDiffs(commitsDiff)) {
-                        createRelease = false;
+                    const existingReleaseBranches: Common.IReleaseBranchInfo[] =
+                        [];
+                    for (const releaseBranch of repositoryBranchInfo.releaseBranches) {
+                        existingReleaseBranches.push({
+                            targetBranch: releaseBranch,
+                            repositoryId: repo.id,
+                        });
                     }
-
-                    const existingReleaseNames: string[] = [];
-                    let hasExistingRelease: boolean = false;
-                    refs.forEach((ref: GitRef) => {
-                        if (ref.name.includes('heads/release')) {
-                            hasExistingRelease = true;
-                            const refNameSplit: string[] =
-                                ref.name.split('heads/');
-                            existingReleaseNames.push(refNameSplit[1]);
-                        }
-                    });
 
                     reposExtended.push({
                         _links: repo._links,
@@ -273,342 +227,382 @@ export class SprintlyPage extends React.Component<{}, ISprintlyPageState> {
                         validRemoteUrls: repo.validRemoteUrls,
                         webUrl: repo.webUrl,
                         createRelease,
-                        hasExistingRelease,
-                        existingReleaseNames,
-                        refs,
-                    });
-                    this.setState({
-                        repositories: new ArrayItemProvider(
-                            reposExtended.sort(
-                                (
-                                    a: GitRepositoryExtended,
-                                    b: GitRepositoryExtended
-                                ) => {
-                                    return a.name.localeCompare(b.name);
-                                }
-                            )
-                        ),
+                        hasExistingRelease:
+                            repositoryBranchInfo.releaseBranches.length > 0,
+                        hasMainBranch: repositoryBranchInfo.hasMainBranch,
+                        existingReleaseBranches,
+                        branchesAndTags:
+                            repositoryBranchInfo.allBranchesAndTags,
                     });
                 }
+            }
+
+            this.setState({
+                repositories: new ArrayItemProvider(
+                    Common.sortRepositoryList(reposExtended)
+                ),
             });
-        });
+        }
     }
 
-    private codeChangesInCommitDiffs(commitsDiff: GitCommitDiffs): boolean {
+    private async isDevelopAheadOfMasterMain(
+        repositoryBranchInfo: Common.IRepositoryBranchInfo,
+        repositoryId: string
+    ): Promise<boolean> {
+        const baseVersion: GitBaseVersionDescriptor = {
+            baseVersion: repositoryBranchInfo.hasMasterBranch
+                ? 'master'
+                : 'main',
+            baseVersionOptions: 0,
+            baseVersionType: 0,
+            version: repositoryBranchInfo.hasMasterBranch ? 'master' : 'main',
+            versionOptions: 0,
+            versionType: 0,
+        };
+        const targetVersion: GitTargetVersionDescriptor = {
+            targetVersion: 'develop',
+            targetVersionOptions: 0,
+            targetVersionType: 0,
+            version: 'develop',
+            versionOptions: 0,
+            versionType: 0,
+        };
+
+        const commitsDiff: GitCommitDiffs = await Common.getCommitDiffs(
+            repositoryId,
+            baseVersion,
+            targetVersion
+        );
+
+        return Common.codeChangesInCommitDiffs(commitsDiff);
+    }
+
+    private tagsModal(): JSX.Element {
         return (
-            Object.keys(commitsDiff.changeCounts).length > 0 ||
-            commitsDiff.changes.length > 0
+            <Observer isTagsDialogOpen={isTagsDialogOpenObservable}>
+                {(props: { isTagsDialogOpen: boolean }) => {
+                    return (
+                        <TagsModal
+                            key={tagsModalKeyObservable.value}
+                            isTagsDialogOpen={props.isTagsDialogOpen}
+                            tagsRepoName={tagsRepoNameObservable.value}
+                            tags={tagsObservable.value}
+                            closeMe={() => {
+                                isTagsDialogOpenObservable.value = false;
+                            }}
+                        ></TagsModal>
+                    );
+                }}
+            </Observer>
         );
     }
 
-    public render(): JSX.Element {
-        const onDismiss: () => void = () => {
-            isTagsDialogOpen.value = false;
-        };
+    private renderNameCell(
+        rowIndex: number,
+        columnIndex: number,
+        tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
+        tableItem: Common.IGitRepositoryExtended
+    ): JSX.Element {
         return (
-            /* tslint:disable */
-            <Observer totalRepositoriesToProcess={totalRepositoriesToProcess}>
-                {(props: { totalRepositoriesToProcess: number }) => {
-                    if (totalRepositoriesToProcess.value > 0) {
-                        return (
-                            <div className="page-content page-content-top flex-column rhythm-vertical-16">
-                                {!this.state.repositories && (
-                                    <div className="flex-row">
-                                        <Spinner label="loading" />
-                                    </div>
-                                )}
-                                {this.state.repositories && (
-                                    <Table
-                                        columns={columns}
-                                        itemProvider={this.state.repositories}
+            <SimpleTableCell
+                key={'col-' + columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={tableColumn}
+                children={
+                    <>
+                        <Icon
+                            ariaLabel='Repository'
+                            iconName='Repo'
+                            size={IconSize.large}
+                        />{' '}
+                        {Common.repositoryLinkJsxElement(
+                            tableItem.webUrl,
+                            '',
+                            tableItem.name
+                        )}
+                    </>
+                }
+            ></SimpleTableCell>
+        );
+    }
+
+    private renderReleaseNeededCell(
+        rowIndex: number,
+        columnIndex: number,
+        tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
+        tableItem: Common.IGitRepositoryExtended
+    ): JSX.Element {
+        let color: IColor = Common.redColor;
+        let text: string = 'No';
+        if (tableItem.createRelease === true) {
+            color = Common.greenColor;
+            text = 'Yes';
+        }
+        if (tableItem.hasExistingRelease === true) {
+            color = Common.orangeColor;
+            text = 'Release Exists';
+        }
+        if (tableItem.hasExistingRelease) {
+            const releaseBranchLinks: JSX.Element[] = [];
+            let counter: number = 0;
+            for (const releaseBranch of tableItem.existingReleaseBranches) {
+                const releaseBranchName: string =
+                    releaseBranch.targetBranch.name.split('heads/')[1];
+                releaseBranchLinks.push(
+                    Common.branchLinkJsxElement(
+                        counter + 'link',
+                        tableItem.webUrl,
+                        releaseBranchName,
+                        ''
+                    )
+                );
+                counter++;
+            }
+
+            return (
+                <TwoLineTableCell
+                    className={'flex-direction-col'}
+                    key={'col-' + columnIndex}
+                    columnIndex={columnIndex}
+                    tableColumn={tableColumn}
+                    line1={
+                        <>
+                            <Pill
+                                color={color}
+                                size={PillSize.large}
+                                variant={PillVariant.colored}
+                                iconProps={{ iconName: 'Warning' }}
+                                className='bolt-list-overlay'
+                            >
+                                <b>{text}</b>
+                            </Pill>
+                        </>
+                    }
+                    line2={<>{releaseBranchLinks}</>}
+                ></TwoLineTableCell>
+            );
+        }
+        return (
+            <SimpleTableCell
+                key={'col-' + columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={tableColumn}
+                children={
+                    <>
+                        <Pill
+                            color={color}
+                            size={PillSize.large}
+                            variant={PillVariant.colored}
+                            className='bolt-list-overlay'
+                        >
+                            <b>{text}</b>
+                        </Pill>
+                    </>
+                }
+            ></SimpleTableCell>
+        );
+    }
+
+    private renderTagsCell(
+        rowIndex: number,
+        columnIndex: number,
+        tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
+        tableItem: Common.IGitRepositoryExtended
+    ): JSX.Element {
+        return (
+            <SimpleTableCell
+                key={'col-' + columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={tableColumn}
+                children={
+                    <>
+                        <Button
+                            text='View Tags'
+                            subtle={true}
+                            iconProps={{ iconName: 'Tag' }}
+                            onClick={() => {
+                                tagsModalKeyObservable.value = new Date()
+                                    .getTime()
+                                    .toString();
+                                isTagsDialogOpenObservable.value = true;
+                                const modalContent: ITagsModalContent =
+                                    getTagsModalContent(
+                                        tableItem.name,
+                                        tableItem.branchesAndTags
+                                    );
+                                tagsRepoNameObservable.value =
+                                    modalContent.modalName;
+                                tagsObservable.value = modalContent.modalValues;
+                            }}
+                        />
+                    </>
+                }
+            ></SimpleTableCell>
+        );
+    }
+
+    private renderCreateReleaseBranchCell(
+        rowIndex: number,
+        columnIndex: number,
+        tableColumn: ITableColumn<Common.IGitRepositoryExtended>,
+        tableItem: Common.IGitRepositoryExtended
+    ): JSX.Element {
+        newReleaseBranchNamesObservable[rowIndex] = new ObservableValue<string>(
+            ''
+        );
+        return (
+            <SimpleTableCell
+                key={'col-' + columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={tableColumn}
+                children={
+                    <>
+                        release /&nbsp;
+                        <TextField
+                            value={newReleaseBranchNamesObservable[rowIndex]}
+                            onChange={(
+                                e: React.ChangeEvent<
+                                    HTMLInputElement | HTMLTextAreaElement
+                                >,
+                                newValue: string
+                            ) =>
+                                (newReleaseBranchNamesObservable[
+                                    rowIndex
+                                ].value = newValue.trim())
+                            }
+                        />
+                        &nbsp;
+                        <Observer
+                            enteredValue={
+                                newReleaseBranchNamesObservable[rowIndex]
+                            }
+                        >
+                            {() => {
+                                return (
+                                    <Button
+                                        disabled={
+                                            newReleaseBranchNamesObservable[
+                                                rowIndex
+                                            ].value.trim() === ''
+                                        }
+                                        text='Create Branch'
+                                        iconProps={{ iconName: 'OpenSource' }}
+                                        primary={true}
+                                        onClick={async () => {
+                                            const createRefOptions: GitRefUpdate[] =
+                                                [];
+                                            const developBranch: GitBranchStats =
+                                                await getClient(
+                                                    GitRestClient
+                                                ).getBranch(
+                                                    tableItem.id,
+                                                    'develop'
+                                                );
+
+                                            const newDevObjectId: string =
+                                                developBranch.commit.commitId;
+
+                                            createRefOptions.push({
+                                                repositoryId: tableItem.id,
+                                                name:
+                                                    'refs/heads/release/' +
+                                                    newReleaseBranchNamesObservable[
+                                                        rowIndex
+                                                    ].value,
+                                                isLocked: false,
+                                                newObjectId: newDevObjectId,
+                                                oldObjectId:
+                                                    '0000000000000000000000000000000000000000',
+                                            });
+                                            const createRef: GitRefUpdateResult[] =
+                                                await getClient(
+                                                    GitRestClient
+                                                ).updateRefs(
+                                                    createRefOptions,
+                                                    tableItem.id
+                                                );
+
+                                            newReleaseBranchNamesObservable[
+                                                rowIndex
+                                            ].value = '';
+                                            createRef.forEach(
+                                                async (
+                                                    ref: GitRefUpdateResult
+                                                ) => {
+                                                    this.globalMessagesSvc.addToast(
+                                                        {
+                                                            duration: 5000,
+                                                            forceOverrideExisting:
+                                                                true,
+                                                            message: ref.success
+                                                                ? 'Branch Created!'
+                                                                : 'Error Creating Branch: ' +
+                                                                  GitRefUpdateStatus[
+                                                                      ref
+                                                                          .updateStatus
+                                                                  ],
+                                                        }
+                                                    );
+                                                    await this.initializeComponent();
+                                                }
+                                            );
+                                        }}
                                     />
+                                );
+                            }}
+                        </Observer>
+                    </>
+                }
+            ></SimpleTableCell>
+        );
+    }
+
+    private onSize(event: MouseEvent, index: number, width: number): void {
+        (this.columns[index].width as ObservableValue<number>).value = width;
+    }
+
+    public render(): JSX.Element {
+        return (
+            <Observer
+                totalRepositoriesToProcess={
+                    totalRepositoriesToProcessObservable
+                }
+            >
+                {(props: { totalRepositoriesToProcess: number }) => {
+                    if (props.totalRepositoriesToProcess > 0) {
+                        return !this.state.repositories ? (
+                            <Spinner label='loading' />
+                        ) : (
+                            <div className='page-content page-content-top flex-column rhythm-vertical-16'>
+                                {this.state.repositories && (
+                                    <Card className='bolt-table-card bolt-card-white'>
+                                        <Table
+                                            columns={this.columns}
+                                            itemProvider={
+                                                this.state.repositories
+                                            }
+                                        />
+                                    </Card>
                                 )}
-                                <Observer
-                                    isTagsDialogOpen={isTagsDialogOpen}
-                                    tagsRepoName={tagsRepoName}
-                                >
-                                    {(props: {
-                                        isTagsDialogOpen: boolean;
-                                        tagsRepoName: string;
-                                    }) => {
-                                        return props.isTagsDialogOpen ? (
-                                            <Dialog
-                                                titleProps={{
-                                                    text: props.tagsRepoName,
-                                                }}
-                                                footerButtonProps={[
-                                                    {
-                                                        text: 'Close',
-                                                        onClick: onDismiss,
-                                                    },
-                                                ]}
-                                                onDismiss={onDismiss}
-                                            >
-                                                <SimpleList
-                                                    itemProvider={
-                                                        new ArrayItemProvider<string>(
-                                                            tags.value
-                                                        )
-                                                    }
-                                                />
-                                            </Dialog>
-                                        ) : null;
-                                    }}
-                                </Observer>
+                                {this.tagsModal()}
                             </div>
                         );
                     }
                     return (
                         <ZeroData
-                            primaryText="No repositories."
+                            primaryText='No repositories.'
                             secondaryText={
                                 <span>
                                     Please select valid repositories from the
                                     Settings page.
                                 </span>
                             }
-                            imageAltText="No repositories"
+                            imageAltText='No repositories'
                             imagePath={'../static/notfound.png'}
                         />
                     );
                 }}
             </Observer>
-
-            /* tslint:disable */
         );
     }
-}
-
-function renderName(
-    rowIndex: number,
-    columnIndex: number,
-    tableColumn: ITableColumn<GitRepositoryExtended>,
-    tableItem: GitRepositoryExtended
-): JSX.Element {
-    return (
-        <SimpleTableCell
-            key={'col-' + columnIndex}
-            columnIndex={columnIndex}
-            tableColumn={tableColumn}
-            children={
-                <>
-                    <Icon ariaLabel="Repository" iconName="Repo" />
-                    &nbsp;
-                    <Link
-                        excludeTabStop
-                        href={tableItem.webUrl + '/branches'}
-                        subtle={true}
-                        target="_blank"
-                    >
-                        <u>{tableItem.name}</u>
-                    </Link>
-                </>
-            }
-        ></SimpleTableCell>
-    );
-}
-
-function renderReleaseNeeded(
-    rowIndex: number,
-    columnIndex: number,
-    tableColumn: ITableColumn<GitRepositoryExtended>,
-    tableItem: GitRepositoryExtended
-): JSX.Element {
-    const redColor: IColor = {
-        red: 191,
-        green: 65,
-        blue: 65,
-    };
-    const greenColor: IColor = {
-        red: 109,
-        green: 210,
-        blue: 109,
-    };
-    const orangeColor: IColor = {
-        red: 225,
-        green: 172,
-        blue: 74,
-    };
-    let color: IColor = redColor;
-    let text: string = 'No';
-    if (tableItem.createRelease === true) {
-        color = greenColor;
-        text = 'Yes';
-    }
-    if (tableItem.hasExistingRelease === true) {
-        color = orangeColor;
-        text = 'Release Exists';
-    }
-    if (tableItem.hasExistingRelease) {
-        const releaseLinks: JSX.Element[] = [];
-        let counter: number = 0;
-        for (const release of tableItem.existingReleaseNames) {
-            releaseLinks.push(
-                <Link
-                    key={counter}
-                    excludeTabStop
-                    href={tableItem.webUrl + '?version=GB' + encodeURI(release)}
-                    target="_blank"
-                >
-                    {release}
-                </Link>
-            );
-            counter++;
-        }
-
-        return (
-            <TwoLineTableCell
-                className={'flex-direction-col'}
-                key={'col-' + columnIndex}
-                columnIndex={columnIndex}
-                tableColumn={tableColumn}
-                line1={
-                    <>
-                        <Pill
-                            color={color}
-                            size={PillSize.large}
-                            variant={PillVariant.colored}
-                            iconProps={{ iconName: 'Warning' }}
-                            className="bolt-list-overlay"
-                        >
-                            <b>{text}</b>
-                        </Pill>
-                    </>
-                }
-                line2={<>{releaseLinks}</>}
-            ></TwoLineTableCell>
-        );
-    }
-    return (
-        <SimpleTableCell
-            key={'col-' + columnIndex}
-            columnIndex={columnIndex}
-            tableColumn={tableColumn}
-            children={
-                <>
-                    <Pill
-                        color={color}
-                        size={PillSize.large}
-                        variant={PillVariant.colored}
-                        className="bolt-list-overlay"
-                    >
-                        <b>{text}</b>
-                    </Pill>
-                </>
-            }
-        ></SimpleTableCell>
-    );
-}
-
-function renderCreateReleaseBranch(
-    rowIndex: number,
-    columnIndex: number,
-    tableColumn: ITableColumn<GitRepositoryExtended>,
-    tableItem: GitRepositoryExtended
-): JSX.Element {
-    newReleaseBranchNamesObservable[rowIndex] = new ObservableValue<string>('');
-    return (
-        <SimpleTableCell
-            key={'col-' + columnIndex}
-            columnIndex={columnIndex}
-            tableColumn={tableColumn}
-            children={
-                <>
-                    release /&nbsp;
-                    <TextField
-                        value={newReleaseBranchNamesObservable[rowIndex]}
-                        onChange={(e, newValue) =>
-                            (newReleaseBranchNamesObservable[rowIndex].value =
-                                newValue.trim())
-                        }
-                    />
-                    &nbsp;
-                    <Button
-                        text="Create Branch"
-                        iconProps={{ iconName: 'OpenSource' }}
-                        primary={true}
-                        onClick={async () => {
-                            const createRefOptions: GitRefUpdate[] = [];
-                            const developBranch = await getClient(
-                                GitRestClient
-                            ).getBranch(tableItem.id, 'develop');
-
-                            const newDevObjectId =
-                                developBranch.commit.commitId;
-
-                            createRefOptions.push({
-                                repositoryId: tableItem.id,
-                                name:
-                                    'refs/heads/release/' +
-                                    newReleaseBranchNamesObservable[rowIndex]
-                                        .value,
-                                isLocked: false,
-                                newObjectId: newDevObjectId,
-                                oldObjectId:
-                                    '0000000000000000000000000000000000000000',
-                            });
-                            const createRef = await getClient(
-                                GitRestClient
-                            ).updateRefs(createRefOptions, tableItem.id);
-
-                            newReleaseBranchNamesObservable[rowIndex].value =
-                                '';
-                            createRef.forEach(async (ref) => {
-                                const globalMessagesSvc =
-                                    await SDK.getService<IGlobalMessagesService>(
-                                        CommonServiceIds.GlobalMessagesService
-                                    );
-                                globalMessagesSvc.addToast({
-                                    duration: 3000,
-                                    forceOverrideExisting: true,
-                                    message: ref.success
-                                        ? 'Branch Created!'
-                                        : 'Error Creating Branch: ' +
-                                          ref.customMessage,
-                                });
-                            });
-                        }}
-                    />
-                </>
-            }
-        ></SimpleTableCell>
-    );
-}
-
-function renderTags(
-    rowIndex: number,
-    columnIndex: number,
-    tableColumn: ITableColumn<GitRepositoryExtended>,
-    tableItem: GitRepositoryExtended
-): JSX.Element {
-    return (
-        <SimpleTableCell
-            key={'col-' + columnIndex}
-            columnIndex={columnIndex}
-            tableColumn={tableColumn}
-            children={
-                <>
-                    <Button
-                        text="View Tags"
-                        subtle={true}
-                        iconProps={{ iconName: 'Tag' }}
-                        onClick={() => {
-                            isTagsDialogOpen.value = true;
-                            tagsRepoName.value = tableItem.name + ' Tags';
-                            tags.value = [];
-                            tableItem.refs.forEach((ref) => {
-                                if (ref.name.includes('refs/tags')) {
-                                    tags.value.push(ref.name);
-                                }
-                            });
-                        }}
-                    />
-                </>
-            }
-        ></SimpleTableCell>
-    );
-}
-
-function onSize(event: MouseEvent, index: number, width: number) {
-    (columns[index].width as ObservableValue<number>).value = width;
 }

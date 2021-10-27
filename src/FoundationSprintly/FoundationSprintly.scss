@@ -1,8 +1,102 @@
-@import "node_modules/azure-devops-ui/Core/_platformCommon.scss";
+@import 'node_modules/azure-devops-ui/Core/_platformCommon.scss';
 
 .foundation-sprintly {
     font-size: $fontSizeM;
 }
 .flex-direction-col > div {
     flex-direction: column;
+}
+
+.master-row {
+    background-color: inherit;
+    cursor: pointer;
+}
+
+.master-row-content {
+    padding: 8px 8px 8px 20px;
+}
+
+.master-scroll-container {
+    height: 100%;
+    width: 100%;
+}
+
+@media screen and (max-width: 1023px) {
+    .single-layer-details {
+        max-width: 150px;
+    }
+}
+
+.single-layer-details-contents {
+    font-size: 18px;
+    margin-left: 12px;
+}
+
+.description-primary-text.secondary-text,
+.bolt-master-panel-header-subtitle.secondary-text {
+    color: inherit;
+}
+
+@media screen and (max-width: 800px) {
+    .context-details {
+        max-width: 320px;
+    }
+}
+
+.details-view-title {
+    white-space: normal;
+}
+
+.bolt-master-panel-header-title {
+    white-space: normal;
+}
+
+tr.selected > td.bolt-list-cell {
+    border-left: 5px solid #045B9E;
+}
+
+tr.selected > td.bolt-list-box-text,
+tr.selected > td.bolt-table-cell-select {
+    border-left: 0px;
+}
+
+.padding-horizontal-6 {
+    padding: 0px 6px;
+}
+
+.padding-vertical-10 {
+    padding: 10px 0px;
+}
+
+.margin-horizontal-3 {
+    margin: 0px 3px;
+}
+
+.margin-horizontal-10 {
+    margin: 0px 10px;
+}
+
+.font-size-1 {
+    font-size: 1rem;
+}
+
+.sprintly-environment-status {
+    margin: 0px 10px;
+    width: 96px;
+}
+
+.sprintly-text-white {
+    color: white;
+}
+
+.sprintly-width-100 {
+    width: 100%;
+}
+
+.sprintly-dropdown-width-100 {
+    width: 100%;
+}
+
+.sprintly-vertical-align-bottom {
+    vertical-align: bottom;
 }
