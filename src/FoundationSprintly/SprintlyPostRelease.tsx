@@ -1156,11 +1156,23 @@ export default class SprintlyPostRelease extends React.Component<
                 await this.reloadComponent();
             })
             .catch((error: any) => {
-                this.globalMessagesSvc.addToast({
-                    duration: 5000,
-                    forceOverrideExisting: true,
-                    message: 'Branch deletion failed!' + error,
-                });
+                if (error.response?.data?.message) {
+                    this.globalMessagesSvc.addBanner({
+                        dismissable: true,
+                        level: MessageBannerLevel.error,
+                        message: error.response.data.message,
+                    });
+                } else {
+                    this.globalMessagesSvc.addToast({
+                        duration: 5000,
+                        forceOverrideExisting: true,
+                        message:
+                            'Branch deletion failed!' +
+                            error +
+                            ' ' +
+                            error.response?.data?.message,
+                    });
+                }
             });
         this.onDismissDeleteBranchActionModal();
     }
@@ -1408,7 +1420,11 @@ export default class SprintlyPostRelease extends React.Component<
                         this.globalMessagesSvc.addToast({
                             duration: 5000,
                             forceOverrideExisting: true,
-                            message: 'PR completion failed!' + error,
+                            message:
+                                'PR completion failed!' +
+                                error +
+                                ' ' +
+                                error.response.data?.message,
                         });
                     }
                 });

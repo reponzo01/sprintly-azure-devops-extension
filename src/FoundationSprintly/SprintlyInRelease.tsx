@@ -6,6 +6,7 @@ import {
     getClient,
     IExtensionDataManager,
     IGlobalMessagesService,
+    MessageBannerLevel,
 } from 'azure-devops-extension-api';
 import { GitRepository } from 'azure-devops-extension-api/Git';
 import { TeamProjectReference } from 'azure-devops-extension-api/Core';
@@ -51,6 +52,7 @@ import * as Common from './SprintlyCommon';
 import { Icon } from 'azure-devops-ui/Icon';
 import { Link } from 'azure-devops-ui/Link';
 import { Dialog } from 'azure-devops-ui/Dialog';
+import axios, { AxiosResponse } from 'axios';
 
 export interface ISprintlyInReleaseState {
     userSettings?: Common.IUserSettings;
@@ -610,25 +612,48 @@ export default class SprintlyInRelease extends React.Component<
     }
 
     private deployAction(): void {
-        const environmentUpdateData: any = {
-            comment: '',
-            status: EnvironmentStatus.InProgress,
-        };
-        getClient(ReleaseRestClient)
-            .updateReleaseEnvironment(
-                environmentUpdateData,
-                clickedDeployProjectReferenceObservable.value.id,
-                clickedDeployReleaseIdObservable.value,
-                clickedDeployEnvironmentObservable.value.id
-            )
-            .then(async (result: ReleaseEnvironment) => {
-                this.globalMessagesSvc.addToast({
-                    duration: 5000,
-                    forceOverrideExisting: true,
-                    message: 'Deploy started!',
+        const url: string = `https://vsrm.dev.azure.com/${this.organizationName}/${clickedDeployProjectReferenceObservable.value.id}/_apis/Release/releases/${clickedDeployReleaseIdObservable.value}/environments/${clickedDeployEnvironmentObservable.value.id}?api-version=5.0-preview.6`;
+
+        Common.getOrRefreshToken(this.accessToken).then(async (token) => {
+            await axios
+                .patch(
+                    url,
+                    {
+                        comment: '',
+                        status: EnvironmentStatus.InProgress,
+                    },
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                        },
+                    }
+                )
+                .then(async (result: void | AxiosResponse<any>) => {
+                    this.globalMessagesSvc.addToast({
+                        duration: 5000,
+                        forceOverrideExisting: true,
+                        message: 'Deploy started!',
+                    });
+                    await this.reloadComponent(true);
+                })
+                .catch((error: any) => {
+                    if (error.response?.data?.message) {
+                        this.globalMessagesSvc.addBanner({
+                            dismissable: true,
+                            level: MessageBannerLevel.error,
+                            message: error.response.data.message,
+                        });
+                    } else {
+                        this.globalMessagesSvc.addToast({
+                            duration: 5000,
+                            forceOverrideExisting: true,
+                            message:
+                                'Deploy request failed!' + error + ' ' + error,
+                        });
+                    }
                 });
-                await this.reloadComponent(true);
-            });
+        });
+
         isDeployDialogOpenObservable.value = false;
     }
 

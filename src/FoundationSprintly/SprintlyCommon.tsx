@@ -477,7 +477,8 @@ export async function getReleasesForReleaseBranch(
         const existingIndex: number = releaseInfoObservable.value.findIndex(
             (item: IReleaseInfo) =>
                 item.releaseBranch.targetBranch.name ===
-                releaseBranch.targetBranch.name
+                    releaseBranch.targetBranch.name &&
+                item.repositoryId === releaseBranch.repositoryId
         );
         const releaseInfo: IReleaseInfo = {
             repositoryId,
