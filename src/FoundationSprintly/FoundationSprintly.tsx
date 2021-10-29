@@ -71,7 +71,7 @@ export default class FoundationSprintly extends React.Component<
     private buildDefinitions: BuildDefinition[] = [];
 
     private alwaysAllowedGroups: Common.IAllowedEntity[] = [
-        /*{
+        {
             displayName: 'Dev Team Leads',
             originId: '841aee2f-860d-45a1-91a5-779aa4dca78c',
             descriptor:
@@ -82,13 +82,13 @@ export default class FoundationSprintly extends React.Component<
             originId: 'b2620fb7-f672-4162-a15f-940b1ec78efe',
             descriptor:
                 'vssgp.Uy0xLTktMTU1MTM3NDI0NS0xODk1NzMzMjY1LTQ3ODY0Mzg0LTMwMjU3MjkyMzQtOTM5ODg1NzU0LTEtMzA1NDcxNjM4Mi0zNjc1OTA4OTI5LTI3MjY5NzI4MTctMzczODgxNDI4NQ',
-        },*/
-        {
-            displayName: 'ample Project Team',
+        },
+        /*{
+            displayName: 'Sample Project Team',
             originId: 'fccefee4-a7a9-432a-a7a2-fc6d3d8bc45d',
             descriptor:
                 'vssgp.Uy0xLTktMTU1MTM3NDI0NS0zMTEzMzAyODctMzI5MTIzMzA5NC0zMTI4MjY0MTg3LTQwMTUzMTUzOTYtMS0xNTY5MTY5Mjc5LTIzODYzODU5OTQtMjU1MDU2OTgzMi02NDQyOTAwODc',
-        },
+        },*/
     ];
 
     constructor(props: {}) {
