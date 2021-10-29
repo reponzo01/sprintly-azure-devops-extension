@@ -220,7 +220,7 @@ export default class SprintlyPostRelease extends React.Component<
         await this.initializeComponent();
     }
 
-    public async componentWillUnmount() {
+    public async componentWillUnmount(): Promise<void> {
         this._isMounted = false;
     }
 
@@ -240,8 +240,8 @@ export default class SprintlyPostRelease extends React.Component<
                 );
 
             this.setState({
-                userSettings: userSettings,
-                systemSettings: systemSettings,
+                userSettings,
+                systemSettings,
             });
 
             repositoriesToProcess = Common.getSavedRepositoriesToView(
@@ -257,7 +257,7 @@ export default class SprintlyPostRelease extends React.Component<
                 const pullRequests: GitPullRequest[] =
                     await Common.getPullRequests(filteredProjects);
                 this.setState({
-                    pullRequests: pullRequests,
+                    pullRequests,
                 });
                 await this.loadRepositoriesDisplayState(filteredProjects);
             }
@@ -303,18 +303,19 @@ export default class SprintlyPostRelease extends React.Component<
                     const baseDevelopBranch: GitRef | undefined =
                         repositoryBranchInfo.hasDevelopBranch
                             ? repositoryBranchInfo.allBranchesAndTags.find(
-                                  (branch) =>
+                                  (branch: GitRef) =>
                                       branch.name === 'refs/heads/develop'
                               )
                             : undefined;
                     const baseMasterMainBranch: GitRef | undefined =
                         repositoryBranchInfo.hasMasterBranch
                             ? repositoryBranchInfo.allBranchesAndTags.find(
-                                  (branch) =>
+                                  (branch: GitRef) =>
                                       branch.name === 'refs/heads/master'
                               )
                             : repositoryBranchInfo.allBranchesAndTags.find(
-                                  (branch) => branch.name === 'refs/heads/main'
+                                  (branch: GitRef) =>
+                                      branch.name === 'refs/heads/main'
                               );
                     const existingReleaseBranches: Common.IReleaseBranchInfo[] =
                         [];
@@ -813,7 +814,7 @@ export default class SprintlyPostRelease extends React.Component<
         aheadOfStatus?: boolean,
         pullRequest?: GitPullRequest
     ): JSX.Element {
-        let statusText = '';
+        let statusText: string = '';
         let status: IStatusProps = { ...Statuses.Success };
         let prLink: JSX.Element = <></>;
         let actionButtons: JSX.Element = <></>;
@@ -1138,7 +1139,7 @@ export default class SprintlyPostRelease extends React.Component<
                 createRefOptions,
                 this.state.repositoryListSelectedItemObservable.value.id
             )
-            .then(async (result) => {
+            .then(async (result: GitRefUpdateResult[]) => {
                 for (const res of result) {
                     this.globalMessagesSvc.addToast({
                         duration: 5000,
@@ -1232,7 +1233,13 @@ export default class SprintlyPostRelease extends React.Component<
                                     <TextField
                                         required={true}
                                         value={createPullRequestTitleObservable}
-                                        onChange={(e, newValue) => {
+                                        onChange={(
+                                            event: React.ChangeEvent<
+                                                | HTMLInputElement
+                                                | HTMLTextAreaElement
+                                            >,
+                                            newValue: string
+                                        ) => {
                                             createPullRequestTitleObservable.value =
                                                 newValue;
                                             this.setState({
@@ -1249,7 +1256,13 @@ export default class SprintlyPostRelease extends React.Component<
                                         value={
                                             createPullRequestDescriptionObservable
                                         }
-                                        onChange={(e, newValue) => {
+                                        onChange={(
+                                            event: React.ChangeEvent<
+                                                | HTMLInputElement
+                                                | HTMLTextAreaElement
+                                            >,
+                                            newValue: string
+                                        ) => {
                                             createPullRequestDescriptionObservable.value =
                                                 newValue;
                                             this.setState({
@@ -1284,7 +1297,7 @@ export default class SprintlyPostRelease extends React.Component<
                 pullRequest as GitPullRequest,
                 this.state.repositoryListSelectedItemObservable.value.id
             )
-            .then(async (result) => {
+            .then(async (result: GitPullRequest) => {
                 this.globalMessagesSvc.addToast({
                     duration: 5000,
                     forceOverrideExisting: true,
@@ -1383,50 +1396,52 @@ export default class SprintlyPostRelease extends React.Component<
             status: PullRequestStatus.Completed,
         };
 
-        Common.getOrRefreshToken(this.accessToken).then(async (token) => {
-            await axios
-                .patch(url, requestBody, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                })
-                .then(async (result: void | AxiosResponse<any>) => {
-                    this.globalMessagesSvc.addToast({
-                        duration: 5000,
-                        forceOverrideExisting: true,
-                        message: 'PR completion queued!',
-                    });
-                    await this.reloadComponent();
-                })
-                .catch((error: any) => {
-                    if (error.response.status == 403) {
-                        this.globalMessagesSvc.closeBanner();
-                        this.globalMessagesSvc.addBanner({
-                            dismissable: true,
-                            level: MessageBannerLevel.error,
-                            message:
-                                'Permission denied! The target branch may have policies that you do not have permissions to override.',
-                            buttons: [
-                                {
-                                    text: 'Check Permissions',
-                                    href: `https://dev.azure.com/${this.organizationName}/${this.state.pullRequestToComplete?.repository.project.id}/_settings/repositories?_a=permissions`,
-                                    target: '_blank',
-                                },
-                            ],
-                        });
-                    } else {
+        Common.getOrRefreshToken(this.accessToken).then(
+            async (token: string) => {
+                await axios
+                    .patch(url, requestBody, {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                        },
+                    })
+                    .then(async (result: void | AxiosResponse<any>) => {
                         this.globalMessagesSvc.addToast({
                             duration: 5000,
                             forceOverrideExisting: true,
-                            message:
-                                'PR completion failed!' +
-                                error +
-                                ' ' +
-                                error.response.data?.message,
+                            message: 'PR completion queued!',
                         });
-                    }
-                });
-        });
+                        await this.reloadComponent();
+                    })
+                    .catch((error: any) => {
+                        if (error.response.status === 403) {
+                            this.globalMessagesSvc.closeBanner();
+                            this.globalMessagesSvc.addBanner({
+                                dismissable: true,
+                                level: MessageBannerLevel.error,
+                                message:
+                                    'Permission denied! The target branch may have policies that you do not have permissions to override.',
+                                buttons: [
+                                    {
+                                        text: 'Check Permissions',
+                                        href: `https://dev.azure.com/${this.organizationName}/${this.state.pullRequestToComplete?.repository.project.id}/_settings/repositories?_a=permissions`,
+                                        target: '_blank',
+                                    },
+                                ],
+                            });
+                        } else {
+                            this.globalMessagesSvc.addToast({
+                                duration: 5000,
+                                forceOverrideExisting: true,
+                                message:
+                                    'PR completion failed!' +
+                                    error +
+                                    ' ' +
+                                    error.response.data?.message,
+                            });
+                        }
+                    });
+            }
+        );
 
         isCompletePullRequestDialogOpenObservable.value = false;
     }
@@ -1485,7 +1500,13 @@ export default class SprintlyPostRelease extends React.Component<
                                     <TextField
                                         required={true}
                                         value={createTagTitleObservable}
-                                        onChange={(e, newValue) => {
+                                        onChange={(
+                                            event: React.ChangeEvent<
+                                                | HTMLInputElement
+                                                | HTMLTextAreaElement
+                                            >,
+                                            newValue: string
+                                        ) => {
                                             createTagTitleObservable.value =
                                                 newValue;
                                             this.setState({
@@ -1500,7 +1521,13 @@ export default class SprintlyPostRelease extends React.Component<
                                     <TextField
                                         required={true}
                                         value={createTagDescriptionObservable}
-                                        onChange={(e, newValue) => {
+                                        onChange={(
+                                            event: React.ChangeEvent<
+                                                | HTMLInputElement
+                                                | HTMLTextAreaElement
+                                            >,
+                                            newValue: string
+                                        ) => {
                                             createTagDescriptionObservable.value =
                                                 newValue;
                                             this.setState({
@@ -1538,7 +1565,7 @@ export default class SprintlyPostRelease extends React.Component<
                         .project.id,
                     this.state.repositoryListSelectedItemObservable.value.id
                 )
-                .then(async (result) => {
+                .then(async (result: GitAnnotatedTag) => {
                     this.globalMessagesSvc.addToast({
                         duration: 5000,
                         forceOverrideExisting: true,

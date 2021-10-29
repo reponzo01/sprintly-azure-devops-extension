@@ -215,9 +215,10 @@ export function getSavedRepositoriesToView(
             if (!systemSettings?.projectRepositories) {
                 allowedRepositories = userSettings.myRepositories;
             } else {
-                const projectRepoIdx =
+                const projectRepoIdx: number =
                     systemSettings.projectRepositories.findIndex(
-                        (item) => item.id === userSettings.projectRepositoriesId
+                        (item: IProjectRepositories) =>
+                            item.id === userSettings.projectRepositoriesId
                     );
                 if (projectRepoIdx > -1) {
                     allowedRepositories =
@@ -769,6 +770,7 @@ export function environmentStatusPillJsxElement(
                         {...Statuses.Running}
                         key='running'
                         size={StatusSize.m}
+                        className='sprintly-vertical-align-bottom'
                     />
                 ) : (
                     <Icon iconName={statusIconName} size={IconSize.small} />

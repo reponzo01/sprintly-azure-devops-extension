@@ -165,8 +165,8 @@ export default class SprintlySettings extends React.Component<
         }
 
         this.setState({
-            userSettings: userSettings,
-            systemSettings: systemSettings,
+            userSettings,
+            systemSettings,
             ready: true,
         });
 
@@ -283,7 +283,8 @@ export default class SprintlySettings extends React.Component<
 
     private loadProjectRepositories(): void {
         if (this.state.systemSettings?.projectRepositories) {
-            const systemSettings = this.state.systemSettings;
+            const systemSettings: Common.ISystemSettings =
+                this.state.systemSettings;
             for (const projectRepository of systemSettings.projectRepositories) {
                 for (const selectedRepository of projectRepository.repositories) {
                     const idx: number = this.allRepositories.findIndex(
@@ -296,7 +297,7 @@ export default class SprintlySettings extends React.Component<
                 }
             }
             this.setState({
-                systemSettings: systemSettings,
+                systemSettings,
             });
         }
     }
@@ -344,7 +345,7 @@ export default class SprintlySettings extends React.Component<
             { scopeType: 'User' }
         ).then(() => {
             this.setState({
-                userSettings: userSettings,
+                userSettings,
                 ready: true,
             });
             this.globalMessagesSvc.addToast({
@@ -397,7 +398,7 @@ export default class SprintlySettings extends React.Component<
             systemSettings
         ).then(() => {
             this.setState({
-                systemSettings: systemSettings,
+                systemSettings,
                 ready: true,
             });
             this.globalMessagesSvc.addToast({
@@ -569,7 +570,13 @@ export default class SprintlySettings extends React.Component<
                                             value={
                                                 addProjectRepositoriesLabelObservable
                                             }
-                                            onChange={(e, newValue) => {
+                                            onChange={(
+                                                event: React.ChangeEvent<
+                                                    | HTMLInputElement
+                                                    | HTMLTextAreaElement
+                                                >,
+                                                newValue: string
+                                            ) => {
                                                 addProjectRepositoriesLabelObservable.value =
                                                     newValue;
                                                 this.setState({
@@ -638,7 +645,7 @@ export default class SprintlySettings extends React.Component<
         });
 
         this.setState({
-            systemSettings: systemSettings,
+            systemSettings,
         });
 
         addProjectRepositoriesLabelObservable.value = '';
@@ -842,17 +849,20 @@ export default class SprintlySettings extends React.Component<
 
     private deleteProjectLabelAction(): void {
         if (this.state.systemSettings?.projectRepositories) {
-            const systemSettings = this.state.systemSettings;
-            const projectRepositories = systemSettings.projectRepositories;
-            const projectLabelIdx = projectRepositories.findIndex(
-                (item) => item.id === this.state.projectLabelIdToDelete!
+            const systemSettings: Common.ISystemSettings =
+                this.state.systemSettings;
+            const projectRepositories: Common.IProjectRepositories[] =
+                systemSettings.projectRepositories;
+            const projectLabelIdx: number = projectRepositories.findIndex(
+                (item: Common.IProjectRepositories) =>
+                    item.id === this.state.projectLabelIdToDelete!
             );
             if (projectLabelIdx > -1) {
                 projectRepositories.splice(projectLabelIdx, 1);
             }
             systemSettings.projectRepositories = projectRepositories;
             this.setState({
-                systemSettings: systemSettings,
+                systemSettings,
             });
         }
         this.onDismissDeleteProjectLabelActionModal();
@@ -932,11 +942,13 @@ export default class SprintlySettings extends React.Component<
                                         placeholder='Select Individual Repositories'
                                         showFilterBox={true}
                                         onSelect={() => {
-                                            let systemSettings =
+                                            const systemSettings: Common.ISystemSettings =
                                                 this.state.systemSettings!;
                                             const projectRepoIdx: number =
                                                 systemSettings.projectRepositories.findIndex(
-                                                    (item) =>
+                                                    (
+                                                        item: Common.IProjectRepositories
+                                                    ) =>
                                                         item.id === tableItem.id
                                                 );
                                             if (projectRepoIdx > -1) {
@@ -954,7 +966,7 @@ export default class SprintlySettings extends React.Component<
                                                 );
                                             }
                                             this.setState({
-                                                systemSettings: systemSettings,
+                                                systemSettings,
                                             });
                                         }}
                                     />

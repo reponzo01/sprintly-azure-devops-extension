@@ -22,7 +22,7 @@ import SprintlyPostRelease from './SprintlyPostRelease';
 import SprintlySettings from './SprintlySettings';
 import * as Common from './SprintlyCommon';
 import { showRootComponent } from '../Common';
-import { IMenuItem } from 'azure-devops-ui/Menu';
+import { IMenu, IMenuItem } from 'azure-devops-ui/Menu';
 import { Link } from 'azure-devops-ui/Link';
 import { Icon, IconSize } from 'azure-devops-ui/Icon';
 import { ReleaseDefinition } from 'azure-devops-extension-api/Release';
@@ -150,8 +150,8 @@ export default class FoundationSprintly extends React.Component<
         );
 
         this.setState({
-            userSettings: userSettings,
-            systemSettings: systemSettings,
+            userSettings,
+            systemSettings,
         });
 
         await this.loadAllowedUserGroupsUsers();
@@ -203,7 +203,7 @@ export default class FoundationSprintly extends React.Component<
     }
 
     private loadAllowedUsers(): void {
-        let users: Common.IAllowedEntity[] | undefined =
+        const users: Common.IAllowedEntity[] | undefined =
             this.state.systemSettings?.allowedUsers;
         if (users) {
             const allAllowedUsersDescriptors: string[] = users.map(
@@ -223,13 +223,13 @@ export default class FoundationSprintly extends React.Component<
 
     private getCommandBarItems(): IHeaderCommandBarItem[] {
         const items: IHeaderCommandBarItem[] = [];
-        items.push(this.refreshButtonCommandBarItem());
         if (
             this.state.systemSettings?.projectRepositories &&
             this.state.systemSettings.projectRepositories.length > 0
         ) {
             items.push(this.selectViewRepositoriesCommandBarItem());
         }
+        items.push(this.refreshButtonCommandBarItem());
         return items;
     }
 
@@ -255,7 +255,7 @@ export default class FoundationSprintly extends React.Component<
         subMenuItems.push({
             id: '0',
             text: ' My Repositories',
-            onActivate: (item) => {
+            onActivate: () => {
                 this.selectRepositoriesAction('');
             },
         });
@@ -265,7 +265,7 @@ export default class FoundationSprintly extends React.Component<
                 subMenuItems.push({
                     id: projectRepository.id,
                     text: projectRepository.label,
-                    onActivate: (item) => {
+                    onActivate: (item: IMenuItem) => {
                         this.selectRepositoriesAction(item.id);
                     },
                 });
@@ -288,11 +288,11 @@ export default class FoundationSprintly extends React.Component<
         Common.getUserSettings(
             this.dataManager,
             userSettingsDataManagerKey
-        ).then((userSettings) => {
+        ).then((userSettings: Common.IUserSettings | undefined) => {
             if (!userSettings) {
                 userSettings = {
                     myRepositories: [],
-                    projectRepositoriesId: projectRepositoriesId,
+                    projectRepositoriesId,
                 };
             } else {
                 userSettings.projectRepositoriesId = projectRepositoriesId;
@@ -360,9 +360,9 @@ export default class FoundationSprintly extends React.Component<
                 if (!this.state.systemSettings?.projectRepositories) {
                     title += ' (My Repositories)';
                 } else {
-                    const projectRepo =
+                    const projectRepo: Common.IProjectRepositories | undefined =
                         this.state.systemSettings?.projectRepositories.find(
-                            (item) =>
+                            (item: Common.IProjectRepositories) =>
                                 item.id ===
                                 this.state.userSettings!.projectRepositoriesId
                         );

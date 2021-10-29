@@ -156,8 +156,8 @@ export default class SprintlyPage extends React.Component<
             );
 
         this.setState({
-            userSettings: userSettings,
-            systemSettings: systemSettings,
+            userSettings,
+            systemSettings,
         });
 
         repositoriesToProcess = Common.getSavedRepositoriesToView(

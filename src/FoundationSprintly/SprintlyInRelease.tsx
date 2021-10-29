@@ -8,7 +8,7 @@ import {
     IGlobalMessagesService,
     MessageBannerLevel,
 } from 'azure-devops-extension-api';
-import { GitRepository } from 'azure-devops-extension-api/Git';
+import { GitRef, GitRepository } from 'azure-devops-extension-api/Git';
 import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
     EnvironmentStatus,
@@ -184,8 +184,8 @@ export default class SprintlyInRelease extends React.Component<
             );
 
         this.setState({
-            userSettings: userSettings,
-            systemSettings: systemSettings,
+            userSettings,
+            systemSettings,
         });
 
         repositoriesToProcess = Common.getSavedRepositoriesToView(
@@ -238,7 +238,7 @@ export default class SprintlyInRelease extends React.Component<
 
                 const existingReleaseBranches: Common.IReleaseBranchInfo[] =
                     repositoryBranchInfo.releaseBranches.map<Common.IReleaseBranchInfo>(
-                        (releaseBranch) => {
+                        (releaseBranch: GitRef) => {
                             return {
                                 targetBranch: releaseBranch,
                                 repositoryId: repo.id,
@@ -281,7 +281,7 @@ export default class SprintlyInRelease extends React.Component<
                             webUrl: repo.webUrl,
                             releaseInfo:
                                 allBranchesReleaseInfoObservable.value.find(
-                                    (ri) =>
+                                    (ri: Common.IReleaseInfo) =>
                                         ri.repositoryId === repo.id &&
                                         ri.releaseBranch.targetBranch.name ===
                                             releaseBranch.targetBranch.name
@@ -610,46 +610,51 @@ export default class SprintlyInRelease extends React.Component<
     private deployAction(): void {
         const url: string = `https://vsrm.dev.azure.com/${this.organizationName}/${clickedDeployProjectReferenceObservable.value.id}/_apis/Release/releases/${clickedDeployReleaseIdObservable.value}/environments/${clickedDeployEnvironmentObservable.value.id}?api-version=5.0-preview.6`;
 
-        Common.getOrRefreshToken(this.accessToken).then(async (token) => {
-            await axios
-                .patch(
-                    url,
-                    {
-                        comment: '',
-                        status: EnvironmentStatus.InProgress,
-                    },
-                    {
-                        headers: {
-                            Authorization: `Bearer ${token}`,
+        Common.getOrRefreshToken(this.accessToken).then(
+            async (token: string) => {
+                await axios
+                    .patch(
+                        url,
+                        {
+                            comment: '',
+                            status: EnvironmentStatus.InProgress,
                         },
-                    }
-                )
-                .then(async (result: void | AxiosResponse<any>) => {
-                    this.globalMessagesSvc.addToast({
-                        duration: 5000,
-                        forceOverrideExisting: true,
-                        message: 'Deploy started!',
-                    });
-                    await this.reloadComponent(true);
-                })
-                .catch((error: any) => {
-                    if (error.response?.data?.message) {
-                        this.globalMessagesSvc.closeBanner();
-                        this.globalMessagesSvc.addBanner({
-                            dismissable: true,
-                            level: MessageBannerLevel.error,
-                            message: error.response.data.message,
-                        });
-                    } else {
+                        {
+                            headers: {
+                                Authorization: `Bearer ${token}`,
+                            },
+                        }
+                    )
+                    .then(async (result: void | AxiosResponse<any>) => {
                         this.globalMessagesSvc.addToast({
                             duration: 5000,
                             forceOverrideExisting: true,
-                            message:
-                                'Deploy request failed!' + error + ' ' + error,
+                            message: 'Deploy started!',
                         });
-                    }
-                });
-        });
+                        await this.reloadComponent(true);
+                    })
+                    .catch((error: any) => {
+                        if (error.response?.data?.message) {
+                            this.globalMessagesSvc.closeBanner();
+                            this.globalMessagesSvc.addBanner({
+                                dismissable: true,
+                                level: MessageBannerLevel.error,
+                                message: error.response.data.message,
+                            });
+                        } else {
+                            this.globalMessagesSvc.addToast({
+                                duration: 5000,
+                                forceOverrideExisting: true,
+                                message:
+                                    'Deploy request failed!' +
+                                    error +
+                                    ' ' +
+                                    error,
+                            });
+                        }
+                    });
+            }
+        );
 
         isDeployDialogOpenObservable.value = false;
     }
@@ -666,7 +671,7 @@ export default class SprintlyInRelease extends React.Component<
     }
 
     private exportToCsvAction(): void {
-        let data = '';
+        let data: string = '';
         const now: Date = new Date();
         data += `Release Candidate builds as of ${now.toString()}\r\n`;
         data += 'Repository,Version,Release Artifact\r\n';
@@ -709,7 +714,7 @@ export default class SprintlyInRelease extends React.Component<
             }
         }
 
-        var hiddenElement = document.createElement('a');
+        const hiddenElement: HTMLAnchorElement = document.createElement('a');
         hiddenElement.setAttribute(
             'href',
             'data:text/csv;base64,' + window.btoa(data)
@@ -771,7 +776,10 @@ export default class SprintlyInRelease extends React.Component<
                                                     .releaseBranchDeployItemProvider
                                             }
                                             onToggle={(
-                                                event,
+                                                event: React.SyntheticEvent<
+                                                    HTMLElement,
+                                                    Event
+                                                >,
                                                 treeItem: ITreeItemEx<IReleaseBranchDeployTableItem>
                                             ) => {
                                                 this.state.releaseBranchDeployItemProvider.toggle(
