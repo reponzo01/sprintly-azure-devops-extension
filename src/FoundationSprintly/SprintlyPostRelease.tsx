@@ -155,6 +155,8 @@ export default class SprintlyPostRelease extends React.Component<
         organizationName: string;
         globalMessagesSvc: IGlobalMessagesService;
         dataManager: IExtensionDataManager;
+        releaseDefinitions: ReleaseDefinition[];
+        buildDefinitions: BuildDefinition[];
     },
     ISprintlyPostReleaseState
 > {
@@ -164,13 +166,15 @@ export default class SprintlyPostRelease extends React.Component<
     private accessToken: string = '';
     private organizationName: string;
 
-    private releaseDefinitions: ReleaseDefinition[] = [];
-    private buildDefinitions: BuildDefinition[] = [];
+    private releaseDefinitions: ReleaseDefinition[];
+    private buildDefinitions: BuildDefinition[];
 
     constructor(props: {
         organizationName: string;
         globalMessagesSvc: IGlobalMessagesService;
         dataManager: IExtensionDataManager;
+        releaseDefinitions: ReleaseDefinition[];
+        buildDefinitions: BuildDefinition[];
     }) {
         super(props);
 
@@ -207,6 +211,8 @@ export default class SprintlyPostRelease extends React.Component<
         this.organizationName = props.organizationName;
         this.globalMessagesSvc = props.globalMessagesSvc;
         this.dataManager = props.dataManager;
+        this.releaseDefinitions = props.releaseDefinitions;
+        this.buildDefinitions = props.buildDefinitions;
     }
 
     public async componentDidMount(): Promise<void> {
@@ -253,16 +259,6 @@ export default class SprintlyPostRelease extends React.Component<
                 this.setState({
                     pullRequests: pullRequests,
                 });
-                this.releaseDefinitions = await Common.getReleaseDefinitions(
-                    filteredProjects,
-                    this.organizationName,
-                    this.accessToken
-                );
-                this.buildDefinitions = await Common.getBuildDefinitions(
-                    filteredProjects,
-                    this.organizationName,
-                    this.accessToken
-                );
                 await this.loadRepositoriesDisplayState(filteredProjects);
             }
         }

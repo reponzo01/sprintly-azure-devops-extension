@@ -25,6 +25,9 @@ import { showRootComponent } from '../Common';
 import { IMenuItem } from 'azure-devops-ui/Menu';
 import { Link } from 'azure-devops-ui/Link';
 import { Icon, IconSize } from 'azure-devops-ui/Icon';
+import { ReleaseDefinition } from 'azure-devops-extension-api/Release';
+import { BuildDefinition } from 'azure-devops-extension-api/Build';
+import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 
 const selectedTabKey: string = 'selected-tab';
 const userSettingsDataManagerKey: string = 'user-settings';
@@ -64,6 +67,8 @@ export default class FoundationSprintly extends React.Component<
     private dataManager!: IExtensionDataManager;
     private globalMessagesSvc!: IGlobalMessagesService;
     private accessToken: string = '';
+    private releaseDefinitions: ReleaseDefinition[] = [];
+    private buildDefinitions: BuildDefinition[] = [];
 
     private alwaysAllowedGroups: Common.IAllowedEntity[] = [
         /*{
@@ -130,6 +135,19 @@ export default class FoundationSprintly extends React.Component<
                 this.dataManager,
                 systemSettingsDataManagerKey
             );
+
+        const filteredProjects: TeamProjectReference[] =
+            await Common.getFilteredProjects();
+        this.releaseDefinitions = await Common.getReleaseDefinitions(
+            filteredProjects,
+            organizationNameObservable.value,
+            this.accessToken
+        );
+        this.buildDefinitions = await Common.getBuildDefinitions(
+            filteredProjects,
+            organizationNameObservable.value,
+            this.accessToken
+        );
 
         this.setState({
             userSettings: userSettings,
@@ -314,6 +332,8 @@ export default class FoundationSprintly extends React.Component<
                         organizationName={organizationNameObservable.value}
                         globalMessagesSvc={this.globalMessagesSvc}
                         dataManager={this.dataManager}
+                        releaseDefinitions={this.releaseDefinitions}
+                        buildDefinitions={this.buildDefinitions}
                     />
                 );
             case sprintlyPostReleaseTabKey:
@@ -322,6 +342,8 @@ export default class FoundationSprintly extends React.Component<
                         organizationName={organizationNameObservable.value}
                         globalMessagesSvc={this.globalMessagesSvc}
                         dataManager={this.dataManager}
+                        releaseDefinitions={this.releaseDefinitions}
+                        buildDefinitions={this.buildDefinitions}
                     />
                 );
             default:
