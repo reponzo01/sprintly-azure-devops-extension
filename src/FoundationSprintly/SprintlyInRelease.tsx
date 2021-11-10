@@ -228,7 +228,7 @@ export default class SprintlyInRelease extends React.Component<
             > = [];
             for (const repo of filteredRepos) {
                 const repositoryBranchInfo: Common.IRepositoryBranchInfo =
-                    await Common.getRepositoryBranchesInfo(repo.id);
+                    await Common.getRepositoryBranchesInfo(repo.id, false);
 
                 const buildDefinitionForRepo: BuildDefinition | undefined =
                     this.buildDefinitions.find(

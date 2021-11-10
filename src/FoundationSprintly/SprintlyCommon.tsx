@@ -264,11 +264,14 @@ export async function getFilteredProjectRepositories(
     return filteredRepos;
 }
 
-export async function getRepositoryInfo(repoId: string): Promise<GitRef[]> {
+export async function getRepositoryInfo(
+    repoId: string,
+    includeTags: boolean
+): Promise<GitRef[]> {
     return await getClient(GitRestClient).getRefs(
         repoId,
         undefined,
-        undefined,
+        includeTags ? undefined : 'heads/',
         false,
         false,
         undefined,
@@ -363,13 +366,17 @@ export function codeChangesInCommitDiffs(commitsDiff: GitCommitDiffs): boolean {
 }
 
 export async function getRepositoryBranchesInfo(
-    repositoryId: string
+    repositoryId: string,
+    includeTags: boolean = true
 ): Promise<IRepositoryBranchInfo> {
     let hasDevelopBranch: boolean = false;
     let hasMasterBranch: boolean = false;
     let hasMainBranch: boolean = false;
 
-    const allBranchesAndTags: GitRef[] = await getRepositoryInfo(repositoryId);
+    const allBranchesAndTags: GitRef[] = await getRepositoryInfo(
+        repositoryId,
+        includeTags
+    );
     const releaseBranches: GitRef[] = [];
 
     for (const branch of allBranchesAndTags) {
