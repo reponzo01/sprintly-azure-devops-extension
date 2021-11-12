@@ -2,8 +2,6 @@ import * as React from 'react';
 
 import * as SDK from 'azure-devops-extension-sdk';
 import {
-    CommonServiceIds,
-    getClient,
     IExtensionDataManager,
     IGlobalMessagesService,
     MessageBannerLevel,
@@ -16,15 +14,9 @@ import {
     Release,
     ReleaseDefinition,
     ReleaseEnvironment,
-    ReleaseEnvironmentUpdateMetadata,
-    ReleaseRestClient,
 } from 'azure-devops-extension-api/Release';
 import { BuildDefinition } from 'azure-devops-extension-api/Build';
 
-import {
-    ArrayItemProvider,
-    IItemProvider,
-} from 'azure-devops-ui/Utilities/Provider';
 import {
     ITreeItemProvider,
     ITreeItemEx,
@@ -33,24 +25,17 @@ import {
 } from 'azure-devops-ui/Utilities/TreeItemProvider';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
 import {
-    IReadonlyObservableValue,
     ObservableArray,
     ObservableValue,
 } from 'azure-devops-ui/Core/Observable';
-import { ISimpleTableCell, SimpleTableCell } from 'azure-devops-ui/Table';
+import { SimpleTableCell } from 'azure-devops-ui/Table';
 import { Observer } from 'azure-devops-ui/Observer';
 import { Card } from 'azure-devops-ui/Card';
-import {
-    Tree,
-    renderExpandableTreeCell,
-    renderTreeCell,
-    ITreeColumn,
-} from 'azure-devops-ui/TreeEx';
+import { Tree, ITreeColumn } from 'azure-devops-ui/TreeEx';
 import { Spinner } from 'azure-devops-ui/Spinner';
 
 import * as Common from './SprintlyCommon';
 import { Icon } from 'azure-devops-ui/Icon';
-import { Link } from 'azure-devops-ui/Link';
 import { Dialog } from 'azure-devops-ui/Dialog';
 import axios, { AxiosResponse } from 'axios';
 
@@ -228,7 +213,10 @@ export default class SprintlyInRelease extends React.Component<
             > = [];
             for (const repo of filteredRepos) {
                 const repositoryBranchInfo: Common.IRepositoryBranchInfo =
-                    await Common.getRepositoryBranchesInfo(repo.id, false);
+                    await Common.getRepositoryBranchesInfo(
+                        repo.id,
+                        Common.repositoryHeadsFilter
+                    );
 
                 const buildDefinitionForRepo: BuildDefinition | undefined =
                     this.buildDefinitions.find(
@@ -435,34 +423,40 @@ export default class SprintlyInRelease extends React.Component<
 
                                 const environmentStatuses: JSX.Element[] = [];
                                 for (const environment of mostRecentRelease.environments) {
-                                    environmentStatuses.push(
-                                        Common.getSingleEnvironmentStatusPillJsxElement(
-                                            environment,
-                                            () => {
-                                                clickedDeployEnvironmentObservable.value =
-                                                    environment;
-                                                clickedDeployBranchNameObservable.value =
-                                                    treeItem.underlyingItem.data.name;
-                                                clickedDeployReleaseIdObservable.value =
-                                                    mostRecentRelease.id;
-                                                clickedDeployProjectReferenceObservable.value =
-                                                    {
-                                                        id: mostRecentRelease
-                                                            .projectReference
-                                                            .id,
-                                                        name: mostRecentRelease
-                                                            .projectReference
-                                                            .name,
-                                                    };
-                                                this.setState({
-                                                    clickedDeployEnvironmentStatus:
-                                                        environment.status,
-                                                });
-                                                isDeployDialogOpenObservable.value =
-                                                    true;
-                                            }
-                                        )
-                                    );
+                                    if (
+                                        !environment.name
+                                            .toLowerCase()
+                                            .includes('feature')
+                                    ) {
+                                        environmentStatuses.push(
+                                            Common.getSingleEnvironmentStatusPillJsxElement(
+                                                environment,
+                                                () => {
+                                                    clickedDeployEnvironmentObservable.value =
+                                                        environment;
+                                                    clickedDeployBranchNameObservable.value =
+                                                        treeItem.underlyingItem.data.name;
+                                                    clickedDeployReleaseIdObservable.value =
+                                                        mostRecentRelease.id;
+                                                    clickedDeployProjectReferenceObservable.value =
+                                                        {
+                                                            id: mostRecentRelease
+                                                                .projectReference
+                                                                .id,
+                                                            name: mostRecentRelease
+                                                                .projectReference
+                                                                .name,
+                                                        };
+                                                    this.setState({
+                                                        clickedDeployEnvironmentStatus:
+                                                            environment.status,
+                                                    });
+                                                    isDeployDialogOpenObservable.value =
+                                                        true;
+                                                }
+                                            )
+                                        );
+                                    }
                                 }
                                 return environmentStatuses;
                             }}

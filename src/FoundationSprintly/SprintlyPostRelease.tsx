@@ -11,8 +11,6 @@ import {
 import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
     GitAnnotatedTag,
-    GitBaseVersionDescriptor,
-    GitCommitDiffs,
     GitObjectType,
     GitPullRequest,
     GitRef,
@@ -21,7 +19,6 @@ import {
     GitRefUpdateStatus,
     GitRepository,
     GitRestClient,
-    GitTargetVersionDescriptor,
     PullRequestAsyncStatus,
     PullRequestStatus,
 } from 'azure-devops-extension-api/Git';
@@ -55,7 +52,6 @@ import { Page } from 'azure-devops-ui/Page';
 import { Pill, PillSize, PillVariant } from 'azure-devops-ui/Pill';
 import {
     CustomHeader,
-    Header,
     HeaderDescription,
     HeaderIcon,
     HeaderTitle,
@@ -79,11 +75,7 @@ import { ButtonGroup } from 'azure-devops-ui/ButtonGroup';
 import * as Common from './SprintlyCommon';
 import { Dialog } from 'azure-devops-ui/Dialog';
 import { ISelectionRange } from 'azure-devops-ui/Utilities/Selection';
-import {
-    TextField,
-    TextFieldStyle,
-    TextFieldWidth,
-} from 'azure-devops-ui/TextField';
+import { TextField, TextFieldStyle } from 'azure-devops-ui/TextField';
 import { FormItem } from 'azure-devops-ui/FormItem';
 
 // TODO: Instead of a state, consider just global observables
@@ -292,7 +284,10 @@ export default class SprintlyPostRelease extends React.Component<
 
             for (const repo of filteredRepos) {
                 const repositoryBranchInfo: Common.IRepositoryBranchInfo =
-                    await Common.getRepositoryBranchesInfo(repo.id);
+                    await Common.getRepositoryBranchesInfo(
+                        repo.id,
+                        Common.repositoryHeadsFilter
+                    );
 
                 const processRepo: boolean =
                     repositoryBranchInfo.hasDevelopBranch &&
@@ -623,7 +618,7 @@ export default class SprintlyPostRelease extends React.Component<
 
     private renderDetailPageHeaderCommandBar(
         repositoryName: string,
-        repositoryBranchesAndTags: GitRef[]
+        repositoryId: string
     ): JSX.Element {
         return (
             <HeaderCommandBar
@@ -640,14 +635,16 @@ export default class SprintlyPostRelease extends React.Component<
                                 .getTime()
                                 .toString();
                             isTagsDialogOpenObservable.value = true;
-                            const modalContent: ITagsModalContent =
-                                getTagsModalContent(
-                                    repositoryName,
-                                    repositoryBranchesAndTags
-                                );
-                            tagsRepoNameObservable.value =
-                                modalContent.modalName;
-                            tagsObservable.value = modalContent.modalValues;
+                            tagsRepoNameObservable.value = 'Loading tags...';
+                            tagsObservable.value = [];
+                            getTagsModalContent(
+                                repositoryName,
+                                repositoryId
+                            ).then((modalContent: ITagsModalContent) => {
+                                tagsRepoNameObservable.value =
+                                    modalContent.modalName;
+                                tagsObservable.value = modalContent.modalValues;
+                            });
                         },
                     },
                     {
@@ -670,7 +667,7 @@ export default class SprintlyPostRelease extends React.Component<
     private renderDetailPageHeader(
         repositoryName: string,
         repositoryWebUrl: string,
-        repositoryBranchesAndTags: GitRef[]
+        repositoryId: string
     ): JSX.Element {
         return (
             <CustomHeader className='bolt-header-with-commandbar'>
@@ -688,7 +685,7 @@ export default class SprintlyPostRelease extends React.Component<
                 )}
                 {this.renderDetailPageHeaderCommandBar(
                     repositoryName,
-                    repositoryBranchesAndTags
+                    repositoryId
                 )}
             </CustomHeader>
         );
@@ -716,8 +713,7 @@ export default class SprintlyPostRelease extends React.Component<
                                     {this.renderDetailPageHeader(
                                         observerProps.selectedItem.name,
                                         observerProps.selectedItem.webUrl,
-                                        observerProps.selectedItem
-                                            .branchesAndTags
+                                        observerProps.selectedItem.id
                                     )}
                                     <div className='page-content page-content-top'>
                                         <Card className='bolt-card-white'>
@@ -1033,11 +1029,13 @@ export default class SprintlyPostRelease extends React.Component<
             <Observer
                 isTagsDialogOpen={isTagsDialogOpenObservable}
                 tagsRepoName={tagsRepoNameObservable}
+                tags={tagsObservable}
                 tagsModalKey={tagsModalKeyObservable}
             >
                 {(props: {
                     isTagsDialogOpen: boolean;
                     tagsRepoName: string;
+                    tags: string[];
                     tagsModalKey: string;
                 }) => {
                     return (
@@ -1045,7 +1043,7 @@ export default class SprintlyPostRelease extends React.Component<
                             key={props.tagsModalKey}
                             isTagsDialogOpen={props.isTagsDialogOpen}
                             tagsRepoName={props.tagsRepoName}
-                            tags={tagsObservable.value}
+                            tags={props.tags}
                             closeMe={() => {
                                 isTagsDialogOpenObservable.value = false;
                             }}
