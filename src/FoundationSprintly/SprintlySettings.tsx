@@ -22,8 +22,7 @@ import { ISelectionRange } from 'azure-devops-ui/Utilities/Selection';
 import * as Common from './SprintlyCommon';
 import { Card } from 'azure-devops-ui/Card';
 import { Page } from 'azure-devops-ui/Page';
-import { Header, TitleSize, CustomHeader } from 'azure-devops-ui/Header';
-import { HeaderCommandBar } from 'azure-devops-ui/HeaderCommandBar';
+import { Header, TitleSize } from 'azure-devops-ui/Header';
 import {
     Splitter,
     SplitterDirection,
@@ -32,15 +31,7 @@ import {
 import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { FormItem } from 'azure-devops-ui/FormItem';
 import { TextField, TextFieldStyle } from 'azure-devops-ui/TextField';
-import {
-    ISimpleTableCell,
-    ITableColumn,
-    renderSimpleCell,
-    SimpleTableCell,
-    Table,
-    TableColumnLayout,
-} from 'azure-devops-ui/Table';
-import { ISimpleListCell } from 'azure-devops-ui/List';
+import { ITableColumn, SimpleTableCell, Table } from 'azure-devops-ui/Table';
 import { ArrayItemProvider } from 'azure-devops-ui/Utilities/Provider';
 import { Dialog } from 'azure-devops-ui/Dialog';
 
@@ -228,12 +219,16 @@ export default class SprintlySettings extends React.Component<
             const repos: GitRepository[] = await getClient(
                 GitRestClient
             ).getRepositories(project.id);
+
             for (const repo of repos) {
                 this.allRepositories.push({
                     originId: repo.id,
                     displayName: repo.name,
                 });
             }
+            this.allRepositories = Common.sortAllowedEntityList(
+                this.allRepositories
+            );
         }
     }
 

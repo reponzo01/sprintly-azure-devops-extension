@@ -418,6 +418,19 @@ export function sortRepositoryList(
     return repositoryList;
 }
 
+export function sortAllowedEntityList(
+    allowedEntityList: IAllowedEntity[]
+): IAllowedEntity[] {
+    if (allowedEntityList.length > 0) {
+        return allowedEntityList.sort(
+            (a: IAllowedEntity, b: IAllowedEntity) => {
+                return a.displayName.localeCompare(b.displayName);
+            }
+        );
+    }
+    return allowedEntityList;
+}
+
 export async function fetchAndStoreBranchReleaseInfoIntoObservable(
     releaseInfoObservable: ObservableArray<IReleaseInfo>,
     buildDefinitionForRepo: BuildDefinition,
