@@ -2,9 +2,7 @@ import './FoundationSprintly.scss';
 
 import * as React from 'react';
 
-import * as SDK from 'azure-devops-extension-sdk';
 import {
-    CommonServiceIds,
     getClient,
     IExtensionDataManager,
     IGlobalMessagesService,
@@ -189,7 +187,10 @@ export default class SprintlyPage extends React.Component<
 
             for (const repo of filteredRepos) {
                 const repositoryBranchInfo: Common.IRepositoryBranchInfo =
-                    await Common.getRepositoryBranchesInfo(repo.id);
+                    await Common.getRepositoryBranchesInfo(
+                        repo.id,
+                        Common.repositoryHeadsFilter
+                    );
 
                 const processRepo: boolean =
                     repositoryBranchInfo.hasDevelopBranch &&
@@ -279,14 +280,24 @@ export default class SprintlyPage extends React.Component<
 
     private tagsModal(): JSX.Element {
         return (
-            <Observer isTagsDialogOpen={isTagsDialogOpenObservable}>
-                {(props: { isTagsDialogOpen: boolean }) => {
+            <Observer
+                isTagsDialogOpen={isTagsDialogOpenObservable}
+                tagsRepoName={tagsRepoNameObservable}
+                tags={tagsObservable}
+                tagsModalKey={tagsModalKeyObservable}
+            >
+                {(props: {
+                    isTagsDialogOpen: boolean;
+                    tagsRepoName: string;
+                    tags: string[];
+                    tagsModalKey: string;
+                }) => {
                     return (
                         <TagsModal
-                            key={tagsModalKeyObservable.value}
+                            key={props.tagsModalKey}
                             isTagsDialogOpen={props.isTagsDialogOpen}
-                            tagsRepoName={tagsRepoNameObservable.value}
-                            tags={tagsObservable.value}
+                            tagsRepoName={props.tagsRepoName}
+                            tags={props.tags}
                             closeMe={() => {
                                 isTagsDialogOpenObservable.value = false;
                             }}
@@ -425,14 +436,18 @@ export default class SprintlyPage extends React.Component<
                                     .getTime()
                                     .toString();
                                 isTagsDialogOpenObservable.value = true;
-                                const modalContent: ITagsModalContent =
-                                    getTagsModalContent(
-                                        tableItem.name,
-                                        tableItem.branchesAndTags
-                                    );
                                 tagsRepoNameObservable.value =
-                                    modalContent.modalName;
-                                tagsObservable.value = modalContent.modalValues;
+                                    'Loading tags...';
+                                tagsObservable.value = [];
+                                getTagsModalContent(
+                                    tableItem.name,
+                                    tableItem.id
+                                ).then((modalContent: ITagsModalContent) => {
+                                    tagsRepoNameObservable.value =
+                                        modalContent.modalName;
+                                    tagsObservable.value =
+                                        modalContent.modalValues;
+                                });
                             }}
                         />
                     </>

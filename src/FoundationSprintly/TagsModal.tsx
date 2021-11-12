@@ -4,6 +4,8 @@ import { SimpleList } from 'azure-devops-ui/List';
 import { ArrayItemProvider } from 'azure-devops-ui/Utilities/Provider';
 import * as React from 'react';
 
+import { repositoryTagsFilter, getRepositoryInfo } from './SprintlyCommon';
+
 export interface ITagsModalContent {
     modalName: string;
     modalValues: string[];
@@ -48,16 +50,24 @@ export class TagsModal extends React.Component<{
     }
 }
 
-export function getTagsModalContent(
+export async function getTagsModalContent(
     repositoryName: string,
-    branchesAndTags: GitRef[]
-): ITagsModalContent {
+    repositoryId: string
+): Promise<ITagsModalContent> {
     const modalName: string = `${repositoryName} Tags`;
     const modalValues: string[] = [];
-    for (const branch of branchesAndTags) {
-        if (branch.name.includes('refs/tags')) {
-            modalValues.push(branch.name);
+
+    const tags: GitRef[] = await getRepositoryInfo(
+        repositoryId,
+        repositoryTagsFilter
+    );
+    if (!tags || tags.length <= 0) {
+        modalValues.push('No tags found.');
+    } else {
+        for (const tag of tags) {
+            modalValues.push(tag.name);
         }
     }
+
     return { modalName, modalValues };
 }

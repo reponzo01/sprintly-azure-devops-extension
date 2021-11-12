@@ -87,6 +87,10 @@ export const warningColor: IColor = {
     blue: 37,
 };
 
+export const repositoryHeadsFilter: string = 'heads/';
+
+export const repositoryTagsFilter: string = 'tags/';
+
 export interface IAllowedEntity {
     displayName: string;
     originId: string;
@@ -264,20 +268,6 @@ export async function getFilteredProjectRepositories(
     return filteredRepos;
 }
 
-export async function getRepositoryInfo(repoId: string): Promise<GitRef[]> {
-    return await getClient(GitRestClient).getRefs(
-        repoId,
-        undefined,
-        undefined,
-        false,
-        false,
-        undefined,
-        true,
-        false,
-        undefined
-    );
-}
-
 export async function isBranchAheadOfDevelop(
     branchName: string,
     repositoryId: string
@@ -362,14 +352,35 @@ export function codeChangesInCommitDiffs(commitsDiff: GitCommitDiffs): boolean {
     );
 }
 
+export async function getRepositoryInfo(
+    repoId: string,
+    filter?: string
+): Promise<GitRef[]> {
+    return await getClient(GitRestClient).getRefs(
+        repoId,
+        undefined,
+        filter ? filter : undefined,
+        false,
+        false,
+        undefined,
+        true,
+        false,
+        undefined
+    );
+}
+
 export async function getRepositoryBranchesInfo(
-    repositoryId: string
+    repositoryId: string,
+    filter?: string
 ): Promise<IRepositoryBranchInfo> {
     let hasDevelopBranch: boolean = false;
     let hasMasterBranch: boolean = false;
     let hasMainBranch: boolean = false;
 
-    const allBranchesAndTags: GitRef[] = await getRepositoryInfo(repositoryId);
+    const allBranchesAndTags: GitRef[] = await getRepositoryInfo(
+        repositoryId,
+        filter
+    );
     const releaseBranches: GitRef[] = [];
 
     for (const branch of allBranchesAndTags) {
