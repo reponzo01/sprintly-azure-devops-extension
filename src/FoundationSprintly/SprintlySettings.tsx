@@ -197,6 +197,7 @@ export default class SprintlySettings extends React.Component<
                 descriptor: group.descriptor,
             });
         }
+        this.allUserGroups = Common.sortAllowedEntityList(this.allUserGroups);
     }
 
     private async loadUsers(): Promise<void> {
@@ -209,6 +210,7 @@ export default class SprintlySettings extends React.Component<
                 descriptor: user.descriptor,
             });
         }
+        this.allUsers = Common.sortAllowedEntityList(this.allUsers);
     }
 
     private async loadRepositories(): Promise<void> {
