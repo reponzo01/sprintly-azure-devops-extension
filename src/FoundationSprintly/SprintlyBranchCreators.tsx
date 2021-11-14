@@ -9,7 +9,10 @@ import {
 } from 'azure-devops-extension-api/Git';
 
 import { Card } from 'azure-devops-ui/Card';
-import { ObservableValue } from 'azure-devops-ui/Core/Observable';
+import {
+    ObservableArray,
+    ObservableValue,
+} from 'azure-devops-ui/Core/Observable';
 import { Icon, IconSize } from 'azure-devops-ui/Icon';
 import { Link } from 'azure-devops-ui/Link';
 import {
@@ -31,6 +34,7 @@ import {
     ColumnSorting,
     ITableColumn,
     SimpleTableCell,
+    sortItems,
     SortOrder,
     Table,
 } from 'azure-devops-ui/Table';
@@ -45,7 +49,7 @@ export interface ISprintlyBranchCreatorsState {
     userSettings?: Common.IUserSettings;
     systemSettings?: Common.ISystemSettings;
     repositories: ArrayItemProvider<GitRepository>;
-    repositoryBranches: ArrayItemProvider<GitRef>;
+    repositoryBranches: ObservableArray<GitRef>;
     repositoryListSelection: ListSelection;
     repositoryListSelectedItemObservable: ObservableValue<GitRepository>;
 }
@@ -74,27 +78,36 @@ export default class SprintlyBranchCreators extends React.Component<
 > {
     private dataManager: IExtensionDataManager;
     private columns: any = [];
-    // private sortingBehavior = new ColumnSorting<GitRef>(
-    //     (
-    //         columnIndex: number,
-    //         proposedSortOrder: SortOrder,
-    //         event:
-    //             | React.KeyboardEvent<HTMLElement>
-    //             | React.MouseEvent<HTMLElement>
-    //     ) => {
-    //         this.state.repositoryBranches.splice(
-    //             0,
-    //             tableItems.length,
-    //             ...sortItems<GitRef>(
-    //                 columnIndex,
-    //                 proposedSortOrder,
-    //                 sortFunctions,
-    //                 columns,
-    //                 rawTableItems
-    //             )
-    //         );
-    //     }
-    // );
+    private sortingBehavior: ColumnSorting<GitRef> = new ColumnSorting<GitRef>(
+        (
+            columnIndex: number,
+            proposedSortOrder: SortOrder,
+            event:
+                | React.KeyboardEvent<HTMLElement>
+                | React.MouseEvent<HTMLElement>
+        ) => {
+            this.state.repositoryBranches.splice(
+                0,
+                this.state.repositoryBranches.length,
+                ...sortItems<GitRef>(
+                    columnIndex,
+                    proposedSortOrder,
+                    this.sortFunctions,
+                    this.columns,
+                    this.state.repositoryBranches.value
+                )
+            );
+        }
+    );
+    private sortFunctions: any = [
+        (a: GitRef, b: GitRef): number => {
+            return a.name.localeCompare(b.name);
+        },
+        null,
+        (a: GitRef, b: GitRef): number => {
+            return a.creator.displayName.localeCompare(b.creator.displayName);
+        },
+    ];
 
     constructor(props: { dataManager: IExtensionDataManager }) {
         super(props);
@@ -112,6 +125,10 @@ export default class SprintlyBranchCreators extends React.Component<
                 name: 'Branch',
                 onSize: this.onSize,
                 renderCell: this.renderNameCell,
+                sortProps: {
+                    ariaLabelAscending: 'Sorted A to Z',
+                    ariaLabelDescending: 'Sorted Z to A',
+                },
                 width: nameColumnWidthObservable,
             },
             {
@@ -126,13 +143,17 @@ export default class SprintlyBranchCreators extends React.Component<
                 name: 'Branch Creator',
                 onSize: this.onSize,
                 renderCell: this.renderBranchCreatorCell,
+                sortProps: {
+                    ariaLabelAscending: 'Sorted A to Z',
+                    ariaLabelDescending: 'Sorted Z to A',
+                },
                 width: branchCreatorColumnWidthObservable,
             },
         ];
 
         this.state = {
             repositories: new ArrayItemProvider<GitRepository>([]),
-            repositoryBranches: new ArrayItemProvider<GitRef>([]),
+            repositoryBranches: new ObservableArray<GitRef>([]),
             repositoryListSelection: new ListSelection({
                 selectOnFocus: false,
             }),
@@ -250,9 +271,9 @@ export default class SprintlyBranchCreators extends React.Component<
                                         <Card className='bolt-table-card bolt-card-white'>
                                             <Table
                                                 columns={this.columns}
-                                                // behaviors={[
-                                                //     this.sortingBehavior,
-                                                // ]}
+                                                behaviors={[
+                                                    this.sortingBehavior,
+                                                ]}
                                                 itemProvider={
                                                     this.state
                                                         .repositoryBranches
@@ -425,7 +446,7 @@ export default class SprintlyBranchCreators extends React.Component<
             undefined
         );
         this.setState({
-            repositoryBranches: new ArrayItemProvider<GitRef>(
+            repositoryBranches: new ObservableArray<GitRef>(
                 Common.sortBranchesList(repositoryBranches)
             ),
         });
