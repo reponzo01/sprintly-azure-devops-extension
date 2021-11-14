@@ -391,7 +391,7 @@ export default class SprintlyPostRelease extends React.Component<
 
             this.setState({
                 repositories: new ArrayItemProvider(
-                    Common.sortRepositoryList(reposExtended)
+                    Common.sortRepositoryExtendedList(reposExtended)
                 ),
             });
 

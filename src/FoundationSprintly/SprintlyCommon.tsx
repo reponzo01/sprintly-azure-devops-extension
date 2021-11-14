@@ -406,6 +406,19 @@ export async function getRepositoryBranchesInfo(
 }
 
 export function sortRepositoryList(
+    repositoryList: GitRepository[]
+): GitRepository[] {
+    if (repositoryList.length > 0) {
+        return repositoryList.sort(
+            (a: GitRepository, b: GitRepository) => {
+                return a.name.localeCompare(b.name);
+            }
+        );
+    }
+    return repositoryList;
+}
+
+export function sortRepositoryExtendedList(
     repositoryList: IGitRepositoryExtended[]
 ): IGitRepositoryExtended[] {
     if (repositoryList.length > 0) {
@@ -429,6 +442,19 @@ export function sortAllowedEntityList(
         );
     }
     return allowedEntityList;
+}
+
+export function sortBranchesList(
+    branchesList: GitRef[]
+): GitRef[] {
+    if (branchesList.length > 0) {
+        return branchesList.sort(
+            (a: GitRef, b: GitRef) => {
+                return a.name.localeCompare(b.name);
+            }
+        );
+    }
+    return branchesList;
 }
 
 export async function fetchAndStoreBranchReleaseInfoIntoObservable(

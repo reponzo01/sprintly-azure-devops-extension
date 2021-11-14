@@ -7,6 +7,9 @@ import {
     IExtensionDataManager,
     IGlobalMessagesService,
 } from 'azure-devops-extension-api';
+import { ReleaseDefinition } from 'azure-devops-extension-api/Release';
+import { BuildDefinition } from 'azure-devops-extension-api/Build';
+import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 
 import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
@@ -15,19 +18,18 @@ import { Page } from 'azure-devops-ui/Page';
 import { Header, TitleSize } from 'azure-devops-ui/Header';
 import { IHeaderCommandBarItem } from 'azure-devops-ui/HeaderCommandBar';
 import { ZeroData } from 'azure-devops-ui/ZeroData';
+import { IMenuItem } from 'azure-devops-ui/Menu';
+import { Link } from 'azure-devops-ui/Link';
+import { Icon, IconSize } from 'azure-devops-ui/Icon';
 
 import SprintlyPage from './SprintlyPage';
 import SprintlyInRelease from './SprintlyInRelease';
 import SprintlyPostRelease from './SprintlyPostRelease';
 import SprintlySettings from './SprintlySettings';
+import SprintlyBranchCreators from './SprintlyBranchCreators';
 import * as Common from './SprintlyCommon';
+
 import { showRootComponent } from '../Common';
-import { IMenu, IMenuItem } from 'azure-devops-ui/Menu';
-import { Link } from 'azure-devops-ui/Link';
-import { Icon, IconSize } from 'azure-devops-ui/Icon';
-import { ReleaseDefinition } from 'azure-devops-extension-api/Release';
-import { BuildDefinition } from 'azure-devops-extension-api/Build';
-import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 
 const selectedTabKey: string = 'selected-tab';
 const userSettingsDataManagerKey: string = 'user-settings';
@@ -40,6 +42,8 @@ const sprintlyPostReleaseTabKey: string = 'sprintly-post-release';
 const sprintlyPostReleaseTabName: string = 'Post Release';
 const sprintlySettingsTabKey: string = 'sprintly-settings';
 const sprintlySettingsTabName: string = 'Settings';
+const sprintlyBranchCreatorsTabKey: string = 'sprintly-branch-creators';
+const sprintlyBranchCreatorsTabName: string = 'Branch Creators';
 
 const selectedTabIdObservable: ObservableValue<string> =
     new ObservableValue<string>('');
@@ -83,12 +87,18 @@ export default class FoundationSprintly extends React.Component<
             descriptor:
                 'vssgp.Uy0xLTktMTU1MTM3NDI0NS0xODk1NzMzMjY1LTQ3ODY0Mzg0LTMwMjU3MjkyMzQtOTM5ODg1NzU0LTEtMzA1NDcxNjM4Mi0zNjc1OTA4OTI5LTI3MjY5NzI4MTctMzczODgxNDI4NQ',
         },
-        /*{
-            displayName: 'Sample Project Team',
-            originId: 'fccefee4-a7a9-432a-a7a2-fc6d3d8bc45d',
-            descriptor:
-                'vssgp.Uy0xLTktMTU1MTM3NDI0NS0zMTEzMzAyODctMzI5MTIzMzA5NC0zMTI4MjY0MTg3LTQwMTUzMTUzOTYtMS0xNTY5MTY5Mjc5LTIzODYzODU5OTQtMjU1MDU2OTgzMi02NDQyOTAwODc',
-        },*/
+        // {
+        //     displayName: 'Sample Project Team', // fsllc
+        //     originId: 'fccefee4-a7a9-432a-a7a2-fc6d3d8bc45d',
+        //     descriptor:
+        //         'vssgp.Uy0xLTktMTU1MTM3NDI0NS0zMTEzMzAyODctMzI5MTIzMzA5NC0zMTI4MjY0MTg3LTQwMTUzMTUzOTYtMS0xNTY5MTY5Mjc5LTIzODYzODU5OTQtMjU1MDU2OTgzMi02NDQyOTAwODc',
+        // },
+        // {
+        //     displayName: 'Sample Project Team', // reponzo01
+        //     originId: '221ca28d-8d55-4229-aeee-d96b619d8bf9',
+        //     descriptor:
+        //         'vssgp.Uy0xLTktMTU1MTM3NDI0NS0zNTI2OTIzMzAwLTE2ODEyODk1MzctMjE5OTc3MDkxOC0yNDEwMzk4MTQ4LTEtODgxNTgyODM0LTIyMjg0NjE4OTgtMzA0NDA1NzUwOC03NTYzNzk0ODA',
+        // },
     ];
 
     constructor(props: {}) {
@@ -346,6 +356,10 @@ export default class FoundationSprintly extends React.Component<
                         buildDefinitions={this.buildDefinitions}
                     />
                 );
+            case sprintlyBranchCreatorsTabKey:
+                return (
+                    <SprintlyBranchCreators dataManager={this.dataManager} />
+                );
             default:
                 return <div></div>;
         }
@@ -457,6 +471,10 @@ function renderTabBar(): JSX.Element {
             <Tab
                 name={sprintlyPostReleaseTabName}
                 id={sprintlyPostReleaseTabKey}
+            />
+            <Tab
+                name={sprintlyBranchCreatorsTabName}
+                id={sprintlyBranchCreatorsTabKey}
             />
             <Tab name={sprintlySettingsTabName} id={sprintlySettingsTabKey} />
         </TabBar>
