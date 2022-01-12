@@ -18,11 +18,7 @@ export default class SprintlyBlankTemplatePage extends React.Component<
             <div>
                 <ZeroData
                     primaryText='Nothing to see here.'
-                    secondaryText={
-                        <span>
-                            Add some content.
-                        </span>
-                    }
+                    secondaryText={<span>Add some content.</span>}
                     imageAltText='Nothing Here'
                     imagePath={'../static/notfound.png'}
                 />

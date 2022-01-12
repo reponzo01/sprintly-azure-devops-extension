@@ -27,6 +27,7 @@ import SprintlyInRelease from './SprintlyInRelease';
 import SprintlyPostRelease from './SprintlyPostRelease';
 import SprintlySettings from './SprintlySettings';
 import SprintlyBranchCreators from './SprintlyBranchCreators';
+import SprintlyBranchSearch from './SprintlyBranchSearch';
 import * as Common from './SprintlyCommon';
 
 import { showRootComponent } from '../Common';
@@ -44,6 +45,8 @@ const sprintlySettingsTabKey: string = 'sprintly-settings';
 const sprintlySettingsTabName: string = 'Settings';
 const sprintlyBranchCreatorsTabKey: string = 'sprintly-branch-creators';
 const sprintlyBranchCreatorsTabName: string = 'Branch Creators';
+const sprintlyBranchSearchTabKey: string = 'sprintly-branch-search';
+const sprintlyBranchSearchTabName: string = 'Branch Search';
 
 const selectedTabIdObservable: ObservableValue<string> =
     new ObservableValue<string>('');
@@ -360,6 +363,10 @@ export default class FoundationSprintly extends React.Component<
                 return (
                     <SprintlyBranchCreators dataManager={this.dataManager} />
                 );
+            case sprintlyBranchSearchTabKey:
+                return (
+                    <SprintlyBranchSearch />
+                );
             default:
                 return <div></div>;
         }
@@ -475,6 +482,10 @@ function renderTabBar(): JSX.Element {
             <Tab
                 name={sprintlyBranchCreatorsTabName}
                 id={sprintlyBranchCreatorsTabKey}
+            />
+            <Tab
+                name={sprintlyBranchSearchTabName}
+                id={sprintlyBranchSearchTabKey}
             />
             <Tab name={sprintlySettingsTabName} id={sprintlySettingsTabKey} />
         </TabBar>
