@@ -365,7 +365,7 @@ export default class FoundationSprintly extends React.Component<
                 );
             case sprintlyBranchSearchTabKey:
                 return (
-                    <SprintlyBranchSearch />
+                    <SprintlyBranchSearch dataManager={this.dataManager} />
                 );
             default:
                 return <div></div>;
