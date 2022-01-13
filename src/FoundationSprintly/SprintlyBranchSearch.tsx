@@ -89,19 +89,11 @@ const enum SearchType {
 
 let repositoriesToProcess: string[] = [];
 
-export interface ISearchResultBranch {
-    branchName: string;
-    branchStats?: GitBranchStats;
-    branchCreator: IdentityRef;
-    repository: GitRepository;
-    projectId: string;
-}
-
 export interface ISprintlyBranchSearchPageState {
     userSettings?: Common.IUserSettings;
     systemSettings?: Common.ISystemSettings;
     repositories: GitRepository[];
-    searchResultBranchesObservable: ObservableArray<ISearchResultBranch>;
+    searchResultBranchesObservable: ObservableArray<Common.ISearchResultBranch>;
 }
 
 export default class SprintlyBranchSearchPage extends React.Component<
@@ -117,14 +109,14 @@ export default class SprintlyBranchSearchPage extends React.Component<
     private organizationName: string;
     private userName: string;
     private globalMessagesSvc: IGlobalMessagesService;
-    private branchToDelete?: ISearchResultBranch;
+    private branchToDelete?: Common.ISearchResultBranch;
     private searchResultsSelection: ListSelection = new ListSelection({
         selectOnFocus: false,
         multiSelect: true,
     });
     private columns: any = [];
-    private sortingBehavior: ColumnSorting<ISearchResultBranch> =
-        new ColumnSorting<ISearchResultBranch>(
+    private sortingBehavior: ColumnSorting<Common.ISearchResultBranch> =
+        new ColumnSorting<Common.ISearchResultBranch>(
             (
                 columnIndex: number,
                 proposedSortOrder: SortOrder,
@@ -135,7 +127,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
                 this.state.searchResultBranchesObservable.splice(
                     0,
                     this.state.searchResultBranchesObservable.length,
-                    ...sortItems<ISearchResultBranch>(
+                    ...sortItems<Common.ISearchResultBranch>(
                         columnIndex,
                         proposedSortOrder,
                         this.sortFunctions,
@@ -147,14 +139,23 @@ export default class SprintlyBranchSearchPage extends React.Component<
         );
     private sortFunctions: any = [
         null,
-        (a: ISearchResultBranch, b: ISearchResultBranch): number => {
+        (
+            a: Common.ISearchResultBranch,
+            b: Common.ISearchResultBranch
+        ): number => {
             return a.branchName.localeCompare(b.branchName);
         },
-        (a: ISearchResultBranch, b: ISearchResultBranch): number => {
+        (
+            a: Common.ISearchResultBranch,
+            b: Common.ISearchResultBranch
+        ): number => {
             return a.repository.name.localeCompare(b.repository.name);
         },
         null,
-        (a: ISearchResultBranch, b: ISearchResultBranch): number => {
+        (
+            a: Common.ISearchResultBranch,
+            b: Common.ISearchResultBranch
+        ): number => {
             return a.branchCreator.displayName.localeCompare(
                 b.branchCreator.displayName
             );
@@ -234,7 +235,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
         this.state = {
             repositories: [],
             searchResultBranchesObservable:
-                new ObservableArray<ISearchResultBranch>([]),
+                new ObservableArray<Common.ISearchResultBranch>([]),
         };
 
         this.dataManager = props.dataManager;
@@ -303,8 +304,8 @@ export default class SprintlyBranchSearchPage extends React.Component<
     private renderNameCell(
         rowIndex: number,
         columnIndex: number,
-        tableColumn: ITableColumn<ISearchResultBranch>,
-        tableItem: ISearchResultBranch
+        tableColumn: ITableColumn<Common.ISearchResultBranch>,
+        tableItem: Common.ISearchResultBranch
     ): JSX.Element {
         return (
             <SimpleTableCell
@@ -321,7 +322,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
                             {Common.branchLinkJsxElement(
                                 columnIndex.toString(),
                                 tableItem.repository.webUrl,
-                                tableItem.branchName.split('refs/heads/')[1],
+                                Common.getBranchShortName(tableItem.branchName),
                                 'bolt-table-link bolt-table-inline-link'
                             )}
                         </u>
@@ -334,8 +335,8 @@ export default class SprintlyBranchSearchPage extends React.Component<
     private renderRepositoryCell(
         rowIndex: number,
         columnIndex: number,
-        tableColumn: ITableColumn<ISearchResultBranch>,
-        tableItem: ISearchResultBranch
+        tableColumn: ITableColumn<Common.ISearchResultBranch>,
+        tableItem: Common.ISearchResultBranch
     ): JSX.Element {
         return (
             <SimpleTableCell
@@ -361,8 +362,8 @@ export default class SprintlyBranchSearchPage extends React.Component<
     private renderStatsCell(
         rowIndex: number,
         columnIndex: number,
-        tableColumn: ITableColumn<ISearchResultBranch>,
-        tableItem: ISearchResultBranch
+        tableColumn: ITableColumn<Common.ISearchResultBranch>,
+        tableItem: Common.ISearchResultBranch
     ): JSX.Element {
         return (
             <SimpleTableCell
@@ -377,9 +378,9 @@ export default class SprintlyBranchSearchPage extends React.Component<
                                 this.organizationName
                             }/${tableItem.projectId}/_git/${
                                 tableItem.repository.name
-                            }/branchCompare?baseVersion=GB${
-                                tableItem.branchName.split('refs/heads/')[1]
-                            }&targetVersion=GBdevelop&_a=commits`}
+                            }/branchCompare?baseVersion=GB${Common.getBranchShortName(
+                                tableItem.branchName
+                            )}&targetVersion=GBdevelop&_a=commits`}
                             subtle={true}
                             target='_blank'
                         >
@@ -394,9 +395,9 @@ export default class SprintlyBranchSearchPage extends React.Component<
                                 tableItem.repository.name
                             }/branchCompare?baseVersion=GB${
                                 Common.DEVELOP
-                            }&targetVersion=GB${
-                                tableItem.branchName.split('refs/heads/')[1]
-                            }&_a=commits`}
+                            }&targetVersion=GB${Common.getBranchShortName(
+                                tableItem.branchName
+                            )}&_a=commits`}
                             subtle={true}
                             target='_blank'
                         >
@@ -411,8 +412,8 @@ export default class SprintlyBranchSearchPage extends React.Component<
     private renderBranchCreatorCell(
         rowIndex: number,
         columnIndex: number,
-        tableColumn: ITableColumn<ISearchResultBranch>,
-        tableItem: ISearchResultBranch
+        tableColumn: ITableColumn<Common.ISearchResultBranch>,
+        tableItem: Common.ISearchResultBranch
     ): JSX.Element {
         return (
             <SimpleTableCell
@@ -458,8 +459,8 @@ export default class SprintlyBranchSearchPage extends React.Component<
     private renderDeleteBranchCell(
         rowIndex: number,
         columnIndex: number,
-        tableColumn: ITableColumn<ISearchResultBranch>,
-        tableItem: ISearchResultBranch
+        tableColumn: ITableColumn<Common.ISearchResultBranch>,
+        tableItem: Common.ISearchResultBranch
     ): JSX.Element {
         return (
             <SimpleTableCell
@@ -507,8 +508,9 @@ export default class SprintlyBranchSearchPage extends React.Component<
         if (searchType === SearchType.JustMyBranches) {
             repositoryBranches = repositoryBranches.filter(
                 (branch: GitRef) =>
-                    branch.name.split('refs/heads/')[1].includes(searchTerm) &&
-                    branch.creator.uniqueName === this.userName
+                    Common.getBranchShortName(branch.name).includes(
+                        searchTerm
+                    ) && branch.creator.uniqueName === this.userName
             );
         }
         if (searchType === SearchType.AllMyBranches) {
@@ -524,7 +526,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
         this.searchResultsSelection.clear();
         this.setState({
             searchResultBranchesObservable:
-                new ObservableArray<ISearchResultBranch>([]),
+                new ObservableArray<Common.ISearchResultBranch>([]),
         });
         const searchTerm: string = searchObservable.value.trim();
         if (
@@ -532,7 +534,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
                 (!searchTerm && searchType === SearchType.AllMyBranches)) &&
             totalRepositoriesToProcessObservable.value > 0
         ) {
-            const resultBranches: ISearchResultBranch[] = [];
+            const resultBranches: Common.ISearchResultBranch[] = [];
             for (const repositoryId of repositoriesToProcess) {
                 const baseRepository: GitRepository | undefined =
                     this.state.repositories.find(
@@ -589,13 +591,16 @@ export default class SprintlyBranchSearchPage extends React.Component<
             }
             this.setState({
                 searchResultBranchesObservable:
-                    new ObservableArray<ISearchResultBranch>(resultBranches),
+                    new ObservableArray<Common.ISearchResultBranch>(
+                        Common.sortSearchResultBranchesList(resultBranches)
+                    ),
             });
         } else {
             this.globalMessagesSvc.addToast({
                 duration: 5000,
                 forceOverrideExisting: true,
-                message: 'Please ensure you have typed in a search term or have repositories set up in the Settings tab.'
+                message:
+                    'Please ensure you have typed in a search term or have repositories set up in the Settings tab.',
             });
         }
         isLoadingObservable.value = false;
@@ -688,13 +693,13 @@ export default class SprintlyBranchSearchPage extends React.Component<
     }
 
     private deleteBranchesAction(
-        branchesToDelete: ISearchResultBranch[]
+        branchesToDelete: Common.ISearchResultBranch[]
     ): void {
         if (branchesToDelete.length > 0) {
             const createRefOptions: GitRefUpdate[] = [];
 
             const uniqueRepositories: string[] = branchesToDelete
-                .map((branch: ISearchResultBranch) => {
+                .map((branch: Common.ISearchResultBranch) => {
                     return branch.repository.id;
                 })
                 .filter(
@@ -749,13 +754,15 @@ export default class SprintlyBranchSearchPage extends React.Component<
                                           GitRefUpdateStatus[res.updateStatus],
                                 });
                                 if (res.success) {
-                                    const searchResults: ISearchResultBranch[] =
+                                    const searchResults: Common.ISearchResultBranch[] =
                                         this.state
                                             .searchResultBranchesObservable
                                             .value;
                                     const indexToRemove: number =
                                         searchResults.findIndex(
-                                            (branch: ISearchResultBranch) =>
+                                            (
+                                                branch: Common.ISearchResultBranch
+                                            ) =>
                                                 branch.branchName ===
                                                     res.name &&
                                                 branch.repository.id ===
@@ -764,7 +771,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
                                     searchResults.splice(indexToRemove, 1);
                                     this.setState({
                                         searchResultBranchesObservable:
-                                            new ObservableArray<ISearchResultBranch>(
+                                            new ObservableArray<Common.ISearchResultBranch>(
                                                 searchResults
                                             ),
                                     });
@@ -806,10 +813,11 @@ export default class SprintlyBranchSearchPage extends React.Component<
     }
 
     private deleteBatchBranchAction(): void {
-        const branchesToDelete: ISearchResultBranch[] = this.getSelectedRange(
-            this.searchResultsSelection.value,
-            this.state.searchResultBranchesObservable.value
-        );
+        const branchesToDelete: Common.ISearchResultBranch[] =
+            this.getSelectedRange(
+                this.searchResultsSelection.value,
+                this.state.searchResultBranchesObservable.value
+            );
 
         this.deleteBranchesAction(branchesToDelete);
 
@@ -827,11 +835,11 @@ export default class SprintlyBranchSearchPage extends React.Component<
 
     private getSelectedRange(
         selectionRange: ISelectionRange[],
-        dataArray: ISearchResultBranch[]
-    ): ISearchResultBranch[] {
-        const selectedArray: ISearchResultBranch[] = [];
+        dataArray: Common.ISearchResultBranch[]
+    ): Common.ISearchResultBranch[] {
+        const selectedArray: Common.ISearchResultBranch[] = [];
         for (const rng of selectionRange) {
-            const sliced: ISearchResultBranch[] = dataArray.slice(
+            const sliced: Common.ISearchResultBranch[] = dataArray.slice(
                 rng.beginIndex,
                 rng.endIndex + 1
             );
@@ -902,7 +910,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
                     isLoading={isLoadingObservable}
                 >
                     {(observerProps: {
-                        searchResults: ISearchResultBranch[];
+                        searchResults: Common.ISearchResultBranch[];
                         isLoading: boolean;
                     }) => {
                         if (observerProps.searchResults.length > 0) {
@@ -942,21 +950,31 @@ export default class SprintlyBranchSearchPage extends React.Component<
                                 </>
                             );
                         } else {
-                            if (searchObservable.value && !observerProps.isLoading) {
-                                return <div>
-                                <ZeroData
-                                    primaryText='No results found.'
-                                    secondaryText={
-                                        <span>
-                                            Please update your search term.
-                                        </span>
-                                    }
-                                    imageAltText='No results found.'
-                                    imagePath={'../static/notfound.png'}
-                                />
-                            </div>
+                            if (
+                                searchObservable.value &&
+                                !observerProps.isLoading
+                            ) {
+                                return (
+                                    <div>
+                                        <ZeroData
+                                            primaryText='No results found.'
+                                            secondaryText={
+                                                <span>
+                                                    Please update your search
+                                                    term.
+                                                </span>
+                                            }
+                                            imageAltText='No results found.'
+                                            imagePath={'../static/notfound.png'}
+                                        />
+                                    </div>
+                                );
                             }
-                            return <><div></div></>;
+                            return (
+                                <>
+                                    <div></div>
+                                </>
+                            );
                         }
                     }}
                 </Observer>

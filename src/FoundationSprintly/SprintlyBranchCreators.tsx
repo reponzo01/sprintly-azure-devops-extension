@@ -3,9 +3,13 @@ import * as React from 'react';
 import { getClient, IExtensionDataManager } from 'azure-devops-extension-api';
 import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
+    GitBranchStats,
     GitRef,
     GitRepository,
     GitRestClient,
+    GitVersionDescriptor,
+    GitVersionOptions,
+    GitVersionType,
 } from 'azure-devops-extension-api/Git';
 
 import { Card } from 'azure-devops-ui/Card';
@@ -49,7 +53,7 @@ export interface ISprintlyBranchCreatorsState {
     userSettings?: Common.IUserSettings;
     systemSettings?: Common.ISystemSettings;
     repositories: ArrayItemProvider<GitRepository>;
-    repositoryBranches: ObservableArray<GitRef>;
+    repositoryBranchesObservable: ObservableArray<Common.ISearchResultBranch>;
     repositoryListSelection: ListSelection;
     repositoryListSelectedItemObservable: ObservableValue<GitRepository>;
 }
@@ -78,27 +82,28 @@ export default class SprintlyBranchCreators extends React.Component<
 > {
     private dataManager: IExtensionDataManager;
     private columns: any = [];
-    private sortingBehavior: ColumnSorting<GitRef> = new ColumnSorting<GitRef>(
-        (
-            columnIndex: number,
-            proposedSortOrder: SortOrder,
-            event:
-                | React.KeyboardEvent<HTMLElement>
-                | React.MouseEvent<HTMLElement>
-        ) => {
-            this.state.repositoryBranches.splice(
-                0,
-                this.state.repositoryBranches.length,
-                ...sortItems<GitRef>(
-                    columnIndex,
-                    proposedSortOrder,
-                    this.sortFunctions,
-                    this.columns,
-                    this.state.repositoryBranches.value
-                )
-            );
-        }
-    );
+    private sortingBehavior: ColumnSorting<Common.ISearchResultBranch> =
+        new ColumnSorting<Common.ISearchResultBranch>(
+            (
+                columnIndex: number,
+                proposedSortOrder: SortOrder,
+                event:
+                    | React.KeyboardEvent<HTMLElement>
+                    | React.MouseEvent<HTMLElement>
+            ) => {
+                this.state.repositoryBranchesObservable.splice(
+                    0,
+                    this.state.repositoryBranchesObservable.length,
+                    ...sortItems<Common.ISearchResultBranch>(
+                        columnIndex,
+                        proposedSortOrder,
+                        this.sortFunctions,
+                        this.columns,
+                        this.state.repositoryBranchesObservable.value
+                    )
+                );
+            }
+        );
     private sortFunctions: any = [
         (a: GitRef, b: GitRef): number => {
             return a.name.localeCompare(b.name);
@@ -153,7 +158,8 @@ export default class SprintlyBranchCreators extends React.Component<
 
         this.state = {
             repositories: new ArrayItemProvider<GitRepository>([]),
-            repositoryBranches: new ObservableArray<GitRef>([]),
+            repositoryBranchesObservable:
+                new ObservableArray<Common.ISearchResultBranch>([]),
             repositoryListSelection: new ListSelection({
                 selectOnFocus: false,
             }),
@@ -276,7 +282,7 @@ export default class SprintlyBranchCreators extends React.Component<
                                                 ]}
                                                 itemProvider={
                                                     this.state
-                                                        .repositoryBranches
+                                                        .repositoryBranchesObservable
                                                 }
                                             />
                                         </Card>
@@ -322,8 +328,8 @@ export default class SprintlyBranchCreators extends React.Component<
     private renderNameCell(
         rowIndex: number,
         columnIndex: number,
-        tableColumn: ITableColumn<GitRef>,
-        tableItem: GitRef
+        tableColumn: ITableColumn<Common.ISearchResultBranch>,
+        tableItem: Common.ISearchResultBranch
     ): JSX.Element {
         return (
             <SimpleTableCell
@@ -341,7 +347,7 @@ export default class SprintlyBranchCreators extends React.Component<
                                 columnIndex.toString(),
                                 this.state.repositoryListSelectedItemObservable
                                     .value.webUrl,
-                                tableItem.name.split('refs/heads/')[1],
+                                tableItem.branchName.split('refs/heads/')[1],
                                 'bolt-table-link bolt-table-inline-link'
                             )}
                         </u>
@@ -354,8 +360,8 @@ export default class SprintlyBranchCreators extends React.Component<
     private renderLatestCommitCell(
         rowIndex: number,
         columnIndex: number,
-        tableColumn: ITableColumn<GitRef>,
-        tableItem: GitRef
+        tableColumn: ITableColumn<Common.ISearchResultBranch>,
+        tableItem: Common.ISearchResultBranch
     ): JSX.Element {
         return (
             <SimpleTableCell
@@ -369,13 +375,13 @@ export default class SprintlyBranchCreators extends React.Component<
                             this.state.repositoryListSelectedItemObservable
                                 .value.webUrl +
                             '/commit/' +
-                            tableItem.objectId
+                            tableItem.branchStats?.commit.commitId
                         }
                         subtle={true}
                         target='_blank'
                         className='bolt-table-link bolt-table-inline-link'
                     >
-                        {tableItem.objectId.substr(0, 8)}
+                        {tableItem.branchStats?.commit.commitId.substr(0, 8)}
                     </Link>
                 }
             ></SimpleTableCell>
@@ -385,8 +391,8 @@ export default class SprintlyBranchCreators extends React.Component<
     private renderBranchCreatorCell(
         rowIndex: number,
         columnIndex: number,
-        tableColumn: ITableColumn<GitRef>,
-        tableItem: GitRef
+        tableColumn: ITableColumn<Common.ISearchResultBranch>,
+        tableItem: Common.ISearchResultBranch
     ): JSX.Element {
         return (
             <SimpleTableCell
@@ -398,13 +404,13 @@ export default class SprintlyBranchCreators extends React.Component<
                         <VssPersona
                             className='icon-margin'
                             imageUrl={
-                                tableItem.creator._links['avatar']['href']
+                                tableItem.branchCreator._links['avatar']['href']
                             }
                         />
                         <div className='flex-column text-ellipsis'>
                             <Tooltip overflowOnly={true}>
                                 <div className='primary-text text-ellipsis'>
-                                    {tableItem.creator.displayName}
+                                    {tableItem.branchCreator.displayName}
                                 </div>
                             </Tooltip>
                             <Tooltip overflowOnly={true}>
@@ -413,12 +419,12 @@ export default class SprintlyBranchCreators extends React.Component<
                                         excludeTabStop
                                         href={
                                             'mailto:' +
-                                            tableItem.creator.uniqueName
+                                            tableItem.branchCreator.uniqueName
                                         }
                                         subtle={false}
                                         target='_blank'
                                     >
-                                        {tableItem.creator.uniqueName}
+                                        {tableItem.branchCreator.uniqueName}
                                     </Link>
                                 </div>
                             </Tooltip>
@@ -445,10 +451,62 @@ export default class SprintlyBranchCreators extends React.Component<
             undefined,
             undefined
         );
+
+        const resultBranches: Common.ISearchResultBranch[] = [];
+        if (repositoryBranches.length > 0) {
+            const repositoryDevelopBranch: GitRef | undefined =
+                repositoryBranches.find(
+                    (branch) =>
+                        Common.getBranchShortName(branch.name) ===
+                        Common.DEVELOP
+                );
+            let branchStatsBatch: GitBranchStats[] = [];
+            if (repositoryDevelopBranch) {
+                const baseDevelopCommit: GitVersionDescriptor = {
+                    version: repositoryDevelopBranch.objectId,
+                    versionOptions: GitVersionOptions.None,
+                    versionType: GitVersionType.Commit,
+                };
+                const targetCommits: GitVersionDescriptor[] = [];
+                for (const branch of repositoryBranches) {
+                    targetCommits.push({
+                        version: branch.objectId,
+                        versionOptions: GitVersionOptions.None,
+                        versionType: GitVersionType.Commit,
+                    });
+                }
+                branchStatsBatch = await getClient(
+                    GitRestClient
+                ).getBranchStatsBatch(
+                    {
+                        baseCommit: baseDevelopCommit,
+                        targetCommits,
+                    },
+                    repositoryInfo.id
+                );
+            }
+
+            for (const branch of repositoryBranches) {
+                resultBranches.push({
+                    branchName: branch.name,
+                    repository: repositoryInfo,
+                    branchCreator: branch.creator,
+                    branchStats: repositoryDevelopBranch
+                        ? branchStatsBatch.find(
+                              (stat: GitBranchStats) =>
+                                  stat.commit.commitId === branch.objectId
+                          )
+                        : undefined,
+                    projectId: repositoryInfo.project.id,
+                });
+            }
+        }
+
         this.setState({
-            repositoryBranches: new ObservableArray<GitRef>(
-                Common.sortBranchesList(repositoryBranches)
-            ),
+            repositoryBranchesObservable:
+                new ObservableArray<Common.ISearchResultBranch>(
+                    Common.sortSearchResultBranchesList(resultBranches)
+                ),
         });
     }
 

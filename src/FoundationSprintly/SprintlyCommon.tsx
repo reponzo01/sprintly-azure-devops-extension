@@ -2,6 +2,7 @@ import * as SDK from 'azure-devops-extension-sdk';
 
 import {
     GitBaseVersionDescriptor,
+    GitBranchStats,
     GitCommitDiffs,
     GitPullRequest,
     GitPullRequestSearchCriteria,
@@ -29,15 +30,16 @@ import {
     CoreRestClient,
     TeamProjectReference,
 } from 'azure-devops-extension-api/Core';
-import axios, { AxiosResponse } from 'axios';
+import { IdentityRef } from 'azure-devops-extension-api/WebApi';
 import { BuildDefinition } from 'azure-devops-extension-api/Build';
 import { ObservableArray } from 'azure-devops-ui/Core/Observable';
-import React from 'react';
 import { Link } from 'azure-devops-ui/Link';
 import { Icon, IconSize } from 'azure-devops-ui/Icon';
 import { Pill, PillSize, PillVariant } from 'azure-devops-ui/Pill';
 import { Status, Statuses, StatusSize } from 'azure-devops-ui/Status';
 import { DropdownMultiSelection } from 'azure-devops-ui/Utilities/DropdownSelection';
+import axios, { AxiosResponse } from 'axios';
+import React from 'react';
 
 export const primaryColor: IColor = {
     red: 0,
@@ -149,6 +151,14 @@ export interface ISystemSettings {
     projectRepositories: IProjectRepositories[];
     allowedUserGroups: IAllowedEntity[];
     allowedUsers: IAllowedEntity[];
+}
+
+export interface ISearchResultBranch {
+    branchName: string;
+    branchStats?: GitBranchStats;
+    branchCreator: IdentityRef;
+    repository: GitRepository;
+    projectId: string;
 }
 
 export async function getOrRefreshToken(token: string): Promise<string> {
@@ -453,6 +463,19 @@ export function sortBranchesList(
         return branchesList.sort(
             (a: GitRef, b: GitRef) => {
                 return a.name.localeCompare(b.name);
+            }
+        );
+    }
+    return branchesList;
+}
+
+export function sortSearchResultBranchesList(
+    branchesList: ISearchResultBranch[]
+): ISearchResultBranch[] {
+    if (branchesList.length > 0) {
+        return branchesList.sort(
+            (a: ISearchResultBranch, b: ISearchResultBranch) => {
+                return a.branchName.localeCompare(b.branchName);
             }
         );
     }
