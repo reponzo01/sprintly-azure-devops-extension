@@ -367,6 +367,7 @@ export default class FoundationSprintly extends React.Component<
                 return (
                     <SprintlyBranchSearch
                         dataManager={this.dataManager}
+                        globalMessagesSvc={this.globalMessagesSvc}
                         organizationName={organizationNameObservable.value}
                     />
                 );
