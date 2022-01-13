@@ -837,6 +837,10 @@ export default class SprintlyBranchSearchPage extends React.Component<
     public render(): JSX.Element {
         return (
             <div className='page-content page-content-top flex-column rhythm-vertical-16'>
+                <div>
+                    Search for a branch name across all of the repositories you
+                    have set up in the Settings tab.
+                </div>
                 <ButtonGroup>
                     <TextField
                         prefixIconProps={{ iconName: 'Search' }}
@@ -847,7 +851,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
                             >,
                             newValue: string
                         ) => (searchObservable.value = newValue)}
-                        placeholder='Search Branches'
+                        placeholder='Search Branch Name'
                         width={TextFieldWidth.standard}
                     />
                     <Button
