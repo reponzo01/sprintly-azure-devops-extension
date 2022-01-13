@@ -416,8 +416,8 @@ export default class SprintlySettings extends React.Component<
                 rng.beginIndex,
                 rng.endIndex + 1
             );
-            for (const slic of sliced) {
-                selectedArray.push(slic);
+            for (const slice of sliced) {
+                selectedArray.push(slice);
             }
         }
         return selectedArray;

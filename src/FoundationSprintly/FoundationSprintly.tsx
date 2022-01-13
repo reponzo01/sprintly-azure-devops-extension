@@ -54,6 +54,8 @@ const userIsAllowedObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const loggedInUserDescriptorObservable: ObservableValue<string> =
     new ObservableValue<string>('');
+const loggedInUserNameObservable: ObservableValue<string> =
+    new ObservableValue<string>('');
 const organizationNameObservable: ObservableValue<string> =
     new ObservableValue<string>('');
 
@@ -127,7 +129,9 @@ export default class FoundationSprintly extends React.Component<
     }
 
     private async initializeComponent(): Promise<void> {
-        loggedInUserDescriptorObservable.value = SDK.getUser().descriptor;
+        const user: SDK.IUserContext = SDK.getUser();
+        loggedInUserDescriptorObservable.value = user.descriptor;
+        loggedInUserNameObservable.value = user.name;
         organizationNameObservable.value = SDK.getHost().name;
 
         this.accessToken = await SDK.getAccessToken();
@@ -369,6 +373,7 @@ export default class FoundationSprintly extends React.Component<
                         dataManager={this.dataManager}
                         globalMessagesSvc={this.globalMessagesSvc}
                         organizationName={organizationNameObservable.value}
+                        userName={loggedInUserNameObservable.value}
                     />
                 );
             default:

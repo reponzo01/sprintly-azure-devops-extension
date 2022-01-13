@@ -32,6 +32,7 @@ import { Card } from 'azure-devops-ui/Card';
 import { Page } from 'azure-devops-ui/Page';
 import { TextField, TextFieldWidth } from 'azure-devops-ui/TextField';
 import {
+    ColumnSelect,
     ColumnSorting,
     ITableColumn,
     SimpleTableCell,
@@ -50,11 +51,15 @@ import { Tooltip } from 'azure-devops-ui/TooltipEx';
 import { VssPersona } from 'azure-devops-ui/VssPersona';
 import { Dialog } from 'azure-devops-ui/Dialog';
 import { Observer } from 'azure-devops-ui/Observer';
+import { ListSelection } from 'azure-devops-ui/List';
+import { ISelectionRange } from 'azure-devops-ui/Utilities/Selection';
+import { Spinner } from 'azure-devops-ui/Spinner';
 
 //#region "Observables"
 const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
 const searchObservable = new ObservableValue<string>('');
+const isLoadingObservable = new ObservableValue<boolean>(false);
 const isDeleteSingleBranchDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const isDeleteBatchBranchDialogOpenObservable: ObservableValue<boolean> =
@@ -74,6 +79,12 @@ const deleteBranchColumnWidthObservable: ObservableValue<number> =
 
 const userSettingsDataManagerKey: string = 'user-settings';
 const systemSettingsDataManagerKey: string = 'system-settings';
+
+const enum SearchType {
+    AllBranches,
+    JustMyBranches,
+    AllMyBranches,
+}
 
 let repositoriesToProcess: string[] = [];
 
@@ -96,14 +107,20 @@ export default class SprintlyBranchSearchPage extends React.Component<
     {
         dataManager: IExtensionDataManager;
         organizationName: string;
+        userName: string;
         globalMessagesSvc: IGlobalMessagesService;
     },
     ISprintlyBranchSearchPageState
 > {
     private dataManager: IExtensionDataManager;
     private organizationName: string;
+    private userName: string;
     private globalMessagesSvc: IGlobalMessagesService;
     private branchToDelete?: ISearchResultBranch;
+    private searchResultsSelection = new ListSelection({
+        selectOnFocus: false,
+        multiSelect: true,
+    });
     private columns: any = [];
     private sortingBehavior: ColumnSorting<ISearchResultBranch> =
         new ColumnSorting<ISearchResultBranch>(
@@ -147,6 +164,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
         dataManager: IExtensionDataManager;
         globalMessagesSvc: IGlobalMessagesService;
         organizationName: string;
+        userName: string;
     }) {
         super(props);
 
@@ -158,8 +176,10 @@ export default class SprintlyBranchSearchPage extends React.Component<
         this.renderDeleteBranchCell = this.renderDeleteBranchCell.bind(this);
         this.deleteSingleBranchAction =
             this.deleteSingleBranchAction.bind(this);
+        this.deleteBatchBranchAction = this.deleteBatchBranchAction.bind(this);
 
         this.columns = [
+            new ColumnSelect(),
             {
                 id: 'name',
                 name: 'Branch',
@@ -218,6 +238,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
         this.dataManager = props.dataManager;
         this.globalMessagesSvc = props.globalMessagesSvc;
         this.organizationName = props.organizationName;
+        this.userName = props.userName;
     }
 
     public async componentDidMount(): Promise<void> {
@@ -463,25 +484,46 @@ export default class SprintlyBranchSearchPage extends React.Component<
 
     private async findBranchesInRepository(
         repositoryId: string,
-        searchTerm: string
+        searchTerm: string,
+        searchType: SearchType
     ): Promise<GitRef[]> {
-        const repositoryBranches: GitRef[] = await getClient(
+        let repositoryBranches: GitRef[] = await getClient(
             GitRestClient
         ).getRefs(
             repositoryId,
             undefined,
-            Common.repositoryHeadsFilter,
+            searchType === SearchType.AllBranches
+                ? Common.repositoryHeadsFilter
+                : undefined,
             undefined,
             undefined,
+            searchType !== SearchType.AllBranches,
             undefined,
             undefined,
-            undefined,
-            searchTerm
+            searchType === SearchType.AllBranches ? searchTerm : undefined
         );
+        if (searchType === SearchType.JustMyBranches) {
+            repositoryBranches = repositoryBranches.filter(
+                (branch) =>
+                    branch.name.split('refs/heads/')[1].includes(searchTerm) &&
+                    branch.creator.uniqueName === this.userName
+            );
+        }
+        if (searchType === SearchType.AllMyBranches) {
+            repositoryBranches = repositoryBranches.filter(
+                (branch) => branch.creator.uniqueName === this.userName
+            );
+        }
         return repositoryBranches;
     }
 
-    private async searchAction(): Promise<void> {
+    private async searchAction(searchType: SearchType): Promise<void> {
+        isLoadingObservable.value = true;
+        this.searchResultsSelection.clear();
+        this.setState({
+            searchResultBranchesObservable:
+                new ObservableArray<ISearchResultBranch>([]),
+        });
         const searchTerm: string = searchObservable.value.trim();
         if (searchTerm && totalRepositoriesToProcessObservable.value > 0) {
             const resultBranches: ISearchResultBranch[] = [];
@@ -493,7 +535,8 @@ export default class SprintlyBranchSearchPage extends React.Component<
                     const searchResultsBranches: GitRef[] =
                         await this.findBranchesInRepository(
                             repositoryId,
-                            searchTerm
+                            searchTerm,
+                            searchType
                         );
                     if (searchResultsBranches.length > 0) {
                         const repositoryDevelopBranch: GitBranchStats =
@@ -541,6 +584,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
                 searchResultBranchesObservable:
                     new ObservableArray<ISearchResultBranch>(resultBranches),
             });
+            isLoadingObservable.value = false;
         }
     }
 
@@ -589,76 +633,172 @@ export default class SprintlyBranchSearchPage extends React.Component<
         );
     }
 
-    private deleteSingleBranchAction(): void {
-        if (this.branchToDelete && this.branchToDelete.branchStats) {
+    private renderDeleteBatchBranchActionModal(): JSX.Element {
+        return (
+            <Observer
+                isDeleteBatchBranchDialogOpen={
+                    isDeleteBatchBranchDialogOpenObservable
+                }
+            >
+                {(props: { isDeleteBatchBranchDialogOpen: boolean }) => {
+                    return props.isDeleteBatchBranchDialogOpen ? (
+                        <Dialog
+                            titleProps={{
+                                text: 'Delete branchs',
+                            }}
+                            footerButtonProps={[
+                                {
+                                    text: 'Cancel',
+                                    onClick:
+                                        this
+                                            .onDismissDeleteBatchBranchActionModal,
+                                },
+                                {
+                                    text: 'Delete',
+                                    onClick: this.deleteBatchBranchAction,
+                                    danger: true,
+                                },
+                            ]}
+                            onDismiss={
+                                this.onDismissDeleteBatchBranchActionModal
+                            }
+                        >
+                            <>
+                                These branches will be permanently deleted. Are
+                                you sure you want to proceed?
+                            </>
+                        </Dialog>
+                    ) : null;
+                }}
+            </Observer>
+        );
+    }
+
+    private deleteBranchesAction(
+        branchesToDelete: ISearchResultBranch[]
+    ): void {
+        if (branchesToDelete.length > 0) {
             const createRefOptions: GitRefUpdate[] = [];
 
-            createRefOptions.push({
-                repositoryId: this.branchToDelete.repository.id,
-                name: this.branchToDelete.branchName,
-                isLocked: false,
-                oldObjectId: this.branchToDelete.branchStats.commit.commitId,
-                newObjectId: '0000000000000000000000000000000000000000',
-            });
-
-            getClient(GitRestClient)
-                .updateRefs(createRefOptions, this.branchToDelete.repository.id)
-                .then(async (result: GitRefUpdateResult[]) => {
-                    for (const res of result) {
-                        this.globalMessagesSvc.addToast({
-                            duration: 5000,
-                            forceOverrideExisting: true,
-                            message: res.success
-                                ? 'Branch(es) Deleted!'
-                                : 'Error Deleting Branch(es): ' +
-                                  GitRefUpdateStatus[res.updateStatus],
-                        });
-                        if (res.success) {
-                            const searchResults: ISearchResultBranch[] =
-                                this.state.searchResultBranchesObservable.value;
-                            const branchName =
-                                this.branchToDelete?.branchName ?? '';
-                            const repositoryId =
-                                this.branchToDelete?.repository.id ?? '';
-                            const indexToRemove: number =
-                                searchResults.findIndex(
-                                    (branch) =>
-                                        branch.branchName === branchName &&
-                                        branch.repository.id === repositoryId
-                                );
-                            searchResults.splice(indexToRemove, 1);
-                            this.setState({
-                                searchResultBranchesObservable:
-                                    new ObservableArray<ISearchResultBranch>(
-                                        searchResults
-                                    ),
-                            });
-                        }
-                    }
+            const uniqueRepositories: string[] = branchesToDelete
+                .map((branch) => {
+                    return branch.repository.id;
                 })
-                .catch((error: any) => {
-                    if (error.response?.data?.message) {
-                        this.globalMessagesSvc.closeBanner();
-                        this.globalMessagesSvc.addBanner({
-                            dismissable: true,
-                            level: MessageBannerLevel.error,
-                            message: error.response.data.message,
-                        });
-                    } else {
-                        this.globalMessagesSvc.addToast({
-                            duration: 5000,
-                            forceOverrideExisting: true,
-                            message:
-                                'Branch(es) deletion failed!' +
-                                error +
-                                ' ' +
-                                error.response?.data?.message,
+                .filter((v, i, a) => a.indexOf(v) === i);
+
+            for (const repositoryId of uniqueRepositories) {
+                for (const branchToDelete of branchesToDelete) {
+                    if (branchToDelete.branchStats) {
+                        const branchShortName: string =
+                            Common.getBranchShortName(
+                                branchToDelete.branchName
+                            );
+                        if (
+                            branchShortName === Common.DEVELOP ||
+                            branchShortName === Common.MASTER ||
+                            branchShortName === Common.MAIN
+                        ) {
+                            this.globalMessagesSvc.closeBanner();
+                            this.globalMessagesSvc.addBanner({
+                                dismissable: true,
+                                level: MessageBannerLevel.error,
+                                message:
+                                    "Error: Will not delete 'develop', 'master', or 'main' branches.",
+                            });
+                            return;
+                        }
+                        createRefOptions.push({
+                            repositoryId: branchToDelete.repository.id,
+                            name: branchToDelete.branchName,
+                            isLocked: false,
+                            oldObjectId:
+                                branchToDelete.branchStats.commit.commitId,
+                            newObjectId:
+                                '0000000000000000000000000000000000000000',
                         });
                     }
-                });
+                }
+
+                if (createRefOptions.length > 0) {
+                    getClient(GitRestClient)
+                        .updateRefs(createRefOptions, repositoryId)
+                        .then(async (result: GitRefUpdateResult[]) => {
+                            for (const res of result) {
+                                this.globalMessagesSvc.addToast({
+                                    duration: 5000,
+                                    forceOverrideExisting: true,
+                                    message: res.success
+                                        ? 'Branch(es) Deleted!'
+                                        : 'Error Deleting Branch(es): ' +
+                                          GitRefUpdateStatus[res.updateStatus],
+                                });
+                                if (res.success) {
+                                    const searchResults: ISearchResultBranch[] =
+                                        this.state
+                                            .searchResultBranchesObservable
+                                            .value;
+                                    const indexToRemove: number =
+                                        searchResults.findIndex(
+                                            (branch) =>
+                                                branch.branchName ===
+                                                    res.name &&
+                                                branch.repository.id ===
+                                                    res.repositoryId
+                                        );
+                                    searchResults.splice(indexToRemove, 1);
+                                    this.setState({
+                                        searchResultBranchesObservable:
+                                            new ObservableArray<ISearchResultBranch>(
+                                                searchResults
+                                            ),
+                                    });
+                                }
+                            }
+                        })
+                        .catch((error: any) => {
+                            if (error.response?.data?.message) {
+                                this.globalMessagesSvc.closeBanner();
+                                this.globalMessagesSvc.addBanner({
+                                    dismissable: true,
+                                    level: MessageBannerLevel.error,
+                                    message: error.response.data.message,
+                                });
+                            } else {
+                                this.globalMessagesSvc.addToast({
+                                    duration: 5000,
+                                    forceOverrideExisting: true,
+                                    message:
+                                        'Branch(es) deletion failed!' +
+                                        error +
+                                        ' ' +
+                                        error.response?.data?.message,
+                                });
+                            }
+                        });
+                }
+            }
+        }
+    }
+
+    private deleteSingleBranchAction(): void {
+        if (this.branchToDelete && this.branchToDelete.branchStats) {
+            this.deleteBranchesAction([this.branchToDelete]);
         }
 
+        this.searchResultsSelection.clear();
         this.onDismissDeleteSingleBranchActionModal();
+    }
+
+    private deleteBatchBranchAction(): void {
+        const branchesToDelete: ISearchResultBranch[] = this.getSelectedRange(
+            this.searchResultsSelection.value,
+            this.state.searchResultBranchesObservable.value
+        );
+
+        this.deleteBranchesAction(branchesToDelete);
+
+        this.searchResultsSelection.clear();
+        this.onDismissDeleteBatchBranchActionModal();
     }
 
     private onDismissDeleteSingleBranchActionModal(): void {
@@ -667,6 +807,23 @@ export default class SprintlyBranchSearchPage extends React.Component<
 
     private onDismissDeleteBatchBranchActionModal(): void {
         isDeleteBatchBranchDialogOpenObservable.value = false;
+    }
+
+    private getSelectedRange(
+        selectionRange: ISelectionRange[],
+        dataArray: ISearchResultBranch[]
+    ) {
+        const selectedArray: ISearchResultBranch[] = [];
+        for (const rng of selectionRange) {
+            const sliced: ISearchResultBranch[] = dataArray.slice(
+                rng.beginIndex,
+                rng.endIndex + 1
+            );
+            for (const slice of sliced) {
+                selectedArray.push(slice);
+            }
+        }
+        return selectedArray;
     }
 
     private onSize(event: MouseEvent, index: number, width: number): void {
@@ -687,31 +844,82 @@ export default class SprintlyBranchSearchPage extends React.Component<
                         width={TextFieldWidth.standard}
                     />
                     <Button
-                        text='Search'
+                        text='Search All Branches'
                         primary={true}
-                        onClick={async () => await this.searchAction()}
+                        onClick={async () =>
+                            await this.searchAction(SearchType.AllBranches)
+                        }
+                    />
+                    <Button
+                        text='Just My Branches'
+                        primary={true}
+                        onClick={async () =>
+                            await this.searchAction(SearchType.JustMyBranches)
+                        }
+                    />
+                    <Button
+                        text='All My Branches (Ignore Search Term)'
+                        primary={true}
+                        onClick={async () =>
+                            await this.searchAction(SearchType.AllMyBranches)
+                        }
                     />
                 </ButtonGroup>
+                <Observer isLoading={isLoadingObservable}>
+                    {(observerProps: { isLoading: boolean }) => {
+                        if (observerProps.isLoading) {
+                            return <Spinner label='loading' />;
+                        } else {
+                            return <></>;
+                        }
+                    }}
+                </Observer>
                 <Observer
                     searchResults={this.state.searchResultBranchesObservable}
                 >
                     {(observerProps: {
                         searchResults: ISearchResultBranch[];
-                    }) => (
-                        <Page>
-                            <Card className='bolt-table-card bolt-card-white'>
-                                <Table
-                                    columns={this.columns}
-                                    behaviors={[this.sortingBehavior]}
-                                    itemProvider={
-                                        this.state
-                                            .searchResultBranchesObservable
-                                    }
-                                />
-                            </Card>
-                            {this.renderDeleteSingleBranchActionModal()}
-                        </Page>
-                    )}
+                    }) => {
+                        if (observerProps.searchResults.length > 0) {
+                            return (
+                                <>
+                                    <ButtonGroup>
+                                        <Button
+                                            text='Delete Selected'
+                                            iconProps={{ iconName: 'Delete' }}
+                                            danger={true}
+                                            onClick={() => {
+                                                isDeleteBatchBranchDialogOpenObservable.value =
+                                                    true;
+                                            }}
+                                        />
+                                    </ButtonGroup>
+                                    <Page>
+                                        <Card className='bolt-table-card bolt-card-white'>
+                                            <Table
+                                                columns={this.columns}
+                                                behaviors={[
+                                                    this.sortingBehavior,
+                                                ]}
+                                                itemProvider={
+                                                    this.state
+                                                        .searchResultBranchesObservable
+                                                }
+                                                selection={
+                                                    this.searchResultsSelection
+                                                }
+                                                role='table'
+                                            />
+                                        </Card>
+                                        {this.renderDeleteSingleBranchActionModal()}
+                                        {this.renderDeleteBatchBranchActionModal()}
+                                    </Page>
+                                </>
+                            );
+                        } else {
+                            return <></>;
+                        }
+                    }}
                 </Observer>
             </div>
         );
