@@ -8,7 +8,6 @@ import {
 } from 'azure-devops-extension-api';
 import {
     GitBranchStats,
-    GitCommitRef,
     GitRef,
     GitRefUpdate,
     GitRefUpdateResult,
@@ -20,6 +19,7 @@ import {
     GitVersionType,
 } from 'azure-devops-extension-api/Git';
 import { IdentityRef } from 'azure-devops-extension-api/WebApi';
+import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 
 import {
     ObservableArray,
@@ -41,11 +41,7 @@ import {
     Table,
 } from 'azure-devops-ui/Table';
 
-import * as Common from './SprintlyCommon';
-import { TeamProjectReference } from 'azure-devops-extension-api/Core';
-import { bindSelectionToObservable } from 'azure-devops-ui/MasterDetailsContext';
-import { ArrayItemProvider } from 'azure-devops-ui/Utilities/Provider';
-import { Icon, IconSize } from 'azure-devops-ui/Icon';
+import { Icon } from 'azure-devops-ui/Icon';
 import { Link } from 'azure-devops-ui/Link';
 import { Tooltip } from 'azure-devops-ui/TooltipEx';
 import { VssPersona } from 'azure-devops-ui/VssPersona';
@@ -54,12 +50,16 @@ import { Observer } from 'azure-devops-ui/Observer';
 import { ListSelection } from 'azure-devops-ui/List';
 import { ISelectionRange } from 'azure-devops-ui/Utilities/Selection';
 import { Spinner } from 'azure-devops-ui/Spinner';
+import * as Common from './SprintlyCommon';
 
 //#region "Observables"
 const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
-const searchObservable = new ObservableValue<string>('');
-const isLoadingObservable = new ObservableValue<boolean>(false);
+const searchObservable: ObservableValue<string> = new ObservableValue<string>(
+    ''
+);
+const isLoadingObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(false);
 const isDeleteSingleBranchDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const isDeleteBatchBranchDialogOpenObservable: ObservableValue<boolean> =
@@ -117,7 +117,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
     private userName: string;
     private globalMessagesSvc: IGlobalMessagesService;
     private branchToDelete?: ISearchResultBranch;
-    private searchResultsSelection = new ListSelection({
+    private searchResultsSelection: ListSelection = new ListSelection({
         selectOnFocus: false,
         multiSelect: true,
     });
@@ -504,14 +504,14 @@ export default class SprintlyBranchSearchPage extends React.Component<
         );
         if (searchType === SearchType.JustMyBranches) {
             repositoryBranches = repositoryBranches.filter(
-                (branch) =>
+                (branch: GitRef) =>
                     branch.name.split('refs/heads/')[1].includes(searchTerm) &&
                     branch.creator.uniqueName === this.userName
             );
         }
         if (searchType === SearchType.AllMyBranches) {
             repositoryBranches = repositoryBranches.filter(
-                (branch) => branch.creator.uniqueName === this.userName
+                (branch: GitRef) => branch.creator.uniqueName === this.userName
             );
         }
         return repositoryBranches;
@@ -528,9 +528,10 @@ export default class SprintlyBranchSearchPage extends React.Component<
         if (searchTerm && totalRepositoriesToProcessObservable.value > 0) {
             const resultBranches: ISearchResultBranch[] = [];
             for (const repositoryId of repositoriesToProcess) {
-                const baseRepository = this.state.repositories.find(
-                    (repo) => repo.id === repositoryId
-                );
+                const baseRepository: GitRepository | undefined =
+                    this.state.repositories.find(
+                        (repo: GitRepository) => repo.id === repositoryId
+                    );
                 if (baseRepository) {
                     const searchResultsBranches: GitRef[] =
                         await this.findBranchesInRepository(
@@ -561,7 +562,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
                             await getClient(GitRestClient).getBranchStatsBatch(
                                 {
                                     baseCommit: baseDevelopCommit,
-                                    targetCommits: targetCommits,
+                                    targetCommits,
                                 },
                                 repositoryId
                             );
@@ -571,7 +572,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
                                 repository: baseRepository,
                                 branchCreator: branch.creator,
                                 branchStats: branchStatsBatch.find(
-                                    (stat) =>
+                                    (stat: GitBranchStats) =>
                                         stat.commit.commitId === branch.objectId
                                 ),
                                 projectId: baseRepository.project.id,
@@ -681,10 +682,13 @@ export default class SprintlyBranchSearchPage extends React.Component<
             const createRefOptions: GitRefUpdate[] = [];
 
             const uniqueRepositories: string[] = branchesToDelete
-                .map((branch) => {
+                .map((branch: ISearchResultBranch) => {
                     return branch.repository.id;
                 })
-                .filter((v, i, a) => a.indexOf(v) === i);
+                .filter(
+                    (value: string, index: number, array: string[]) =>
+                        array.indexOf(value) === index
+                );
 
             for (const repositoryId of uniqueRepositories) {
                 for (const branchToDelete of branchesToDelete) {
@@ -703,7 +707,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
                                 dismissable: true,
                                 level: MessageBannerLevel.error,
                                 message:
-                                    "Error: Will not delete 'develop', 'master', or 'main' branches.",
+                                    'Error: Will not delete "develop", "master", or "main" branches.',
                             });
                             return;
                         }
@@ -739,7 +743,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
                                             .value;
                                     const indexToRemove: number =
                                         searchResults.findIndex(
-                                            (branch) =>
+                                            (branch: ISearchResultBranch) =>
                                                 branch.branchName ===
                                                     res.name &&
                                                 branch.repository.id ===
@@ -812,7 +816,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
     private getSelectedRange(
         selectionRange: ISelectionRange[],
         dataArray: ISearchResultBranch[]
-    ) {
+    ): ISearchResultBranch[] {
         const selectedArray: ISearchResultBranch[] = [];
         for (const rng of selectionRange) {
             const sliced: ISearchResultBranch[] = dataArray.slice(
@@ -837,9 +841,12 @@ export default class SprintlyBranchSearchPage extends React.Component<
                     <TextField
                         prefixIconProps={{ iconName: 'Search' }}
                         value={searchObservable}
-                        onChange={(e, newValue) =>
-                            (searchObservable.value = newValue)
-                        }
+                        onChange={(
+                            event: React.ChangeEvent<
+                                HTMLInputElement | HTMLTextAreaElement
+                            >,
+                            newValue: string
+                        ) => (searchObservable.value = newValue)}
                         placeholder='Search Branches'
                         width={TextFieldWidth.standard}
                     />
