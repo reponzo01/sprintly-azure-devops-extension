@@ -525,7 +525,11 @@ export default class SprintlyBranchSearchPage extends React.Component<
                 new ObservableArray<ISearchResultBranch>([]),
         });
         const searchTerm: string = searchObservable.value.trim();
-        if (searchTerm && totalRepositoriesToProcessObservable.value > 0) {
+        if (
+            (searchTerm ||
+                (!searchTerm && searchType === SearchType.AllMyBranches)) &&
+            totalRepositoriesToProcessObservable.value > 0
+        ) {
             const resultBranches: ISearchResultBranch[] = [];
             for (const repositoryId of repositoriesToProcess) {
                 const baseRepository: GitRepository | undefined =
@@ -585,8 +589,14 @@ export default class SprintlyBranchSearchPage extends React.Component<
                 searchResultBranchesObservable:
                     new ObservableArray<ISearchResultBranch>(resultBranches),
             });
-            isLoadingObservable.value = false;
+        } else {
+            this.globalMessagesSvc.addToast({
+                duration: 5000,
+                forceOverrideExisting: true,
+                message: 'Please ensure you have typed in a search term or have repositories set up in the Settings tab.'
+            });
         }
+        isLoadingObservable.value = false;
     }
 
     private renderDeleteSingleBranchActionModal(): JSX.Element {
