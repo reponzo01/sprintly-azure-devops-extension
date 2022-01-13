@@ -88,8 +88,10 @@ export const warningColor: IColor = {
 };
 
 export const repositoryHeadsFilter: string = 'heads/';
-
 export const repositoryTagsFilter: string = 'tags/';
+export const DEVELOP: string = 'develop';
+export const MASTER: string = 'master';
+export const MAIN: string = 'main';
 
 export interface IAllowedEntity {
     displayName: string;

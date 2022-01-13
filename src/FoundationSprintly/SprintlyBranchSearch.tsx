@@ -1,13 +1,22 @@
 import * as React from 'react';
 
 import { getClient, IExtensionDataManager } from 'azure-devops-extension-api';
-import { GitRef, GitRestClient } from 'azure-devops-extension-api/Git';
+import {
+    GitBranchStats,
+    GitCommitRef,
+    GitRef,
+    GitRepository,
+    GitRestClient,
+    GitVersionDescriptor,
+    GitVersionOptions,
+    GitVersionType,
+} from 'azure-devops-extension-api/Git';
+import { IdentityRef } from 'azure-devops-extension-api/WebApi';
 
 import {
     ObservableArray,
     ObservableValue,
 } from 'azure-devops-ui/Core/Observable';
-import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 
 import { Button } from 'azure-devops-ui/Button';
 import { ButtonGroup } from 'azure-devops-ui/ButtonGroup';
@@ -17,12 +26,20 @@ import { TextField, TextFieldWidth } from 'azure-devops-ui/TextField';
 import {
     ColumnSorting,
     ITableColumn,
+    SimpleTableCell,
     sortItems,
     SortOrder,
     Table,
 } from 'azure-devops-ui/Table';
 
 import * as Common from './SprintlyCommon';
+import { TeamProjectReference } from 'azure-devops-extension-api/Core';
+import { bindSelectionToObservable } from 'azure-devops-ui/MasterDetailsContext';
+import { ArrayItemProvider } from 'azure-devops-ui/Utilities/Provider';
+import { Icon } from 'azure-devops-ui/Icon';
+import { Link } from 'azure-devops-ui/Link';
+import { Tooltip } from 'azure-devops-ui/TooltipEx';
+import { VssPersona } from 'azure-devops-ui/VssPersona';
 
 //#region "Observables"
 const totalRepositoriesToProcessObservable: ObservableValue<number> =
@@ -31,7 +48,12 @@ const searchObservable = new ObservableValue<string>('');
 const nameColumnWidthObservable: ObservableValue<number> =
     new ObservableValue<number>(-30);
 const repositoryColumnWidthObservable: ObservableValue<number> =
+    new ObservableValue<number>(-30);
+const statsColumnWidthObservable: ObservableValue<number> =
+    new ObservableValue<number>(-30);
+const branchCreatorColumnWidthObservable: ObservableValue<number> =
     new ObservableValue<number>(-40);
+
 //#endregion "Observables"
 
 const userSettingsDataManagerKey: string = 'user-settings';
@@ -39,55 +61,76 @@ const systemSettingsDataManagerKey: string = 'system-settings';
 
 let repositoriesToProcess: string[] = [];
 
+export interface ISearchResultBranches {
+    branchName: string;
+    branchStats?: GitBranchStats;
+    branchCreator: IdentityRef;
+    repository: GitRepository;
+    projectId: string;
+}
+
 export interface ISprintlyBranchSearchPageState {
     userSettings?: Common.IUserSettings;
     systemSettings?: Common.ISystemSettings;
-    searchResultBranches: ObservableArray<GitRef>;
+    repositories: GitRepository[];
+    searchResultBranches: ObservableArray<ISearchResultBranches>;
 }
 
 export default class SprintlyBranchSearchPage extends React.Component<
-    { dataManager: IExtensionDataManager },
+    { dataManager: IExtensionDataManager; organizationName: string },
     ISprintlyBranchSearchPageState
 > {
     private dataManager: IExtensionDataManager;
+    private organizationName: string;
     private columns: any = [];
-    private sortingBehavior: ColumnSorting<GitRef> = new ColumnSorting<GitRef>(
-        (
-            columnIndex: number,
-            proposedSortOrder: SortOrder,
-            event:
-                | React.KeyboardEvent<HTMLElement>
-                | React.MouseEvent<HTMLElement>
-        ) => {
-            this.state.searchResultBranches.splice(
-                0,
-                this.state.searchResultBranches.length,
-                ...sortItems<GitRef>(
-                    columnIndex,
-                    proposedSortOrder,
-                    this.sortFunctions,
-                    this.columns,
-                    this.state.searchResultBranches.value
-                )
-            );
-        }
-    );
+    private sortingBehavior: ColumnSorting<ISearchResultBranches> =
+        new ColumnSorting<ISearchResultBranches>(
+            (
+                columnIndex: number,
+                proposedSortOrder: SortOrder,
+                event:
+                    | React.KeyboardEvent<HTMLElement>
+                    | React.MouseEvent<HTMLElement>
+            ) => {
+                this.state.searchResultBranches.splice(
+                    0,
+                    this.state.searchResultBranches.length,
+                    ...sortItems<ISearchResultBranches>(
+                        columnIndex,
+                        proposedSortOrder,
+                        this.sortFunctions,
+                        this.columns,
+                        this.state.searchResultBranches.value
+                    )
+                );
+            }
+        );
     private sortFunctions: any = [
-        (a: GitRef, b: GitRef): number => {
-            return a.name.localeCompare(b.name);
+        (a: ISearchResultBranches, b: ISearchResultBranches): number => {
+            return a.branchName.localeCompare(b.branchName);
+        },
+        (a: ISearchResultBranches, b: ISearchResultBranches): number => {
+            return a.repository.name.localeCompare(b.repository.name);
         },
         null,
-        (a: GitRef, b: GitRef): number => {
-            return a.creator.displayName.localeCompare(b.creator.displayName);
+        (a: ISearchResultBranches, b: ISearchResultBranches): number => {
+            return a.branchCreator.displayName.localeCompare(
+                b.branchCreator.displayName
+            );
         },
     ];
 
-    constructor(props: { dataManager: IExtensionDataManager }) {
+    constructor(props: {
+        dataManager: IExtensionDataManager;
+        organizationName: string;
+    }) {
         super(props);
 
         this.onSize = this.onSize.bind(this);
         this.renderNameCell = this.renderNameCell.bind(this);
         this.renderRepositoryCell = this.renderRepositoryCell.bind(this);
+        this.renderStatsCell = this.renderStatsCell.bind(this);
+        this.renderBranchCreatorCell = this.renderBranchCreatorCell.bind(this);
 
         this.columns = [
             {
@@ -112,13 +155,35 @@ export default class SprintlyBranchSearchPage extends React.Component<
                 },
                 width: repositoryColumnWidthObservable,
             },
+            {
+                id: 'stats',
+                name: 'Behind Develop | Ahead Of Develop',
+                onSize: this.onSize,
+                renderCell: this.renderStatsCell,
+                width: statsColumnWidthObservable,
+            },
+            {
+                id: 'creator',
+                name: 'Branch Creator',
+                onSize: this.onSize,
+                renderCell: this.renderBranchCreatorCell,
+                sortProps: {
+                    ariaLabelAscending: 'Sorted A to Z',
+                    ariaLabelDescending: 'Sorted Z to A',
+                },
+                width: branchCreatorColumnWidthObservable,
+            },
         ];
 
         this.state = {
-            searchResultBranches: new ObservableArray<GitRef>([]),
+            repositories: [],
+            searchResultBranches: new ObservableArray<ISearchResultBranches>(
+                []
+            ),
         };
 
         this.dataManager = props.dataManager;
+        this.organizationName = props.organizationName;
     }
 
     public async componentDidMount(): Promise<void> {
@@ -126,6 +191,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
     }
 
     private async initializeComponent(): Promise<void> {
+        searchObservable.value = '';
         const userSettings: Common.IUserSettings | undefined =
             await Common.getUserSettings(
                 this.dataManager,
@@ -149,47 +215,255 @@ export default class SprintlyBranchSearchPage extends React.Component<
 
         totalRepositoriesToProcessObservable.value =
             repositoriesToProcess.length;
+        if (repositoriesToProcess.length > 0) {
+            const filteredProjects: TeamProjectReference[] =
+                await Common.getFilteredProjects();
+            await this.loadRepositoriesState(filteredProjects);
+        }
+    }
+
+    private async loadRepositoriesState(
+        projects: TeamProjectReference[]
+    ): Promise<void> {
+        let repos: GitRepository[] = [];
+        totalRepositoriesToProcessObservable.value = 0;
+        for (const project of projects) {
+            const filteredRepos: GitRepository[] =
+                await Common.getFilteredProjectRepositories(
+                    project.id,
+                    repositoriesToProcess
+                );
+
+            totalRepositoriesToProcessObservable.value += filteredRepos.length;
+            repos = repos.concat(filteredRepos);
+        }
+
+        this.setState({
+            repositories: repos,
+        });
     }
 
     private renderNameCell(
         rowIndex: number,
         columnIndex: number,
-        tableColumn: ITableColumn<GitRef>,
-        tableItem: GitRef
+        tableColumn: ITableColumn<ISearchResultBranches>,
+        tableItem: ISearchResultBranches
     ): JSX.Element {
-        return <></>;
+        return (
+            <SimpleTableCell
+                key={'col-' + columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={tableColumn}
+                children={
+                    <>
+                        <Icon
+                            iconName='OpenSource'
+                            className='icon-margin'
+                        ></Icon>
+                        <u>
+                            {Common.branchLinkJsxElement(
+                                columnIndex.toString(),
+                                tableItem.repository.webUrl,
+                                tableItem.branchName.split('refs/heads/')[1],
+                                'bolt-table-link bolt-table-inline-link'
+                            )}
+                        </u>
+                    </>
+                }
+            ></SimpleTableCell>
+        );
     }
 
     private renderRepositoryCell(
         rowIndex: number,
         columnIndex: number,
-        tableColumn: ITableColumn<GitRef>,
-        tableItem: GitRef
+        tableColumn: ITableColumn<ISearchResultBranches>,
+        tableItem: ISearchResultBranches
     ): JSX.Element {
-        return <></>;
+        return (
+            <SimpleTableCell
+                key={'col-' + columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={tableColumn}
+                children={
+                    <>
+                        <Icon iconName='Repo' className='icon-margin'></Icon>
+                        <u>
+                            {Common.repositoryLinkJsxElement(
+                                tableItem.repository.webUrl,
+                                '',
+                                tableItem.repository.name
+                            )}
+                        </u>
+                    </>
+                }
+            ></SimpleTableCell>
+        );
+    }
+
+    private renderStatsCell(
+        rowIndex: number,
+        columnIndex: number,
+        tableColumn: ITableColumn<ISearchResultBranches>,
+        tableItem: ISearchResultBranches
+    ): JSX.Element {
+        return (
+            <SimpleTableCell
+                key={'col-' + columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={tableColumn}
+                children={
+                    <>
+                        <Link
+                            excludeTabStop
+                            href={`https://dev.azure.com/${this.organizationName}/${tableItem.projectId}/_git/${tableItem.repository.name}/branchCompare?baseVersion=GB${tableItem.branchName.split('refs/heads/')[1]}&targetVersion=GBdevelop&_a=commits`}
+                            subtle={true}
+                            target='_blank'
+                        >
+                            <u>{tableItem.branchStats?.behindCount}</u>
+                        </Link>
+                        &nbsp;|&nbsp;
+                        <Link
+                            excludeTabStop
+                            href={`https://dev.azure.com/${this.organizationName}/${tableItem.projectId}/_git/${tableItem.repository.name}/branchCompare?baseVersion=GB${Common.DEVELOP}&targetVersion=GB${tableItem.branchName.split('refs/heads/')[1]}&_a=commits`}
+                            subtle={true}
+                            target='_blank'
+                        >
+                            <u>{tableItem.branchStats?.aheadCount}</u>
+                        </Link>
+                    </>
+                }
+            ></SimpleTableCell>
+        );
+    }
+
+    private renderBranchCreatorCell(
+        rowIndex: number,
+        columnIndex: number,
+        tableColumn: ITableColumn<ISearchResultBranches>,
+        tableItem: ISearchResultBranches
+    ): JSX.Element {
+        return (
+            <SimpleTableCell
+                key={'col-' + columnIndex}
+                columnIndex={columnIndex}
+                tableColumn={tableColumn}
+                children={
+                    <>
+                        <VssPersona
+                            className='icon-margin'
+                            imageUrl={
+                                tableItem.branchCreator._links['avatar']['href']
+                            }
+                        />
+                        <div className='flex-column text-ellipsis'>
+                            <Tooltip overflowOnly={true}>
+                                <div className='primary-text text-ellipsis'>
+                                    {tableItem.branchCreator.displayName}
+                                </div>
+                            </Tooltip>
+                            <Tooltip overflowOnly={true}>
+                                <div className='primary-text text-ellipsis'>
+                                    <Link
+                                        excludeTabStop
+                                        href={
+                                            'mailto:' +
+                                            tableItem.branchCreator.uniqueName
+                                        }
+                                        subtle={false}
+                                        target='_blank'
+                                    >
+                                        {tableItem.branchCreator.uniqueName}
+                                    </Link>
+                                </div>
+                            </Tooltip>
+                        </div>
+                    </>
+                }
+            ></SimpleTableCell>
+        );
+    }
+
+    private async findBranchesInRepository(
+        repositoryId: string,
+        searchTerm: string
+    ): Promise<GitRef[]> {
+        const repositoryBranches: GitRef[] = await getClient(
+            GitRestClient
+        ).getRefs(
+            repositoryId,
+            undefined,
+            Common.repositoryHeadsFilter,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            searchTerm
+        );
+        return repositoryBranches;
     }
 
     private async searchAction(): Promise<void> {
         const searchTerm: string = searchObservable.value.trim();
         if (searchTerm && totalRepositoriesToProcessObservable.value > 0) {
+            const resultBranches: ISearchResultBranches[] = [];
             for (const repositoryId of repositoriesToProcess) {
-                const repositoryBranches: GitRef[] = await getClient(
-                    GitRestClient
-                ).getRefs(
-                    repositoryId,
-                    undefined,
-                    Common.repositoryHeadsFilter,
-                    undefined,
-                    undefined,
-                    undefined,
-                    undefined,
-                    undefined,
-                    'feature/'
+                const baseRepository = this.state.repositories.find(
+                    (repo) => repo.id === repositoryId
                 );
-                for (const branch of repositoryBranches) {
-                    console.log(branch);
+                if (baseRepository) {
+                    const searchResultsBranches: GitRef[] =
+                        await this.findBranchesInRepository(
+                            repositoryId,
+                            searchTerm
+                        );
+                    if (searchResultsBranches.length > 0) {
+                        const repositoryDevelopBranch: GitBranchStats =
+                            await getClient(GitRestClient).getBranch(
+                                repositoryId,
+                                Common.DEVELOP
+                            );
+                        const baseDevelopCommit: GitVersionDescriptor = {
+                            version: repositoryDevelopBranch.commit.commitId,
+                            versionOptions: GitVersionOptions.None,
+                            versionType: GitVersionType.Commit,
+                        };
+                        const targetCommits: GitVersionDescriptor[] = [];
+                        for (const branch of searchResultsBranches) {
+                            targetCommits.push({
+                                version: branch.objectId,
+                                versionOptions: GitVersionOptions.None,
+                                versionType: GitVersionType.Commit,
+                            });
+                        }
+                        const branchStatsBatch: GitBranchStats[] =
+                            await getClient(GitRestClient).getBranchStatsBatch(
+                                {
+                                    baseCommit: baseDevelopCommit,
+                                    targetCommits: targetCommits,
+                                },
+                                repositoryId
+                            );
+                        for (const branch of searchResultsBranches) {
+                            resultBranches.push({
+                                branchName: branch.name,
+                                repository: baseRepository,
+                                branchCreator: branch.creator,
+                                branchStats: branchStatsBatch.find(
+                                    (stat) =>
+                                        stat.commit.commitId === branch.objectId
+                                ),
+                                projectId: baseRepository.project.id,
+                            });
+                        }
+                    }
                 }
             }
+            this.setState({
+                searchResultBranches:
+                    new ObservableArray<ISearchResultBranches>(resultBranches),
+            });
         }
     }
 
