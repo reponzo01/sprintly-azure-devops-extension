@@ -50,6 +50,7 @@ import { Observer } from 'azure-devops-ui/Observer';
 import { ListSelection } from 'azure-devops-ui/List';
 import { ISelectionRange } from 'azure-devops-ui/Utilities/Selection';
 import { Spinner } from 'azure-devops-ui/Spinner';
+import { ZeroData } from 'azure-devops-ui/ZeroData';
 import * as Common from './SprintlyCommon';
 
 //#region "Observables"
@@ -145,6 +146,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
             }
         );
     private sortFunctions: any = [
+        null,
         (a: ISearchResultBranch, b: ISearchResultBranch): number => {
             return a.branchName.localeCompare(b.branchName);
         },
@@ -897,9 +899,11 @@ export default class SprintlyBranchSearchPage extends React.Component<
                 </Observer>
                 <Observer
                     searchResults={this.state.searchResultBranchesObservable}
+                    isLoading={isLoadingObservable}
                 >
                     {(observerProps: {
                         searchResults: ISearchResultBranch[];
+                        isLoading: boolean;
                     }) => {
                         if (observerProps.searchResults.length > 0) {
                             return (
@@ -938,7 +942,21 @@ export default class SprintlyBranchSearchPage extends React.Component<
                                 </>
                             );
                         } else {
-                            return <></>;
+                            if (searchObservable.value && !observerProps.isLoading) {
+                                return <div>
+                                <ZeroData
+                                    primaryText='No results found.'
+                                    secondaryText={
+                                        <span>
+                                            Please update your search term.
+                                        </span>
+                                    }
+                                    imageAltText='No results found.'
+                                    imagePath={'../static/notfound.png'}
+                                />
+                            </div>
+                            }
+                            return <><div></div></>;
                         }
                     }}
                 </Observer>
