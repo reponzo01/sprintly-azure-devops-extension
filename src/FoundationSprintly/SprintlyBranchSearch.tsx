@@ -175,7 +175,6 @@ export default class SprintlyBranchSearchPage extends React.Component<
         this.renderNameCell = this.renderNameCell.bind(this);
         this.renderRepositoryCell = this.renderRepositoryCell.bind(this);
         this.renderStatsCell = this.renderStatsCell.bind(this);
-        this.renderBranchCreatorCell = this.renderBranchCreatorCell.bind(this);
         this.renderDeleteBranchCell = this.renderDeleteBranchCell.bind(this);
         this.deleteSingleBranchAction =
             this.deleteSingleBranchAction.bind(this);
@@ -371,39 +370,43 @@ export default class SprintlyBranchSearchPage extends React.Component<
                 columnIndex={columnIndex}
                 tableColumn={tableColumn}
                 children={
-                    <>
-                        <Link
-                            excludeTabStop
-                            href={`https://dev.azure.com/${
-                                this.organizationName
-                            }/${tableItem.projectId}/_git/${
-                                tableItem.repository.name
-                            }/branchCompare?baseVersion=GB${Common.getBranchShortName(
-                                tableItem.branchName
-                            )}&targetVersion=GBdevelop&_a=commits`}
-                            subtle={true}
-                            target='_blank'
-                        >
-                            <u>{tableItem.branchStats?.behindCount}</u>
-                        </Link>
-                        &nbsp;|&nbsp;
-                        <Link
-                            excludeTabStop
-                            href={`https://dev.azure.com/${
-                                this.organizationName
-                            }/${tableItem.projectId}/_git/${
-                                tableItem.repository.name
-                            }/branchCompare?baseVersion=GB${
-                                Common.DEVELOP
-                            }&targetVersion=GB${Common.getBranchShortName(
-                                tableItem.branchName
-                            )}&_a=commits`}
-                            subtle={true}
-                            target='_blank'
-                        >
-                            <u>{tableItem.branchStats?.aheadCount}</u>
-                        </Link>
-                    </>
+                    tableItem.branchStats ? (
+                        <>
+                            <Link
+                                excludeTabStop
+                                href={`https://dev.azure.com/${
+                                    this.organizationName
+                                }/${tableItem.projectId}/_git/${
+                                    tableItem.repository.name
+                                }/branchCompare?baseVersion=GB${Common.getBranchShortName(
+                                    tableItem.branchName
+                                )}&targetVersion=GBdevelop&_a=commits`}
+                                subtle={true}
+                                target='_blank'
+                            >
+                                <u>{tableItem.branchStats?.behindCount}</u>
+                            </Link>
+                            &nbsp;|&nbsp;
+                            <Link
+                                excludeTabStop
+                                href={`https://dev.azure.com/${
+                                    this.organizationName
+                                }/${tableItem.projectId}/_git/${
+                                    tableItem.repository.name
+                                }/branchCompare?baseVersion=GB${
+                                    Common.DEVELOP
+                                }&targetVersion=GB${Common.getBranchShortName(
+                                    tableItem.branchName
+                                )}&_a=commits`}
+                                subtle={true}
+                                target='_blank'
+                            >
+                                <u>{tableItem.branchStats?.aheadCount}</u>
+                            </Link>
+                        </>
+                    ) : (
+                        <>No develop branch</>
+                    )
                 }
             ></SimpleTableCell>
         );
@@ -548,41 +551,56 @@ export default class SprintlyBranchSearchPage extends React.Component<
                             searchType
                         );
                     if (searchResultsBranches.length > 0) {
-                        const repositoryDevelopBranch: GitBranchStats =
-                            await getClient(GitRestClient).getBranch(
-                                repositoryId,
-                                Common.DEVELOP
-                            );
-                        const baseDevelopCommit: GitVersionDescriptor = {
-                            version: repositoryDevelopBranch.commit.commitId,
-                            versionOptions: GitVersionOptions.None,
-                            versionType: GitVersionType.Commit,
-                        };
-                        const targetCommits: GitVersionDescriptor[] = [];
-                        for (const branch of searchResultsBranches) {
-                            targetCommits.push({
-                                version: branch.objectId,
+                        let branchStatsBatch: GitBranchStats[] = [];
+                        let repositoryDevelopBranch:
+                            | GitBranchStats
+                            | undefined;
+                        try {
+                            repositoryDevelopBranch = await getClient(
+                                GitRestClient
+                            ).getBranch(repositoryId, Common.DEVELOP);
+                        } catch (e) {
+                            repositoryDevelopBranch = undefined;
+                        }
+
+                        if (repositoryDevelopBranch) {
+                            const baseDevelopCommit: GitVersionDescriptor = {
+                                version:
+                                    repositoryDevelopBranch.commit.commitId,
                                 versionOptions: GitVersionOptions.None,
                                 versionType: GitVersionType.Commit,
-                            });
-                        }
-                        const branchStatsBatch: GitBranchStats[] =
-                            await getClient(GitRestClient).getBranchStatsBatch(
+                            };
+                            const targetCommits: GitVersionDescriptor[] = [];
+                            for (const branch of searchResultsBranches) {
+                                targetCommits.push({
+                                    version: branch.objectId,
+                                    versionOptions: GitVersionOptions.None,
+                                    versionType: GitVersionType.Commit,
+                                });
+                            }
+                            branchStatsBatch = await getClient(
+                                GitRestClient
+                            ).getBranchStatsBatch(
                                 {
                                     baseCommit: baseDevelopCommit,
                                     targetCommits,
                                 },
                                 repositoryId
                             );
+                        }
+
                         for (const branch of searchResultsBranches) {
                             resultBranches.push({
                                 branchName: branch.name,
                                 repository: baseRepository,
                                 branchCreator: branch.creator,
-                                branchStats: branchStatsBatch.find(
-                                    (stat: GitBranchStats) =>
-                                        stat.commit.commitId === branch.objectId
-                                ),
+                                branchStats: repositoryDevelopBranch
+                                    ? branchStatsBatch.find(
+                                          (stat: GitBranchStats) =>
+                                              stat.commit.commitId ===
+                                              branch.objectId
+                                      )
+                                    : undefined,
                                 projectId: baseRepository.project.id,
                             });
                         }
@@ -941,7 +959,6 @@ export default class SprintlyBranchSearchPage extends React.Component<
                                                 selection={
                                                     this.searchResultsSelection
                                                 }
-                                                role='table'
                                             />
                                         </Card>
                                         {this.renderDeleteSingleBranchActionModal()}

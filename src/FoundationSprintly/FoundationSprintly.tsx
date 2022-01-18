@@ -365,7 +365,11 @@ export default class FoundationSprintly extends React.Component<
                 );
             case sprintlyBranchCreatorsTabKey:
                 return (
-                    <SprintlyBranchCreators dataManager={this.dataManager} />
+                    <SprintlyBranchCreators
+                        dataManager={this.dataManager}
+                        globalMessagesSvc={this.globalMessagesSvc}
+                        organizationName={organizationNameObservable.value}
+                    />
                 );
             case sprintlyBranchSearchTabKey:
                 return (
