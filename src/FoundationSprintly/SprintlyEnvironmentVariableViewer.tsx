@@ -1,6 +1,7 @@
 import * as React from 'react';
 import axios, { AxiosResponse } from 'axios';
 
+import * as Common from './SprintlyCommon';
 import * as SDK from 'azure-devops-extension-sdk';
 import { Card } from 'azure-devops-ui/Card';
 import {
@@ -15,18 +16,34 @@ import {
     SortOrder,
     Table,
 } from 'azure-devops-ui/Table';
-import * as Common from './SprintlyCommon';
-import { IExtensionDataManager } from 'azure-devops-extension-api';
+import {
+    IExtensionDataManager,
+    IProjectInfo,
+} from 'azure-devops-extension-api';
 import { Checkbox } from 'azure-devops-ui/Checkbox';
 import { Observer } from 'azure-devops-ui/Observer';
 import { Tooltip } from 'azure-devops-ui/TooltipEx';
 import { ButtonGroup } from 'azure-devops-ui/ButtonGroup';
 import { Button } from 'azure-devops-ui/Button';
+import { GitRepository } from 'azure-devops-extension-api/Git';
+import {
+    IListItemDetails,
+    List,
+    ListItem,
+    ListSelection,
+} from 'azure-devops-ui/List';
+import { ArrayItemProvider } from 'azure-devops-ui/Utilities/Provider';
+import { bindSelectionToObservable } from 'azure-devops-ui/MasterDetailsContext';
+import { Spinner } from 'azure-devops-ui/Spinner';
+import { Splitter, SplitterDirection, SplitterElementPosition } from 'azure-devops-ui/Splitter';
 
 export interface ISprintlyEnvironmentVariableViewerState {
     userSettings?: Common.IUserSettings;
     systemSettings?: Common.ISystemSettings;
     environmentVariablesObservable: ObservableArray<ISearchResultEnvironmentVariableItem>;
+    repositories: ArrayItemProvider<GitRepository>;
+    repositoryListSelection: ListSelection;
+    repositoryListSelectedItemObservable: ObservableValue<GitRepository>;
 }
 
 export interface ISearchResultEnvironmentVariableValue {
@@ -40,7 +57,13 @@ export interface ISearchResultEnvironmentVariableItem {
 }
 
 //#region "Observables"
+const totalRepositoriesToProcessObservable: ObservableValue<number> =
+    new ObservableValue<number>(0);
+const showAllEnvironmentVariablesObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(true);
 //#endregion "Observables"
+
+let repositoriesToProcess: string[] = [];
 
 const rawTableItems: ISearchResultEnvironmentVariableItem[] = [
     {
@@ -108,6 +131,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         super(props);
 
         this.onSize = this.onSize.bind(this);
+        this.renderRepositoryMasterPageList =
+            this.renderRepositoryMasterPageList.bind(this);
+        this.renderDetailPageContent = this.renderDetailPageContent.bind(this);
 
         this.columns = [
             {
@@ -126,6 +152,11 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         this.state = {
             environmentVariablesObservable:
                 new ObservableArray<ISearchResultEnvironmentVariableItem>([]),
+            repositories: new ArrayItemProvider<GitRepository>([]),
+            repositoryListSelection: new ListSelection({
+                selectOnFocus: false,
+            }),
+            repositoryListSelectedItemObservable: new ObservableValue<any>({}),
         };
 
         this.dataManager = props.dataManager;
@@ -157,18 +188,18 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
 
         await this.loadEnvironmentVariables();
 
-        // repositoriesToProcess = Common.getSavedRepositoriesToView(
-        //     this.state.userSettings,
-        //     this.state.systemSettings
-        // );
+        repositoriesToProcess = Common.getSavedRepositoriesToView(
+            this.state.userSettings,
+            this.state.systemSettings
+        );
 
-        // totalRepositoriesToProcessObservable.value =
-        //     repositoriesToProcess.length;
-        // if (repositoriesToProcess.length > 0) {
-        //     const filteredProjects: TeamProjectReference[] =
-        //         await Common.getFilteredProjects();
-        //     await this.loadRepositoriesDisplayState(filteredProjects);
-        // }
+        totalRepositoriesToProcessObservable.value =
+            repositoriesToProcess.length;
+        if (repositoriesToProcess.length > 0) {
+            const currentProject: IProjectInfo | undefined =
+                await Common.getCurrentProject();
+            await this.loadRepositoriesDisplayState(currentProject);
+        }
     }
 
     private async loadEnvironmentVariables(): Promise<void> {
@@ -267,6 +298,91 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         this.resetEnvironmentVariablesColumns();
     }
 
+    private async loadRepositoriesDisplayState(
+        currentProject: IProjectInfo | undefined
+    ): Promise<void> {
+        let repos: GitRepository[] = [];
+        totalRepositoriesToProcessObservable.value = 0;
+        if (currentProject !== undefined) {
+            const filteredRepos: GitRepository[] =
+                await Common.getFilteredProjectRepositories(
+                    currentProject.id,
+                    repositoriesToProcess
+                );
+
+            totalRepositoriesToProcessObservable.value += filteredRepos.length;
+            repos = repos.concat(filteredRepos);
+        }
+
+        this.setState({
+            repositories: new ArrayItemProvider(
+                Common.sortRepositoryList(repos)
+            ),
+        });
+
+        bindSelectionToObservable(
+            this.state.repositoryListSelection,
+            this.state.repositories,
+            this.state
+                .repositoryListSelectedItemObservable as ObservableValue<GitRepository>
+        );
+    }
+
+    private renderRepositoryMasterPageList(): JSX.Element {
+        return !this.state.repositories ||
+            this.state.repositories.length === 0 ? (
+            <div className='page-content-top'>
+                <Spinner label='loading' />
+            </div>
+        ) : (
+            <List
+                ariaLabel={'Repositories'}
+                itemProvider={this.state.repositories}
+                selection={this.state.repositoryListSelection}
+                renderRow={this.renderRepositoryListItem}
+                width='100%'
+                singleClickActivation={true}
+                onSelect={async () => {
+                    await this.selectRepository();
+                }}
+            />
+        );
+    }
+
+    private renderDetailPageContent(): JSX.Element {
+        return <></>;
+    }
+
+    private renderRepositoryListItem(
+        index: number,
+        item: GitRepository,
+        details: IListItemDetails<GitRepository>,
+        key?: string
+    ): JSX.Element {
+        return (
+            <ListItem
+                className='master-row border-bottom'
+                key={key || 'list-item' + index}
+                index={index}
+                details={details}
+            >
+                <div className='master-row-content flex-row flex-center h-scroll-hidden'>
+                    <div className='flex-column text-ellipsis'>
+                        <Tooltip overflowOnly={true}>
+                            <div className='primary-text text-ellipsis'>
+                                {Common.repositoryLinkJsxElement(
+                                    item.webUrl,
+                                    'font-size-1',
+                                    item.name
+                                )}
+                            </div>
+                        </Tooltip>
+                    </div>
+                </div>
+            </ListItem>
+        );
+    }
+
     private renderEnvironmentVariablesExcludeFilterCheckboxes(): JSX.Element {
         if (this.environmentVariablesResponse !== undefined) {
             return (
@@ -339,6 +455,8 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         );
     }
 
+    private async selectRepository(): Promise<void> {}
+
     private onSize(event: MouseEvent, index: number, width: number): void {
         (this.columns[index].width as ObservableValue<number>).value = width;
     }
@@ -347,6 +465,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         return (
             <Observer
                 environmentVariables={this.state.environmentVariablesObservable}
+                showAllEnvironmentVariables={
+                    showAllEnvironmentVariablesObservable
+                }
             >
                 {(props: {
                     environmentVariables: ISearchResultEnvironmentVariableItem[];
@@ -356,27 +477,58 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                             <Button
                                 text='Show all environment variables'
                                 primary={true}
-                                onClick={() => {}}
+                                onClick={() => {
+                                    showAllEnvironmentVariablesObservable.value =
+                                        true;
+                                }}
                             />
                             <Button
                                 text='Repository specific variables'
                                 primary={true}
-                                onClick={() => {}}
+                                onClick={() => {
+                                    showAllEnvironmentVariablesObservable.value =
+                                        false;
+                                }}
                             />
                         </ButtonGroup>
-                        <div className='rhythm-horizontal-8 flex-row'>
-                            {this.renderEnvironmentVariablesExcludeFilterCheckboxes()}
-                        </div>
-                        <Card className='bolt-table-card bolt-card-white'>
-                            <Table
-                                columns={this.columns}
-                                behaviors={[this.sortingBehavior]}
-                                selectableText={true}
-                                itemProvider={
-                                    this.state.environmentVariablesObservable
-                                }
-                            />
-                        </Card>
+                        {showAllEnvironmentVariablesObservable.value && (
+                            <>
+                                <div className='rhythm-horizontal-8 flex-row'>
+                                    {this.renderEnvironmentVariablesExcludeFilterCheckboxes()}
+                                </div>
+                                <Card className='bolt-table-card bolt-card-white'>
+                                    <Table
+                                        columns={this.columns}
+                                        behaviors={[this.sortingBehavior]}
+                                        selectableText={true}
+                                        itemProvider={
+                                            this.state
+                                                .environmentVariablesObservable
+                                        }
+                                    />
+                                </Card>
+                            </>
+                        )}
+                        {!showAllEnvironmentVariablesObservable.value && (
+                            <>
+                                <Splitter
+                                    fixedElement={SplitterElementPosition.Near}
+                                    splitterDirection={
+                                        SplitterDirection.Vertical
+                                    }
+                                    initialFixedSize={450}
+                                    minFixedSize={100}
+                                    nearElementClassName='v-scroll-auto custom-scrollbar'
+                                    farElementClassName='v-scroll-auto custom-scrollbar'
+                                    onRenderNearElement={
+                                        this.renderRepositoryMasterPageList
+                                    }
+                                    onRenderFarElement={
+                                        this.renderDetailPageContent
+                                    }
+                                />
+                            </>
+                        )}
                     </div>
                 )}
             </Observer>
