@@ -28,10 +28,6 @@ import {
     IProjectInfo,
     IProjectPageService,
 } from 'azure-devops-extension-api';
-import {
-    CoreRestClient,
-    TeamProjectReference,
-} from 'azure-devops-extension-api/Core';
 import { IdentityRef } from 'azure-devops-extension-api/WebApi';
 import { BuildDefinition } from 'azure-devops-extension-api/Build';
 import { ObservableArray } from 'azure-devops-ui/Core/Observable';
@@ -42,11 +38,6 @@ import { Status, Statuses, StatusSize } from 'azure-devops-ui/Status';
 import { DropdownMultiSelection } from 'azure-devops-ui/Utilities/DropdownSelection';
 import axios, { AxiosResponse } from 'axios';
 import React from 'react';
-
-export const ALWAYS_ALLOWED_PROJECTS: String[] = [
-    'Portfolio',
-    'Sample Project',
-];
 
 export const ALWAYS_ALLOWED_GROUPS: IAllowedEntity[] = [
     {
@@ -284,19 +275,6 @@ export function getSavedRepositoriesToView(
     }
 
     return allowedRepositories.map((item: IAllowedEntity) => item.originId);
-}
-
-export async function getFilteredProjects(): Promise<TeamProjectReference[]> {
-    const projects: TeamProjectReference[] = await getClient(
-        CoreRestClient
-    ).getProjects();
-
-    const filteredProjects: TeamProjectReference[] = projects.filter(
-        (project: TeamProjectReference) => {
-            return ALWAYS_ALLOWED_PROJECTS.includes(project.name);
-        }
-    );
-    return filteredProjects;
 }
 
 export async function getCurrentProject(): Promise<IProjectInfo | undefined> {
@@ -605,15 +583,15 @@ export async function getReleasesForReleaseBranch(
 }
 
 export async function getReleaseDefinitions(
-    projects: TeamProjectReference[],
+    currentProject: IProjectInfo | undefined,
     organizationName: string,
     accessToken: string
 ): Promise<ReleaseDefinition[]> {
-    for (const project of projects) {
+    if (currentProject !== undefined) {
         accessToken = await getOrRefreshToken(accessToken);
         const response: AxiosResponse<never> = await axios
             .get(
-                `https://vsrm.dev.azure.com/${organizationName}/${project.id}/_apis/release/definitions?$expand=artifacts&api-version=6.0`,
+                `https://vsrm.dev.azure.com/${organizationName}/${currentProject.id}/_apis/release/definitions?$expand=artifacts&api-version=6.0`,
                 {
                     headers: {
                         Authorization: `Bearer ${accessToken}`,
@@ -635,15 +613,15 @@ export async function getReleaseDefinitions(
 }
 
 export async function getBuildDefinitions(
-    projects: TeamProjectReference[],
+    currentProject: IProjectInfo | undefined,
     organizationName: string,
     accessToken: string
 ): Promise<BuildDefinition[]> {
-    for (const project of projects) {
+    if (currentProject !== undefined) {
         accessToken = await getOrRefreshToken(accessToken);
         const response: AxiosResponse<never> = await axios
             .get(
-                `https://dev.azure.com/${organizationName}/${project.id}/_apis/build/definitions?includeAllProperties=true&api-version=6.0`,
+                `https://dev.azure.com/${organizationName}/${currentProject.id}/_apis/build/definitions?includeAllProperties=true&api-version=6.0`,
                 {
                     headers: {
                         Authorization: `Bearer ${accessToken}`,
@@ -664,7 +642,7 @@ export async function getBuildDefinitions(
 }
 
 export async function getPullRequests(
-    projects: TeamProjectReference[]
+    currentProject: IProjectInfo | undefined
 ): Promise<GitPullRequest[]> {
     // Statuses:
     // 1 = Queued, 2 = Conflicts, 3 = Premerge Succeeded, 4 = RejectedByPolicy, 5 = Failure
@@ -679,10 +657,10 @@ export async function getPullRequests(
         status: PullRequestStatus.Active,
         targetRefName: '',
     };
-    for (const project of projects) {
+    if (currentProject !== undefined) {
         const pullRequestsResponse: GitPullRequest[] = await getClient(
             GitRestClient
-        ).getPullRequestsByProject(project.id, pullRequestCriteria);
+        ).getPullRequestsByProject(currentProject.id, pullRequestCriteria);
         pullRequests = pullRequests.concat(pullRequestsResponse);
     }
     return pullRequests;

@@ -6,9 +6,9 @@ import {
     getClient,
     IExtensionDataManager,
     IGlobalMessagesService,
+    IProjectInfo,
 } from 'azure-devops-extension-api';
 
-import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
     GitRestClient,
     GitBaseVersionDescriptor,
@@ -164,19 +164,19 @@ export default class SprintlyPage extends React.Component<
             repositoriesToProcess.length;
         if (repositoriesToProcess.length > 0) {
             await this.loadRepositoriesDisplayState(
-                await Common.getFilteredProjects()
+                await Common.getCurrentProject()
             );
         }
     }
 
     private async loadRepositoriesDisplayState(
-        projects: TeamProjectReference[]
+        currentProject: IProjectInfo | undefined
     ): Promise<void> {
         const reposExtended: Common.IGitRepositoryExtended[] = [];
-        for (const project of projects) {
+        if (currentProject !== undefined) {
             const filteredRepos: GitRepository[] =
                 await Common.getFilteredProjectRepositories(
-                    project.id,
+                    currentProject.id,
                     repositoriesToProcess
                 );
 

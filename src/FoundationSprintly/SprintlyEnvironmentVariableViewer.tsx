@@ -9,7 +9,7 @@ import {
 } from 'azure-devops-ui/Core/Observable';
 import { ITableColumn, SimpleTableCell, Table } from 'azure-devops-ui/Table';
 import * as Common from './SprintlyCommon';
-import { CommonServiceIds, IExtensionDataManager, IProjectPageService } from 'azure-devops-extension-api';
+import { IExtensionDataManager } from 'azure-devops-extension-api';
 
 export interface ISprintlyEnvironmentVariableViewerState {
     userSettings?: Common.IUserSettings;
@@ -149,8 +149,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     }
 
     private async loadEnvironmentVariables(): Promise<void> {
-        const projectService = await SDK.getService<IProjectPageService>(CommonServiceIds.ProjectPageService);
-        const project = await projectService.getProject();
+        const project = await Common.getCurrentProject();
         console.log(project);
         //const url: string = `https://vsrm.dev.azure.com/${this.organizationName}/${clickedDeployProjectReferenceObservable.value.id}/_apis/Release/releases/${clickedDeployReleaseIdObservable.value}/environments/${clickedDeployEnvironmentObservable.value.id}?api-version=5.0-preview.6`;
     }

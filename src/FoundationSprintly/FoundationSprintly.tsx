@@ -6,10 +6,10 @@ import {
     CommonServiceIds,
     IExtensionDataManager,
     IGlobalMessagesService,
+    IProjectInfo,
 } from 'azure-devops-extension-api';
 import { ReleaseDefinition } from 'azure-devops-extension-api/Release';
 import { BuildDefinition } from 'azure-devops-extension-api/Build';
-import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 
 import { ObservableValue } from 'azure-devops-ui/Core/Observable';
 import { Observer } from 'azure-devops-ui/Observer';
@@ -129,15 +129,15 @@ export default class FoundationSprintly extends React.Component<
                 Common.SYSTEM_SETTINGS_DATA_MANAGER_KEY
             );
 
-        const filteredProjects: TeamProjectReference[] =
-            await Common.getFilteredProjects();
+        const currentProject: IProjectInfo | undefined =
+            await Common.getCurrentProject();
         this.releaseDefinitions = await Common.getReleaseDefinitions(
-            filteredProjects,
+            currentProject,
             organizationNameObservable.value,
             this.accessToken
         );
         this.buildDefinitions = await Common.getBuildDefinitions(
-            filteredProjects,
+            currentProject,
             organizationNameObservable.value,
             this.accessToken
         );

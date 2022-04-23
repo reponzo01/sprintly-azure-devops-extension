@@ -4,6 +4,7 @@ import {
     getClient,
     IExtensionDataManager,
     IGlobalMessagesService,
+    IProjectInfo,
     MessageBannerLevel,
 } from 'azure-devops-extension-api';
 import {
@@ -18,8 +19,6 @@ import {
     GitVersionOptions,
     GitVersionType,
 } from 'azure-devops-extension-api/Git';
-import { IdentityRef } from 'azure-devops-extension-api/WebApi';
-import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 
 import {
     ObservableArray,
@@ -270,21 +269,21 @@ export default class SprintlyBranchSearchPage extends React.Component<
         totalRepositoriesToProcessObservable.value =
             repositoriesToProcess.length;
         if (repositoriesToProcess.length > 0) {
-            const filteredProjects: TeamProjectReference[] =
-                await Common.getFilteredProjects();
-            await this.loadRepositoriesState(filteredProjects);
+            const currentProject: IProjectInfo | undefined =
+                await Common.getCurrentProject();
+            await this.loadRepositoriesState(currentProject);
         }
     }
 
     private async loadRepositoriesState(
-        projects: TeamProjectReference[]
+        currentProject: IProjectInfo | undefined
     ): Promise<void> {
         let repos: GitRepository[] = [];
         totalRepositoriesToProcessObservable.value = 0;
-        for (const project of projects) {
+        if (currentProject !== undefined) {
             const filteredRepos: GitRepository[] =
                 await Common.getFilteredProjectRepositories(
-                    project.id,
+                    currentProject.id,
                     repositoriesToProcess
                 );
 
@@ -549,9 +548,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
                         );
                     if (searchResultsBranches.length > 0) {
                         let branchStatsBatch: GitBranchStats[] = [];
-                        let repositoryDevelopBranch:
-                            | GitBranchStats
-                            | undefined;
+                        let repositoryDevelopBranch: GitBranchStats | undefined;
                         try {
                             repositoryDevelopBranch = await getClient(
                                 GitRestClient

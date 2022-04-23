@@ -6,9 +6,9 @@ import {
     IColor,
     IExtensionDataManager,
     IGlobalMessagesService,
+    IProjectInfo,
     MessageBannerLevel,
 } from 'azure-devops-extension-api';
-import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
     GitAnnotatedTag,
     GitObjectType,
@@ -241,14 +241,14 @@ export default class SprintlyPostRelease extends React.Component<
             totalRepositoriesToProcessObservable.value =
                 repositoriesToProcess.length;
             if (repositoriesToProcess.length > 0) {
-                const filteredProjects: TeamProjectReference[] =
-                    await Common.getFilteredProjects();
+                const currentProject: IProjectInfo | undefined =
+                    await Common.getCurrentProject();
                 const pullRequests: GitPullRequest[] =
-                    await Common.getPullRequests(filteredProjects);
+                    await Common.getPullRequests(currentProject);
                 this.setState({
                     pullRequests,
                 });
-                await this.loadRepositoriesDisplayState(filteredProjects);
+                await this.loadRepositoriesDisplayState(currentProject);
             }
         }
     }
@@ -267,13 +267,13 @@ export default class SprintlyPostRelease extends React.Component<
     }
 
     private async loadRepositoriesDisplayState(
-        projects: TeamProjectReference[]
+        currentProject: IProjectInfo | undefined
     ): Promise<void> {
         const reposExtended: Common.IGitRepositoryExtended[] = [];
-        for (const project of projects) {
+        if (currentProject !== undefined) {
             const filteredRepos: GitRepository[] =
                 await Common.getFilteredProjectRepositories(
-                    project.id,
+                    currentProject.id,
                     repositoriesToProcess
                 );
 

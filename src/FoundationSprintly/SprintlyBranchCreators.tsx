@@ -4,9 +4,9 @@ import {
     getClient,
     IExtensionDataManager,
     IGlobalMessagesService,
+    IProjectInfo,
     MessageBannerLevel,
 } from 'azure-devops-extension-api';
-import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
     GitBranchStats,
     GitRef,
@@ -25,7 +25,7 @@ import {
     ObservableArray,
     ObservableValue,
 } from 'azure-devops-ui/Core/Observable';
-import { Icon, IconSize } from 'azure-devops-ui/Icon';
+import { Icon } from 'azure-devops-ui/Icon';
 import { Link } from 'azure-devops-ui/Link';
 import {
     IListItemDetails,
@@ -262,21 +262,21 @@ export default class SprintlyBranchCreators extends React.Component<
         totalRepositoriesToProcessObservable.value =
             repositoriesToProcess.length;
         if (repositoriesToProcess.length > 0) {
-            const filteredProjects: TeamProjectReference[] =
-                await Common.getFilteredProjects();
-            await this.loadRepositoriesDisplayState(filteredProjects);
+            const currentProject: IProjectInfo | undefined =
+                await Common.getCurrentProject();
+            await this.loadRepositoriesDisplayState(currentProject);
         }
     }
 
     private async loadRepositoriesDisplayState(
-        projects: TeamProjectReference[]
+        currentProject: IProjectInfo | undefined
     ): Promise<void> {
         let repos: GitRepository[] = [];
         totalRepositoriesToProcessObservable.value = 0;
-        for (const project of projects) {
+        if (currentProject !== undefined) {
             const filteredRepos: GitRepository[] =
                 await Common.getFilteredProjectRepositories(
-                    project.id,
+                    currentProject.id,
                     repositoriesToProcess
                 );
 

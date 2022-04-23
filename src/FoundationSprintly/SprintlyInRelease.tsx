@@ -4,10 +4,10 @@ import * as SDK from 'azure-devops-extension-sdk';
 import {
     IExtensionDataManager,
     IGlobalMessagesService,
+    IProjectInfo,
     MessageBannerLevel,
 } from 'azure-devops-extension-api';
 import { GitRef, GitRepository } from 'azure-devops-extension-api/Git';
-import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
     EnvironmentStatus,
     ProjectReference,
@@ -178,9 +178,9 @@ export default class SprintlyInRelease extends React.Component<
         totalRepositoriesToProcessObservable.value =
             repositoriesToProcess.length;
         if (repositoriesToProcess.length > 0) {
-            const filteredProjects: TeamProjectReference[] =
-                await Common.getFilteredProjects();
-            await this.loadRepositoriesDisplayState(filteredProjects);
+            const currentProject: IProjectInfo | undefined =
+                await Common.getCurrentProject();
+            await this.loadRepositoriesDisplayState(currentProject);
         }
     }
 
@@ -196,13 +196,13 @@ export default class SprintlyInRelease extends React.Component<
     }
 
     private async loadRepositoriesDisplayState(
-        projects: TeamProjectReference[]
+        currentProject: IProjectInfo | undefined
     ): Promise<void> {
         const reposExtended: Common.IGitRepositoryExtended[] = [];
-        for (const project of projects) {
+        if (currentProject !== undefined) {
             const filteredRepos: GitRepository[] =
                 await Common.getFilteredProjectRepositories(
-                    project.id,
+                    currentProject.id,
                     repositoriesToProcess
                 );
             const releaseBranchRootItems: Array<

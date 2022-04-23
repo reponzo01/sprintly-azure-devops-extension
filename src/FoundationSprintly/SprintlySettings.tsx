@@ -4,13 +4,12 @@ import axios, { AxiosResponse } from 'axios';
 
 import * as SDK from 'azure-devops-extension-sdk';
 import {
-    CommonServiceIds,
     getClient,
     IExtensionDataManager,
     IGlobalMessagesService,
+    IProjectInfo,
 } from 'azure-devops-extension-api';
 
-import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import { GitRepository, GitRestClient } from 'azure-devops-extension-api/Git';
 
 import { Button } from 'azure-devops-ui/Button';
@@ -212,12 +211,12 @@ export default class SprintlySettings extends React.Component<
 
     private async loadRepositories(): Promise<void> {
         this.allRepositories = [];
-        const filteredProjects: TeamProjectReference[] =
-            await Common.getFilteredProjects();
-        for (const project of filteredProjects) {
+        const currentProject: IProjectInfo | undefined =
+            await Common.getCurrentProject();
+        if (currentProject !== undefined) {
             const repos: GitRepository[] = await getClient(
                 GitRestClient
-            ).getRepositories(project.id);
+            ).getRepositories(currentProject.id);
 
             for (const repo of repos) {
                 this.allRepositories.push({
