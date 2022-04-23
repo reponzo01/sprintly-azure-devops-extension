@@ -159,7 +159,6 @@ export default class FoundationSprintly extends React.Component<
         } else {
             userGroups = userGroups.concat(Common.ALWAYS_ALLOWED_GROUPS);
         }
-        console.log(userGroups);
         if (userGroups) {
             for (const group of userGroups) {
                 this.accessToken = await Common.getOrRefreshToken(
@@ -361,6 +360,7 @@ export default class FoundationSprintly extends React.Component<
                 return (
                     <SprintlyEnvironmentVariableViewer
                         dataManager={this.dataManager}
+                        organizationName={organizationNameObservable.value}
                     />
                 );
             default:

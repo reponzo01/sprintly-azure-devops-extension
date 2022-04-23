@@ -7,9 +7,21 @@ import {
     ObservableArray,
     ObservableValue,
 } from 'azure-devops-ui/Core/Observable';
-import { ITableColumn, SimpleTableCell, Table } from 'azure-devops-ui/Table';
+import {
+    ColumnSorting,
+    ITableColumn,
+    SimpleTableCell,
+    sortItems,
+    SortOrder,
+    Table,
+} from 'azure-devops-ui/Table';
 import * as Common from './SprintlyCommon';
 import { IExtensionDataManager } from 'azure-devops-extension-api';
+import { Checkbox } from 'azure-devops-ui/Checkbox';
+import { Observer } from 'azure-devops-ui/Observer';
+import { Tooltip } from 'azure-devops-ui/TooltipEx';
+import { ButtonGroup } from 'azure-devops-ui/ButtonGroup';
+import { Button } from 'azure-devops-ui/Button';
 
 export interface ISprintlyEnvironmentVariableViewerState {
     userSettings?: Common.IUserSettings;
@@ -17,35 +29,28 @@ export interface ISprintlyEnvironmentVariableViewerState {
     environmentVariablesObservable: ObservableArray<ISearchResultEnvironmentVariableItem>;
 }
 
+export interface ISearchResultEnvironmentVariableValue {
+    environmentName: string;
+    value: string;
+}
+
 export interface ISearchResultEnvironmentVariableItem {
-    test1: string;
-    test2?: string;
-    test3: string;
+    name: string;
+    values: ISearchResultEnvironmentVariableValue[];
 }
 
 //#region "Observables"
-const test1ColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const test2ColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const test3ColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-40);
 //#endregion "Observables"
 
 const rawTableItems: ISearchResultEnvironmentVariableItem[] = [
     {
-        test1: 't1',
-        test2: 't2',
-        test3: 't3',
-    },
-    {
-        test1: 't1',
-        test3: 't3',
-    },
-    {
-        test1: 't1',
-        test2: 't2',
-        test3: 't3',
+        name: 't1',
+        values: [
+            {
+                environmentName: 'Dev',
+                value: 'var1',
+            },
+        ],
     },
 ];
 const tableItems = new ObservableArray<ISearchResultEnvironmentVariableItem>(
@@ -55,49 +60,66 @@ const tableItems = new ObservableArray<ISearchResultEnvironmentVariableItem>(
 export default class SprintlyEnvironmentVariableViewer extends React.Component<
     {
         dataManager: IExtensionDataManager;
+        organizationName: string;
     },
     ISprintlyEnvironmentVariableViewerState
 > {
     private dataManager: IExtensionDataManager;
+    private organizationName: string;
     private accessToken: string = '';
-    private columns: any = [];
+    private environmentVariablesResponse: any;
+    private environmentVariablesExclusionFilter: Set<string> = new Set();
+    private columns: ITableColumn<ISearchResultEnvironmentVariableItem>[] = [];
+    private sortingBehavior: ColumnSorting<ISearchResultEnvironmentVariableItem> =
+        new ColumnSorting<ISearchResultEnvironmentVariableItem>(
+            (
+                columnIndex: number,
+                proposedSortOrder: SortOrder,
+                event:
+                    | React.KeyboardEvent<HTMLElement>
+                    | React.MouseEvent<HTMLElement>
+            ) => {
+                this.state.environmentVariablesObservable.splice(
+                    0,
+                    this.state.environmentVariablesObservable.length,
+                    ...sortItems<ISearchResultEnvironmentVariableItem>(
+                        columnIndex,
+                        proposedSortOrder,
+                        this.sortFunctions,
+                        this.columns,
+                        this.state.environmentVariablesObservable.value
+                    )
+                );
+            }
+        );
+    private sortFunctions: any = [
+        (
+            a: ISearchResultEnvironmentVariableItem,
+            b: ISearchResultEnvironmentVariableItem
+        ): number => {
+            return a.name.localeCompare(b.name);
+        },
+    ];
 
-    constructor(props: { dataManager: IExtensionDataManager }) {
+    constructor(props: {
+        dataManager: IExtensionDataManager;
+        organizationName: string;
+    }) {
         super(props);
+
+        this.onSize = this.onSize.bind(this);
 
         this.columns = [
             {
-                id: 'name',
-                name: 'Test1',
+                id: 'environmentVariableName',
+                name: 'Environment Variable',
                 onSize: this.onSize,
-                renderCell: this.renderTest1,
+                renderCell: this.renderEnvironmentVariableNameCell,
                 sortProps: {
                     ariaLabelAscending: 'Sorted A to Z',
                     ariaLabelDescending: 'Sorted Z to A',
                 },
-                width: test1ColumnWidthObservable,
-            },
-            {
-                id: 'name',
-                name: 'Test2',
-                onSize: this.onSize,
-                renderCell: this.renderTest2,
-                sortProps: {
-                    ariaLabelAscending: 'Sorted A to Z',
-                    ariaLabelDescending: 'Sorted Z to A',
-                },
-                width: test2ColumnWidthObservable,
-            },
-            {
-                id: 'name',
-                name: 'Test3',
-                onSize: this.onSize,
-                renderCell: this.renderTest3,
-                sortProps: {
-                    ariaLabelAscending: 'Sorted A to Z',
-                    ariaLabelDescending: 'Sorted Z to A',
-                },
-                width: test3ColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
         ];
 
@@ -107,6 +129,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         };
 
         this.dataManager = props.dataManager;
+        this.organizationName = props.organizationName;
     }
 
     public async componentDidMount(): Promise<void> {
@@ -149,12 +172,131 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     }
 
     private async loadEnvironmentVariables(): Promise<void> {
-        const project = await Common.getCurrentProject();
-        console.log(project);
-        //const url: string = `https://vsrm.dev.azure.com/${this.organizationName}/${clickedDeployProjectReferenceObservable.value.id}/_apis/Release/releases/${clickedDeployReleaseIdObservable.value}/environments/${clickedDeployEnvironmentObservable.value.id}?api-version=5.0-preview.6`;
+        const currentProject = await Common.getCurrentProject();
+        if (currentProject !== undefined) {
+            let environmentVariableGroupIds: string = '';
+            for (const groupId of Common.ALLOWED_ENVIRONMENT_VARIABLE_GROUP_IDS) {
+                environmentVariableGroupIds += `${groupId.toString()},`;
+            }
+            const url: string = `https://dev.azure.com/${this.organizationName}/${currentProject.id}/_apis/distributedtask/variablegroups?groupIds=${environmentVariableGroupIds}`;
+            this.accessToken = await Common.getOrRefreshToken(this.accessToken);
+            const response: AxiosResponse<never> = await axios
+                .get(url, {
+                    headers: {
+                        Authorization: `Bearer ${this.accessToken}`,
+                    },
+                })
+                .catch((error: any) => {
+                    console.error(error);
+                    throw error;
+                });
+            this.environmentVariablesResponse = response.data; //No defined type exists in the api
+
+            this.resetEnvironmentVariablesColumns();
+        }
     }
 
-    private renderTest1(
+    private resetEnvironmentVariablesColumns(): void {
+        const resultEnvironmentVariables: ISearchResultEnvironmentVariableItem[] =
+            [];
+        this.columns.splice(1, this.columns.length - 1);
+        for (const environmentVariableGroup of this.environmentVariablesResponse
+            .value) {
+            if (
+                !this.environmentVariablesExclusionFilter.has(
+                    environmentVariableGroup.name
+                )
+            ) {
+                this.columns.push({
+                    id: `environment${environmentVariableGroup.name}`,
+                    name: environmentVariableGroup.name,
+                    onSize: this.onSize,
+                    renderCell: this.renderEnvironmentVariableValueCell,
+                    width: new ObservableValue<number>(-30),
+                });
+                for (const [
+                    environmentVariableName,
+                    environmentVariableValue,
+                ] of Object.entries(environmentVariableGroup.variables)) {
+                    let variableIsSaved: boolean = false;
+                    for (const environmentVariable of resultEnvironmentVariables) {
+                        if (
+                            environmentVariableName === environmentVariable.name
+                        ) {
+                            variableIsSaved = true;
+                            environmentVariable.values.push({
+                                environmentName: environmentVariableGroup.name,
+                                value: (environmentVariableValue as any).value,
+                            });
+                        }
+                    }
+                    if (!variableIsSaved) {
+                        resultEnvironmentVariables.push({
+                            name: environmentVariableName,
+                            values: [
+                                {
+                                    environmentName:
+                                        environmentVariableGroup.name,
+                                    value: (environmentVariableValue as any)
+                                        .value,
+                                },
+                            ],
+                        });
+                    }
+                }
+            }
+        }
+        this.setState({
+            environmentVariablesObservable:
+                new ObservableArray<ISearchResultEnvironmentVariableItem>(
+                    //TODO: Sort by variable name
+                    resultEnvironmentVariables
+                ),
+        });
+    }
+
+    private updateEnvironmentVariablesExcludeFilter(
+        environmentName: string,
+        show: boolean
+    ): void {
+        if (show) {
+            this.environmentVariablesExclusionFilter.delete(environmentName);
+        } else {
+            this.environmentVariablesExclusionFilter.add(environmentName);
+        }
+        this.resetEnvironmentVariablesColumns();
+    }
+
+    private renderEnvironmentVariablesExcludeFilterCheckboxes(): JSX.Element {
+        if (this.environmentVariablesResponse !== undefined) {
+            return (
+                <>
+                    {this.environmentVariablesResponse.value.map(
+                        (environment: any) => (
+                            <Checkbox
+                                key={environment.name}
+                                onChange={(event, checked) =>
+                                    this.updateEnvironmentVariablesExcludeFilter(
+                                        environment.name,
+                                        checked
+                                    )
+                                }
+                                checked={
+                                    !this.environmentVariablesExclusionFilter.has(
+                                        environment.name
+                                    )
+                                }
+                                label={`Show ${environment.name}`}
+                            />
+                        )
+                    )}
+                </>
+            );
+        }
+        return <></>;
+    }
+
+    private renderEnvironmentVariableNameCell(
         rowIndex: number,
         columnIndex: number,
         tableColumn: ITableColumn<ISearchResultEnvironmentVariableItem>,
@@ -165,40 +307,35 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 key={'col-' + columnIndex}
                 columnIndex={columnIndex}
                 tableColumn={tableColumn}
-                children={<>{tableItem.test1}</>}
+                children={<>{tableItem.name}</>}
             ></SimpleTableCell>
         );
     }
 
-    private renderTest2(
+    private renderEnvironmentVariableValueCell(
         rowIndex: number,
         columnIndex: number,
         tableColumn: ITableColumn<ISearchResultEnvironmentVariableItem>,
         tableItem: ISearchResultEnvironmentVariableItem
     ): JSX.Element {
+        let itemValue: String = '';
+        for (const value of tableItem.values) {
+            if (value.environmentName === tableColumn.name) {
+                itemValue = value.value;
+            }
+        }
         return (
             <SimpleTableCell
                 key={'col-' + columnIndex}
                 columnIndex={columnIndex}
                 tableColumn={tableColumn}
-                children={<>{tableItem.test2}</>}
-            ></SimpleTableCell>
-        );
-    }
-
-    private renderTest3(
-        rowIndex: number,
-        columnIndex: number,
-        tableColumn: ITableColumn<ISearchResultEnvironmentVariableItem>,
-        tableItem: ISearchResultEnvironmentVariableItem
-    ): JSX.Element {
-        return (
-            <SimpleTableCell
-                key={'col-' + columnIndex}
-                columnIndex={columnIndex}
-                tableColumn={tableColumn}
-                children={<>{tableItem.test3}</>}
-            ></SimpleTableCell>
+            >
+                <div className='flex-row scroll-hidden'>
+                    <Tooltip overflowOnly={true}>
+                        <span className='text-ellipsis'>{itemValue}</span>
+                    </Tooltip>
+                </div>
+            </SimpleTableCell>
         );
     }
 
@@ -208,16 +345,41 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
 
     public render(): JSX.Element {
         return (
-            <div className='page-content page-content-top flex-column rhythm-vertical-16'>
-                <Card className='bolt-table-card bolt-card-white'>
-                    <Table
-                        columns={this.columns}
-                        //behaviors={[this.sortingBehavior]}
-                        //itemProvider={this.state.repositoryBranchesObservable}
-                        itemProvider={tableItems}
-                    />
-                </Card>
-            </div>
+            <Observer
+                environmentVariables={this.state.environmentVariablesObservable}
+            >
+                {(props: {
+                    environmentVariables: ISearchResultEnvironmentVariableItem[];
+                }) => (
+                    <div className='page-content page-content-top flex-column rhythm-vertical-16'>
+                        <ButtonGroup>
+                            <Button
+                                text='Show all environment variables'
+                                primary={true}
+                                onClick={() => {}}
+                            />
+                            <Button
+                                text='Repository specific variables'
+                                primary={true}
+                                onClick={() => {}}
+                            />
+                        </ButtonGroup>
+                        <div className='rhythm-horizontal-8 flex-row'>
+                            {this.renderEnvironmentVariablesExcludeFilterCheckboxes()}
+                        </div>
+                        <Card className='bolt-table-card bolt-card-white'>
+                            <Table
+                                columns={this.columns}
+                                behaviors={[this.sortingBehavior]}
+                                selectableText={true}
+                                itemProvider={
+                                    this.state.environmentVariablesObservable
+                                }
+                            />
+                        </Card>
+                    </div>
+                )}
+            </Observer>
         );
     }
 }
