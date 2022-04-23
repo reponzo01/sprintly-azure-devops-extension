@@ -60,15 +60,6 @@ const tagsObservable: ObservableValue<string[]> = new ObservableValue<string[]>(
 );
 const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
-
-const nameColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const releaseNeededColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const tagsColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const createReleaseBranchColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-40);
 //#endregion "Observables"
 
 let repositoriesToProcess: string[] = [];
@@ -105,27 +96,27 @@ export default class SprintlyPage extends React.Component<
                 name: 'Repository',
                 onSize: this.onSize,
                 renderCell: this.renderNameCell,
-                width: nameColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'releaseNeeded',
                 name: 'Release Needed?',
                 onSize: this.onSize,
                 renderCell: this.renderReleaseNeededCell,
-                width: releaseNeededColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'tags',
                 name: 'Tags',
                 onSize: this.onSize,
                 renderCell: this.renderTagsCell,
-                width: tagsColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'createReleaseBranch',
                 name: 'Create Release Branch',
                 renderCell: this.renderCreateReleaseBranchCell,
-                width: createReleaseBranchColumnWidthObservable,
+                width: new ObservableValue<number>(-40),
             },
         ];
 

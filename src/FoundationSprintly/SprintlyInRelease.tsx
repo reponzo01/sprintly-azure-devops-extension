@@ -72,11 +72,6 @@ const clickedDeployReleaseIdObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
 const clickedDeployProjectReferenceObservable: ObservableValue<ProjectReference> =
     new ObservableValue<any>({});
-
-const nameColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const deployColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-80);
 //#endregion "Observables"
 
 let repositoriesToProcess: string[] = [];
@@ -122,14 +117,14 @@ export default class SprintlyInRelease extends React.Component<
                 name: 'Repository Release Branches',
                 onSize: this.onSize,
                 renderCell: this.renderBranchColumn,
-                width: nameColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'deploy',
                 name: 'Deploy Status',
                 onSize: this.onSize,
                 renderCell: this.renderDeployStatusColumn,
-                width: deployColumnWidthObservable,
+                width: new ObservableValue<number>(-80),
             },
         ];
 

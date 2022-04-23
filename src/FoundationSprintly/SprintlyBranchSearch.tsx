@@ -64,17 +64,6 @@ const isDeleteSingleBranchDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const isDeleteBatchBranchDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
-const nameColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const repositoryColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const statsColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const branchCreatorColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const deleteBranchColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-40);
-
 //#endregion "Observables"
 
 const enum SearchType {
@@ -187,7 +176,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
                     ariaLabelAscending: 'Sorted A to Z',
                     ariaLabelDescending: 'Sorted Z to A',
                 },
-                width: nameColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'repository',
@@ -198,14 +187,14 @@ export default class SprintlyBranchSearchPage extends React.Component<
                     ariaLabelAscending: 'Sorted A to Z',
                     ariaLabelDescending: 'Sorted Z to A',
                 },
-                width: repositoryColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'stats',
                 name: 'Behind Develop | Ahead Of Develop',
                 onSize: this.onSize,
                 renderCell: this.renderStatsCell,
-                width: statsColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'creator',
@@ -216,14 +205,14 @@ export default class SprintlyBranchSearchPage extends React.Component<
                     ariaLabelAscending: 'Sorted A to Z',
                     ariaLabelDescending: 'Sorted Z to A',
                 },
-                width: branchCreatorColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'delete',
                 name: 'Delete Branch',
                 onSize: this.onSize,
                 renderCell: this.renderDeleteBranchCell,
-                width: deleteBranchColumnWidthObservable,
+                width: new ObservableValue<number>(-40),
             },
         ];
 

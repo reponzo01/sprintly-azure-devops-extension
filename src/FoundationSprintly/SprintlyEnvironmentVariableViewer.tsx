@@ -20,6 +20,13 @@ import {
     IExtensionDataManager,
     IProjectInfo,
 } from 'azure-devops-extension-api';
+import { FilterBar } from 'azure-devops-ui/FilterBar';
+import { KeywordFilterBarItem } from 'azure-devops-ui/TextFilterBarItem';
+import {
+    Filter,
+    FILTER_CHANGE_EVENT,
+    IFilterState,
+} from 'azure-devops-ui/Utilities/Filter';
 import { Checkbox } from 'azure-devops-ui/Checkbox';
 import { Observer } from 'azure-devops-ui/Observer';
 import { Tooltip } from 'azure-devops-ui/TooltipEx';
@@ -35,7 +42,11 @@ import {
 import { ArrayItemProvider } from 'azure-devops-ui/Utilities/Provider';
 import { bindSelectionToObservable } from 'azure-devops-ui/MasterDetailsContext';
 import { Spinner } from 'azure-devops-ui/Spinner';
-import { Splitter, SplitterDirection, SplitterElementPosition } from 'azure-devops-ui/Splitter';
+import {
+    Splitter,
+    SplitterDirection,
+    SplitterElementPosition,
+} from 'azure-devops-ui/Splitter';
 
 export interface ISprintlyEnvironmentVariableViewerState {
     userSettings?: Common.IUserSettings;
@@ -61,24 +72,16 @@ const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
 const showAllEnvironmentVariablesObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(true);
+const environmentVariableSearchFilterCurrentState: ObservableValue<IFilterState> =
+    new ObservableValue<any>({});
 //#endregion "Observables"
 
-let repositoriesToProcess: string[] = [];
+const environmentVariableNameFilterKey: string =
+    'environmentVariableNameFilterKey';
+const environmentVariableValueFilterKey: string =
+    'environmentVariableValueFilterKey';
 
-const rawTableItems: ISearchResultEnvironmentVariableItem[] = [
-    {
-        name: 't1',
-        values: [
-            {
-                environmentName: 'Dev',
-                value: 'var1',
-            },
-        ],
-    },
-];
-const tableItems = new ObservableArray<ISearchResultEnvironmentVariableItem>(
-    rawTableItems
-);
+let repositoriesToProcess: string[] = [];
 
 export default class SprintlyEnvironmentVariableViewer extends React.Component<
     {
@@ -92,6 +95,8 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     private accessToken: string = '';
     private environmentVariablesResponse: any;
     private environmentVariablesExclusionFilter: Set<string> = new Set();
+    private environmentVariableNameSearchFilter: Filter;
+    private environmentVariableValueSearchFilter: Filter;
     private columns: ITableColumn<ISearchResultEnvironmentVariableItem>[] = [];
     private sortingBehavior: ColumnSorting<ISearchResultEnvironmentVariableItem> =
         new ColumnSorting<ISearchResultEnvironmentVariableItem>(
@@ -135,6 +140,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
             this.renderRepositoryMasterPageList.bind(this);
         this.renderDetailPageContent = this.renderDetailPageContent.bind(this);
 
+        this.justATest = this.justATest.bind(this);
+        this.justATest2 = this.justATest2.bind(this);
+
         this.columns = [
             {
                 id: 'environmentVariableName',
@@ -148,6 +156,15 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 width: new ObservableValue<number>(-30),
             },
         ];
+
+        this.environmentVariableNameSearchFilter = new Filter();
+        this.environmentVariableValueSearchFilter = new Filter();
+        this.environmentVariableNameSearchFilter.subscribe(() => {
+            this.redrawEnvironmentVariablesSearchResult();
+        }, FILTER_CHANGE_EVENT);
+        this.environmentVariableValueSearchFilter.subscribe(() => {
+            this.redrawEnvironmentVariablesSearchResult();
+        }, FILTER_CHANGE_EVENT);
 
         this.state = {
             environmentVariablesObservable:
@@ -223,13 +240,58 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 });
             this.environmentVariablesResponse = response.data; //No defined type exists in the api
 
-            this.resetEnvironmentVariablesColumns();
+            this.redrawEnvironmentVariablesSearchResult();
         }
     }
 
-    private resetEnvironmentVariablesColumns(): void {
+    private justATest(): void {
+        console.log(this.environmentVariableNameSearchFilter.getState());
+        var s: IFilterState =
+            this.environmentVariableNameSearchFilter.getState();
+        if (s[environmentVariableNameFilterKey] === undefined) {
+            console.log('empty filter state');
+        } else {
+            console.log(s[environmentVariableNameFilterKey]!.value);
+            console.log(s[environmentVariableNameFilterKey]!.value.length);
+        }
+    }
+    private justATest2(): void {
+        console.log(this.environmentVariableValueSearchFilter.getState());
+    }
+
+    private redrawEnvironmentVariablesSearchResult(): void {
         const resultEnvironmentVariables: ISearchResultEnvironmentVariableItem[] =
             [];
+        let environmentVariableNameSearchFilterString: string = '';
+        let environmentVariableValueSearchFilterString: string = '';
+
+        var environmentVariableNameSearchFilterState: IFilterState =
+            this.environmentVariableNameSearchFilter.getState();
+        var environmentVariableValueSearchFilterState: IFilterState =
+            this.environmentVariableValueSearchFilter.getState();
+
+        if (
+            environmentVariableNameSearchFilterState[
+                environmentVariableNameFilterKey
+            ] !== undefined
+        ) {
+            environmentVariableNameSearchFilterString =
+                environmentVariableNameSearchFilterState[
+                    environmentVariableNameFilterKey
+                ]!.value;
+        }
+
+        if (
+            environmentVariableValueSearchFilterState[
+                environmentVariableValueFilterKey
+            ] !== undefined
+        ) {
+            environmentVariableValueSearchFilterString =
+                environmentVariableValueSearchFilterState[
+                    environmentVariableValueFilterKey
+                ]!.value;
+        }
+
         this.columns.splice(1, this.columns.length - 1);
         for (const environmentVariableGroup of this.environmentVariablesResponse
             .value) {
@@ -255,24 +317,57 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                             environmentVariableName === environmentVariable.name
                         ) {
                             variableIsSaved = true;
-                            environmentVariable.values.push({
-                                environmentName: environmentVariableGroup.name,
-                                value: (environmentVariableValue as any).value,
-                            });
-                        }
-                    }
-                    if (!variableIsSaved) {
-                        resultEnvironmentVariables.push({
-                            name: environmentVariableName,
-                            values: [
-                                {
+                            if (
+                                environmentVariableValueSearchFilterString.length ===
+                                    0 ||
+                                (environmentVariableValue as any).value
+                                    .toLowerCase()
+                                    .includes(
+                                        environmentVariableValueSearchFilterString.toLowerCase()
+                                    )
+                            ) {
+                                environmentVariable.values.push({
                                     environmentName:
                                         environmentVariableGroup.name,
                                     value: (environmentVariableValue as any)
                                         .value,
-                                },
-                            ],
-                        });
+                                });
+                            }
+                        }
+                    }
+                    if (!variableIsSaved) {
+                        if (
+                            environmentVariableNameSearchFilterString.length ===
+                                0 ||
+                            environmentVariableName
+                                .toLowerCase()
+                                .includes(
+                                    environmentVariableNameSearchFilterString.toLowerCase()
+                                )
+                        ) {
+                            if (
+                                environmentVariableValueSearchFilterString.length ===
+                                    0 ||
+                                (environmentVariableValue as any).value
+                                    .toLowerCase()
+                                    .includes(
+                                        environmentVariableValueSearchFilterString.toLowerCase()
+                                    )
+                            ) {
+                                resultEnvironmentVariables.push({
+                                    name: environmentVariableName,
+                                    values: [
+                                        {
+                                            environmentName:
+                                                environmentVariableGroup.name,
+                                            value: (
+                                                environmentVariableValue as any
+                                            ).value,
+                                        },
+                                    ],
+                                });
+                            }
+                        }
                     }
                 }
             }
@@ -295,7 +390,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         } else {
             this.environmentVariablesExclusionFilter.add(environmentName);
         }
-        this.resetEnvironmentVariablesColumns();
+        this.redrawEnvironmentVariablesSearchResult();
     }
 
     private async loadRepositoriesDisplayState(
@@ -350,6 +445,11 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     }
 
     private renderDetailPageContent(): JSX.Element {
+        //TODO: get release defs to be passed in from page 1
+        //get single release for repo
+        //get the inline transform variables and parse them out
+        //build a tree table nesting each environment under each variable (root)
+        //show appsettings transform at root level, second column, and environment value for nested children.
         return <></>;
     }
 
@@ -495,6 +595,38 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                             <>
                                 <div className='rhythm-horizontal-8 flex-row'>
                                     {this.renderEnvironmentVariablesExcludeFilterCheckboxes()}
+                                </div>
+                                <div className='rhythm-horizontal-8 flex-row'>
+                                    <div className='flex-grow'>
+                                        <FilterBar
+                                            filter={
+                                                this
+                                                    .environmentVariableNameSearchFilter
+                                            }
+                                        >
+                                            <KeywordFilterBarItem
+                                                placeholder='Filter by variable name'
+                                                filterItemKey={
+                                                    environmentVariableNameFilterKey
+                                                }
+                                            />
+                                        </FilterBar>
+                                    </div>
+                                    <div className='flex-grow sprintly-margin-right-auto'>
+                                        <FilterBar
+                                            filter={
+                                                this
+                                                    .environmentVariableValueSearchFilter
+                                            }
+                                        >
+                                            <KeywordFilterBarItem
+                                                placeholder='Filter by value'
+                                                filterItemKey={
+                                                    environmentVariableValueFilterKey
+                                                }
+                                            />
+                                        </FilterBar>
+                                    </div>
                                 </div>
                                 <Card className='bolt-table-card bolt-card-white'>
                                     <Table
