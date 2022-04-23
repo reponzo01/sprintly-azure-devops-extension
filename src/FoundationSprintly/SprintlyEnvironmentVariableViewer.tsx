@@ -130,9 +130,11 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     private environmentVariableNameSearchFilter: Filter;
     private environmentVariableValueSearchFilter: Filter;
 
-    private columns: ITableColumn<ISearchResultEnvironmentVariableItem>[] = [];
-    private repositoryTreeColumns: ITreeColumn<ISearchResultRepositoryEnvironmentVariableItem>[] =
+    private columns: Array<ITableColumn<ISearchResultEnvironmentVariableItem>> =
         [];
+    private repositoryTreeColumns: Array<
+        ITreeColumn<ISearchResultRepositoryEnvironmentVariableItem>
+    > = [];
     private sortingBehavior: ColumnSorting<ISearchResultEnvironmentVariableItem> =
         new ColumnSorting<ISearchResultEnvironmentVariableItem>(
             (
@@ -314,7 +316,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                     console.error(error);
                     throw error;
                 });
-            this.environmentVariablesResponse = response.data; //No defined type exists in the api
+            this.environmentVariablesResponse = response.data; // No defined type exists in the api
 
             this.redrawEnvironmentVariablesSearchResult();
         }
@@ -326,9 +328,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         let environmentVariableNameSearchFilterString: string = '';
         let environmentVariableValueSearchFilterString: string = '';
 
-        var environmentVariableNameSearchFilterState: IFilterState =
+        const environmentVariableNameSearchFilterState: IFilterState =
             this.environmentVariableNameSearchFilter.getState();
-        var environmentVariableValueSearchFilterState: IFilterState =
+        const environmentVariableValueSearchFilterState: IFilterState =
             this.environmentVariableValueSearchFilter.getState();
 
         if (
@@ -436,7 +438,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         this.setState({
             globalEnvironmentVariablesObservable:
                 new ObservableArray<ISearchResultEnvironmentVariableItem>(
-                    this.sortEnvironmentVariableSearchResult(resultEnvironmentVariables)
+                    this.sortEnvironmentVariableSearchResult(
+                        resultEnvironmentVariables
+                    )
                 ),
         });
     }
@@ -626,7 +630,15 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                         (environment: any) => (
                             <Checkbox
                                 key={environment.name}
-                                onChange={(event, checked) =>
+                                onChange={(
+                                    event:
+                                        | React.MouseEvent<
+                                              HTMLElement,
+                                              MouseEvent
+                                          >
+                                        | React.KeyboardEvent<HTMLElement>,
+                                    checked: boolean
+                                ) =>
                                     this.updateEnvironmentVariablesExcludeFilter(
                                         environment.name,
                                         checked
@@ -669,7 +681,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         tableColumn: ITableColumn<ISearchResultEnvironmentVariableItem>,
         tableItem: ISearchResultEnvironmentVariableItem
     ): JSX.Element {
-        let itemValue: String = '';
+        let itemValue: string = '';
         for (const value of tableItem.values) {
             if (value.environmentName === tableColumn.name) {
                 itemValue = value.value;
@@ -746,8 +758,8 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         treeColumn: ITreeColumn<ISearchResultRepositoryEnvironmentVariableItem>,
         treeItem: ITreeItemEx<ISearchResultRepositoryEnvironmentVariableItem>
     ): JSX.Element {
-        const regex = /(\$\([^\)]+\))/g;
-        const variableHighlightSplit =
+        const regex: RegExp = /(\$\([^\)]+\))/g;
+        const variableHighlightSplit: string[] =
             treeItem.underlyingItem.data.value.split(regex);
         return (
             <SimpleTableCell
@@ -759,7 +771,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                         {treeItem.depth === 0 ? (
                             <>
                                 {variableHighlightSplit.map(
-                                    (valueSubstring, index) => {
+                                    (valueSubstring: string, index: number) => {
                                         if (valueSubstring.startsWith('$(')) {
                                             return (
                                                 <div
@@ -781,10 +793,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                 )}
                             </>
                         ) : (
-                            // <>{treeItem.underlyingItem.data.value}</>
                             <>
                                 {variableHighlightSplit.map(
-                                    (valueSubstring, index) => {
+                                    (valueSubstring: string, index: number) => {
                                         if (valueSubstring.startsWith('$(')) {
                                             return (
                                                 <div
@@ -819,7 +830,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     }
 
     private async selectRepository(): Promise<void> {
-        const releaseDefinitionIdForRepo =
+        const releaseDefinitionIdForRepo: number =
             Common.getRepositoryReleaseDefinitionId(
                 this.buildDefinitions,
                 this.releaseDefinitions,
@@ -834,7 +845,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
             releaseDefinitionIdForRepo > -1 &&
             this.currentProject !== undefined
         ) {
-            const environmentVariableRegex = /(\$\([^\)]+\))/g;
+            const environmentVariableRegex: RegExp = /(\$\([^\)]+\))/g;
 
             const releaseDefinition: ReleaseDefinition = await getClient(
                 ReleaseRestClient

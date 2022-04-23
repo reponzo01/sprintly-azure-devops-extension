@@ -39,7 +39,7 @@ import { DropdownMultiSelection } from 'azure-devops-ui/Utilities/DropdownSelect
 import axios, { AxiosResponse } from 'axios';
 import React from 'react';
 
-export const ALLOWED_ENVIRONMENT_VARIABLE_GROUP_IDS: Number[] = [3, 4, 5, 6];
+export const ALLOWED_ENVIRONMENT_VARIABLE_GROUP_IDS: number[] = [3, 4, 5, 6];
 export const ALWAYS_ALLOWED_GROUPS: IAllowedEntity[] = [
     {
         displayName: 'Dev Team Leads',
@@ -279,10 +279,10 @@ export function getSavedRepositoriesToView(
 }
 
 export async function getCurrentProject(): Promise<IProjectInfo | undefined> {
-    const projectService = await SDK.getService<IProjectPageService>(
+    const projectService: IProjectPageService = await SDK.getService<IProjectPageService>(
         CommonServiceIds.ProjectPageService
     );
-    const project = await projectService.getProject();
+    const project: IProjectInfo | undefined = await projectService.getProject();
     return project;
 }
 
