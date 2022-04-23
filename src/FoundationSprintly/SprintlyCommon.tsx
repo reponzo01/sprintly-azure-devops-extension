@@ -39,10 +39,7 @@ import { DropdownMultiSelection } from 'azure-devops-ui/Utilities/DropdownSelect
 import axios, { AxiosResponse } from 'axios';
 import React from 'react';
 
-export const ALLOWED_ENVIRONMENT_VARIABLE_GROUP_IDS: Number[] = [
-    2,
-    3
-];
+export const ALLOWED_ENVIRONMENT_VARIABLE_GROUP_IDS: Number[] = [2, 3];
 export const ALWAYS_ALLOWED_GROUPS: IAllowedEntity[] = [
     {
         displayName: 'Dev Team Leads',
@@ -497,6 +494,41 @@ export function sortSearchResultBranchesList(
         );
     }
     return branchesList;
+}
+
+export function getRepositoryReleaseDefinitionId(
+    buildDefinitions: BuildDefinition[],
+    releaseDefinitions: ReleaseDefinition[],
+    repoId: string
+): number {
+    let releaseDefinitionId: number = -1;
+
+    const buildDefinitionForRepo: BuildDefinition | undefined =
+        buildDefinitions.find(
+            (buildDef: BuildDefinition) => buildDef.repository.id === repoId
+        );
+    if (buildDefinitionForRepo !== undefined) {
+        const buildDefinitionId: number = buildDefinitionForRepo.id;
+        for (const releaseDefinition of releaseDefinitions) {
+            for (const artifact of releaseDefinition.artifacts) {
+                if (artifact.isPrimary) {
+                    const releaseDefBuildDef: ArtifactSourceReference =
+                        artifact.definitionReference['definition'];
+                    if (releaseDefBuildDef) {
+                        if (
+                            releaseDefBuildDef.id === buildDefinitionId.toString()
+                        ) {
+                            releaseDefinitionId = releaseDefinition.id;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (releaseDefinitionId > -1) break;
+        }
+    }
+
+    return releaseDefinitionId;
 }
 
 export async function fetchAndStoreBranchReleaseInfoIntoObservable(

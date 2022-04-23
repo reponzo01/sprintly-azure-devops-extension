@@ -361,6 +361,9 @@ export default class FoundationSprintly extends React.Component<
                     <SprintlyEnvironmentVariableViewer
                         dataManager={this.dataManager}
                         organizationName={organizationNameObservable.value}
+                        userDescriptor={loggedInUserDescriptorObservable.value}
+                        releaseDefinitions={this.releaseDefinitions}
+                        buildDefinitions={this.buildDefinitions}
                     />
                 );
             default:

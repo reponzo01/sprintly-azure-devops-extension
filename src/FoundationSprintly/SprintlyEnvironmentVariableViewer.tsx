@@ -17,6 +17,7 @@ import {
     Table,
 } from 'azure-devops-ui/Table';
 import {
+    getClient,
     IExtensionDataManager,
     IProjectInfo,
 } from 'azure-devops-extension-api';
@@ -47,14 +48,29 @@ import {
     SplitterDirection,
     SplitterElementPosition,
 } from 'azure-devops-ui/Splitter';
+import { Page } from 'azure-devops-ui/Page';
+import { ITreeColumn, Tree } from 'azure-devops-ui/TreeEx';
+import {
+    ITreeItem,
+    ITreeItemEx,
+    ITreeItemProvider,
+    TreeItemProvider,
+} from 'azure-devops-ui/Utilities/TreeItemProvider';
+import {
+    ReleaseDefinition,
+    ReleaseRestClient,
+} from 'azure-devops-extension-api/Release';
+import { BuildDefinition } from 'azure-devops-extension-api/Build';
+import { Icon } from 'azure-devops-ui/Icon';
 
 export interface ISprintlyEnvironmentVariableViewerState {
     userSettings?: Common.IUserSettings;
     systemSettings?: Common.ISystemSettings;
-    environmentVariablesObservable: ObservableArray<ISearchResultEnvironmentVariableItem>;
+    globalEnvironmentVariablesObservable: ObservableArray<ISearchResultEnvironmentVariableItem>;
     repositories: ArrayItemProvider<GitRepository>;
     repositoryListSelection: ListSelection;
     repositoryListSelectedItemObservable: ObservableValue<GitRepository>;
+    repositoryEnvironmentVariablesItemProvider: ITreeItemProvider<ISearchResultRepositoryEnvironmentVariableItem>;
 }
 
 export interface ISearchResultEnvironmentVariableValue {
@@ -67,19 +83,25 @@ export interface ISearchResultEnvironmentVariableItem {
     values: ISearchResultEnvironmentVariableValue[];
 }
 
+export interface ISearchResultRepositoryEnvironmentVariableItem {
+    name: string;
+    value: string;
+    isRootItem: boolean;
+}
+
 //#region "Observables"
 const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
 const showAllEnvironmentVariablesObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(true);
-const environmentVariableSearchFilterCurrentState: ObservableValue<IFilterState> =
-    new ObservableValue<any>({});
 //#endregion "Observables"
 
 const environmentVariableNameFilterKey: string =
     'environmentVariableNameFilterKey';
 const environmentVariableValueFilterKey: string =
     'environmentVariableValueFilterKey';
+const localStorageShowAllVariablesKey: string =
+    'show-all-environment-variables';
 
 let repositoriesToProcess: string[] = [];
 
@@ -87,17 +109,28 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     {
         dataManager: IExtensionDataManager;
         organizationName: string;
+        userDescriptor: string;
+        releaseDefinitions: ReleaseDefinition[];
+        buildDefinitions: BuildDefinition[];
     },
     ISprintlyEnvironmentVariableViewerState
 > {
     private dataManager: IExtensionDataManager;
     private organizationName: string;
+    private userDescriptor: string;
+    private releaseDefinitions: ReleaseDefinition[];
+    private buildDefinitions: BuildDefinition[];
     private accessToken: string = '';
+    private currentProject: IProjectInfo | undefined;
+
     private environmentVariablesResponse: any;
     private environmentVariablesExclusionFilter: Set<string> = new Set();
     private environmentVariableNameSearchFilter: Filter;
     private environmentVariableValueSearchFilter: Filter;
+
     private columns: ITableColumn<ISearchResultEnvironmentVariableItem>[] = [];
+    private repositoryTreeColumns: ITreeColumn<ISearchResultRepositoryEnvironmentVariableItem>[] =
+        [];
     private sortingBehavior: ColumnSorting<ISearchResultEnvironmentVariableItem> =
         new ColumnSorting<ISearchResultEnvironmentVariableItem>(
             (
@@ -107,15 +140,15 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                     | React.KeyboardEvent<HTMLElement>
                     | React.MouseEvent<HTMLElement>
             ) => {
-                this.state.environmentVariablesObservable.splice(
+                this.state.globalEnvironmentVariablesObservable.splice(
                     0,
-                    this.state.environmentVariablesObservable.length,
+                    this.state.globalEnvironmentVariablesObservable.length,
                     ...sortItems<ISearchResultEnvironmentVariableItem>(
                         columnIndex,
                         proposedSortOrder,
                         this.sortFunctions,
                         this.columns,
-                        this.state.environmentVariablesObservable.value
+                        this.state.globalEnvironmentVariablesObservable.value
                     )
                 );
             }
@@ -132,6 +165,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     constructor(props: {
         dataManager: IExtensionDataManager;
         organizationName: string;
+        userDescriptor: string;
+        releaseDefinitions: ReleaseDefinition[];
+        buildDefinitions: BuildDefinition[];
     }) {
         super(props);
 
@@ -139,9 +175,14 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         this.renderRepositoryMasterPageList =
             this.renderRepositoryMasterPageList.bind(this);
         this.renderDetailPageContent = this.renderDetailPageContent.bind(this);
-
-        this.justATest = this.justATest.bind(this);
-        this.justATest2 = this.justATest2.bind(this);
+        this.renderRepositoryEnvironmentVariableAppSettingsElementCell =
+            this.renderRepositoryEnvironmentVariableAppSettingsElementCell.bind(
+                this
+            );
+        this.renderRepositoryEnvironmentVariableTransformValueCell =
+            this.renderRepositoryEnvironmentVariableTransformValueCell.bind(
+                this
+            );
 
         this.columns = [
             {
@@ -157,6 +198,26 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
             },
         ];
 
+        this.repositoryTreeColumns = [
+            {
+                id: 'appsettingsElementName',
+                name: 'Appsettings Field',
+                onSize: this.onSizeTreeColumn,
+                renderCell:
+                    this
+                        .renderRepositoryEnvironmentVariableAppSettingsElementCell,
+                width: new ObservableValue<number>(-30),
+            },
+            {
+                id: 'transformValue',
+                name: 'Transform Value',
+                onSize: this.onSizeTreeColumn,
+                renderCell:
+                    this.renderRepositoryEnvironmentVariableTransformValueCell,
+                width: new ObservableValue<number>(-80),
+            },
+        ];
+
         this.environmentVariableNameSearchFilter = new Filter();
         this.environmentVariableValueSearchFilter = new Filter();
         this.environmentVariableNameSearchFilter.subscribe(() => {
@@ -167,17 +228,24 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         }, FILTER_CHANGE_EVENT);
 
         this.state = {
-            environmentVariablesObservable:
+            globalEnvironmentVariablesObservable:
                 new ObservableArray<ISearchResultEnvironmentVariableItem>([]),
             repositories: new ArrayItemProvider<GitRepository>([]),
             repositoryListSelection: new ListSelection({
                 selectOnFocus: false,
             }),
             repositoryListSelectedItemObservable: new ObservableValue<any>({}),
+            repositoryEnvironmentVariablesItemProvider:
+                new TreeItemProvider<ISearchResultRepositoryEnvironmentVariableItem>(
+                    []
+                ),
         };
 
         this.dataManager = props.dataManager;
         this.organizationName = props.organizationName;
+        this.userDescriptor = props.userDescriptor;
+        this.releaseDefinitions = props.releaseDefinitions;
+        this.buildDefinitions = props.buildDefinitions;
     }
 
     public async componentDidMount(): Promise<void> {
@@ -186,6 +254,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
 
     private async initializeComponent(): Promise<void> {
         this.accessToken = await SDK.getAccessToken();
+        this.currentProject = await Common.getCurrentProject();
 
         const userSettings: Common.IUserSettings | undefined =
             await Common.getUserSettings(
@@ -203,7 +272,15 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
             systemSettings,
         });
 
-        await this.loadEnvironmentVariables();
+        showAllEnvironmentVariablesObservable.value = JSON.parse(
+            localStorage.getItem(
+                `${this.userDescriptor}-${localStorageShowAllVariablesKey}`
+            ) ?? true.toString()
+        );
+
+        if (showAllEnvironmentVariablesObservable.value) {
+            await this.loadEnvironmentVariables();
+        }
 
         repositoriesToProcess = Common.getSavedRepositoriesToView(
             this.state.userSettings,
@@ -213,20 +290,17 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         totalRepositoriesToProcessObservable.value =
             repositoriesToProcess.length;
         if (repositoriesToProcess.length > 0) {
-            const currentProject: IProjectInfo | undefined =
-                await Common.getCurrentProject();
-            await this.loadRepositoriesDisplayState(currentProject);
+            await this.loadRepositoriesDisplayState(this.currentProject);
         }
     }
 
     private async loadEnvironmentVariables(): Promise<void> {
-        const currentProject = await Common.getCurrentProject();
-        if (currentProject !== undefined) {
+        if (this.currentProject !== undefined) {
             let environmentVariableGroupIds: string = '';
             for (const groupId of Common.ALLOWED_ENVIRONMENT_VARIABLE_GROUP_IDS) {
                 environmentVariableGroupIds += `${groupId.toString()},`;
             }
-            const url: string = `https://dev.azure.com/${this.organizationName}/${currentProject.id}/_apis/distributedtask/variablegroups?groupIds=${environmentVariableGroupIds}`;
+            const url: string = `https://dev.azure.com/${this.organizationName}/${this.currentProject.id}/_apis/distributedtask/variablegroups?groupIds=${environmentVariableGroupIds}`;
             this.accessToken = await Common.getOrRefreshToken(this.accessToken);
             const response: AxiosResponse<never> = await axios
                 .get(url, {
@@ -242,21 +316,6 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
 
             this.redrawEnvironmentVariablesSearchResult();
         }
-    }
-
-    private justATest(): void {
-        console.log(this.environmentVariableNameSearchFilter.getState());
-        var s: IFilterState =
-            this.environmentVariableNameSearchFilter.getState();
-        if (s[environmentVariableNameFilterKey] === undefined) {
-            console.log('empty filter state');
-        } else {
-            console.log(s[environmentVariableNameFilterKey]!.value);
-            console.log(s[environmentVariableNameFilterKey]!.value.length);
-        }
-    }
-    private justATest2(): void {
-        console.log(this.environmentVariableValueSearchFilter.getState());
     }
 
     private redrawEnvironmentVariablesSearchResult(): void {
@@ -373,9 +432,8 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
             }
         }
         this.setState({
-            environmentVariablesObservable:
+            globalEnvironmentVariablesObservable:
                 new ObservableArray<ISearchResultEnvironmentVariableItem>(
-                    //TODO: Sort by variable name
                     resultEnvironmentVariables
                 ),
         });
@@ -445,12 +503,57 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     }
 
     private renderDetailPageContent(): JSX.Element {
-        //TODO: get release defs to be passed in from page 1
-        //get single release for repo
-        //get the inline transform variables and parse them out
-        //build a tree table nesting each environment under each variable (root)
-        //show appsettings transform at root level, second column, and environment value for nested children.
-        return <></>;
+        return (
+            <Observer
+                selectedItem={this.state.repositoryListSelectedItemObservable}
+            >
+                {(observerProps: { selectedItem: GitRepository }) => (
+                    <Page className='flex-grow single-layer-details'>
+                        {this.state.repositoryListSelection.selectedCount ===
+                            0 && (
+                            <span className='single-layer-details-contents'>
+                                Select a repository on the right to see its
+                                environment variable transforms.
+                            </span>
+                        )}
+                        {this.state
+                            .repositoryEnvironmentVariablesItemProvider &&
+                            this.state.repositoryListSelection.selectedCount !==
+                                0 && (
+                                <Page>
+                                    <div className='page-content'>
+                                        <Card className='bolt-table-card bolt-card-white'>
+                                            <Tree<ISearchResultRepositoryEnvironmentVariableItem>
+                                                ariaLabel='Basic tree'
+                                                columns={
+                                                    this.repositoryTreeColumns
+                                                }
+                                                itemProvider={
+                                                    this.state
+                                                        .repositoryEnvironmentVariablesItemProvider
+                                                }
+                                                onToggle={(
+                                                    event: React.SyntheticEvent<
+                                                        HTMLElement,
+                                                        Event
+                                                    >,
+                                                    treeItem: ITreeItemEx<ISearchResultRepositoryEnvironmentVariableItem>
+                                                ) => {
+                                                    this.state.repositoryEnvironmentVariablesItemProvider.toggle(
+                                                        treeItem.underlyingItem
+                                                    );
+                                                }}
+                                                selectableText={true}
+                                                scrollable={true}
+                                            />
+                                        </Card>
+                                    </div>
+                                </Page>
+                            )}
+                    </Page>
+                )}
+            </Observer>
+        );
     }
 
     private renderRepositoryListItem(
@@ -555,16 +658,227 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         );
     }
 
-    private async selectRepository(): Promise<void> {}
+    private renderRepositoryEnvironmentVariableAppSettingsElementCell(
+        rowIndex: number,
+        columnIndex: number,
+        treeColumn: ITreeColumn<ISearchResultRepositoryEnvironmentVariableItem>,
+        treeItem: ITreeItemEx<ISearchResultRepositoryEnvironmentVariableItem>
+    ): JSX.Element {
+        return (
+            <SimpleTableCell
+                key={`col-${columnIndex}-row-${rowIndex}`}
+                columnIndex={columnIndex}
+                tableColumn={treeColumn}
+                children={
+                    <>
+                        {treeItem.depth === 0 ? (
+                            <>
+                                <Icon
+                                    iconName={
+                                        treeItem.underlyingItem.expanded
+                                            ? 'ChevronDownMed'
+                                            : 'ChevronRightMed'
+                                    }
+                                    className='bolt-tree-expand-button cursor-pointer'
+                                ></Icon>
+                                <Icon
+                                    iconName='Settings'
+                                    className='icon-margin'
+                                    style={{ color: '#0081E3' }}
+                                ></Icon>
+                                <span className='icon-margin'>
+                                    {treeItem.underlyingItem.data.name}
+                                </span>
+                            </>
+                        ) : (
+                            <>
+                                <Icon
+                                    iconName='ChevronRightMed'
+                                    className='invisible'
+                                    style={{
+                                        marginLeft: `${treeItem.depth * 16}px`,
+                                    }}
+                                ></Icon>
+                                {treeItem.underlyingItem.data.name}
+                            </>
+                        )}
+                    </>
+                }
+            ></SimpleTableCell>
+        );
+    }
+
+    private renderRepositoryEnvironmentVariableTransformValueCell(
+        rowIndex: number,
+        columnIndex: number,
+        treeColumn: ITreeColumn<ISearchResultRepositoryEnvironmentVariableItem>,
+        treeItem: ITreeItemEx<ISearchResultRepositoryEnvironmentVariableItem>
+    ): JSX.Element {
+        const regex = /(\$\([^\)]+\))/g;
+        const variableHighlightSplit =
+            treeItem.underlyingItem.data.value.split(regex);
+        return (
+            <SimpleTableCell
+                key={`col-${columnIndex}-row-${rowIndex}`}
+                columnIndex={columnIndex}
+                tableColumn={treeColumn}
+                children={
+                    <>
+                        {treeItem.depth === 0 ? (
+                            <>
+                                {variableHighlightSplit.map((substring) => {
+                                    if (substring.startsWith('$(')) {
+                                        return (
+                                            <>
+                                                <b>{substring}</b>
+                                            </>
+                                        );
+                                    } else {
+                                        return <>{substring}</>;
+                                    }
+                                })}
+                            </>
+                        ) : (
+                            <>{treeItem.underlyingItem.data.value}</>
+                        )}
+                    </>
+                }
+            ></SimpleTableCell>
+        );
+    }
+
+    private async selectRepository(): Promise<void> {
+        //TODO: get release defs to be passed in from page 1
+        //get single release for repo
+        //get the inline transform variables and parse them out
+        //build a tree table nesting each environment under each variable (root)
+        //show appsettings transform at root level, second column, and environment value for nested children.
+        console.log(this.releaseDefinitions);
+        console.log(this.state.repositoryListSelectedItemObservable.value);
+        const releaseDefinitionIdForRepo =
+            Common.getRepositoryReleaseDefinitionId(
+                this.buildDefinitions,
+                this.releaseDefinitions,
+                this.state.repositoryListSelectedItemObservable.value.id
+            );
+        const repositoryEnvironmentVariablesRootItems: Array<
+            ITreeItem<ISearchResultRepositoryEnvironmentVariableItem>
+        > = [];
+
+        if (
+            releaseDefinitionIdForRepo > -1 &&
+            this.currentProject !== undefined
+        ) {
+            const environmentVariableRegex = /(\$\([^\)]+\))/g;
+
+            console.log(releaseDefinitionIdForRepo);
+
+            const releaseDefinition: ReleaseDefinition = await getClient(
+                ReleaseRestClient
+            ).getReleaseDefinition(
+                this.currentProject.id,
+                releaseDefinitionIdForRepo
+            );
+            console.log(releaseDefinition.variables);
+            if (releaseDefinition.variables['inlineTransforms'] !== undefined) {
+                if (this.environmentVariablesResponse === undefined) {
+                    await this.loadEnvironmentVariables();
+                }
+                const inlineTransforms: any = JSON.parse(
+                    releaseDefinition.variables['inlineTransforms'].value
+                );
+                for (const [appsetting, transform] of Object.entries(
+                    inlineTransforms
+                )) {
+                    const transformValue: string = (
+                        transform as any
+                    ).toString();
+                    const repositoryEnvironmentVariablesTableItem: ITreeItem<ISearchResultRepositoryEnvironmentVariableItem> =
+                        {
+                            childItems: [],
+                            data: {
+                                name: appsetting,
+                                value: transformValue,
+                                isRootItem: true,
+                            },
+                            expanded: true,
+                        };
+
+                    const foundEnvironmentVariables: RegExpMatchArray | null =
+                        transformValue.match(environmentVariableRegex);
+                    if (
+                        foundEnvironmentVariables !== undefined &&
+                        foundEnvironmentVariables !== null
+                    ) {
+                        for (const foundEnvironmentVariable of foundEnvironmentVariables) {
+                            const cleanEnvironmentVariable: string =
+                                foundEnvironmentVariable.substring(
+                                    2,
+                                    foundEnvironmentVariable.length - 1
+                                );
+
+                            for (const environmentVariableGroup of this
+                                .environmentVariablesResponse.value) {
+                                for (const [
+                                    environmentVariableName,
+                                    environmentVariableValue,
+                                ] of Object.entries(
+                                    environmentVariableGroup.variables
+                                )) {
+                                    if (
+                                        environmentVariableName ===
+                                        cleanEnvironmentVariable
+                                    ) {
+                                        repositoryEnvironmentVariablesTableItem.childItems!.push(
+                                            {
+                                                data: {
+                                                    isRootItem: false,
+                                                    name: environmentVariableGroup.name,
+                                                    value: (
+                                                        environmentVariableValue as any
+                                                    ).value,
+                                                },
+                                            }
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    repositoryEnvironmentVariablesRootItems.push(
+                        repositoryEnvironmentVariablesTableItem
+                    );
+                }
+            }
+        }
+        this.setState({
+            repositoryEnvironmentVariablesItemProvider: new TreeItemProvider(
+                repositoryEnvironmentVariablesRootItems
+            ),
+        });
+    }
 
     private onSize(event: MouseEvent, index: number, width: number): void {
         (this.columns[index].width as ObservableValue<number>).value = width;
     }
 
+    private onSizeTreeColumn(
+        event: MouseEvent,
+        index: number,
+        width: number
+    ): void {
+        (
+            this.repositoryTreeColumns[index].width as ObservableValue<number>
+        ).value = width;
+    }
+
     public render(): JSX.Element {
         return (
             <Observer
-                environmentVariables={this.state.environmentVariablesObservable}
+                environmentVariables={
+                    this.state.globalEnvironmentVariablesObservable
+                }
                 showAllEnvironmentVariables={
                     showAllEnvironmentVariablesObservable
                 }
@@ -580,6 +894,16 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                 onClick={() => {
                                     showAllEnvironmentVariablesObservable.value =
                                         true;
+                                    localStorage.setItem(
+                                        `${this.userDescriptor}-${localStorageShowAllVariablesKey}`,
+                                        showAllEnvironmentVariablesObservable.value.toString()
+                                    );
+                                    if (
+                                        this.environmentVariablesResponse ===
+                                        undefined
+                                    ) {
+                                        this.loadEnvironmentVariables();
+                                    }
                                 }}
                             />
                             <Button
@@ -588,6 +912,10 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                 onClick={() => {
                                     showAllEnvironmentVariablesObservable.value =
                                         false;
+                                    localStorage.setItem(
+                                        `${this.userDescriptor}-${localStorageShowAllVariablesKey}`,
+                                        showAllEnvironmentVariablesObservable.value.toString()
+                                    );
                                 }}
                             />
                         </ButtonGroup>
@@ -635,7 +963,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                         selectableText={true}
                                         itemProvider={
                                             this.state
-                                                .environmentVariablesObservable
+                                                .globalEnvironmentVariablesObservable
                                         }
                                     />
                                 </Card>
