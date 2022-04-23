@@ -28,13 +28,12 @@ import SprintlyPostRelease from './SprintlyPostRelease';
 import SprintlySettings from './SprintlySettings';
 import SprintlyBranchCreators from './SprintlyBranchCreators';
 import SprintlyBranchSearch from './SprintlyBranchSearch';
+import SprintlyEnvironmentVariableViewer from './SprintlyEnvironmentVariableViewer';
 import * as Common from './SprintlyCommon';
 
 import { showRootComponent } from '../Common';
 
 const selectedTabKey: string = 'selected-tab';
-const userSettingsDataManagerKey: string = 'user-settings';
-const systemSettingsDataManagerKey: string = 'system-settings';
 const sprintlyPageTabKey: string = 'sprintly-page';
 const sprintlyPageTabName: string = 'Sprintly';
 const sprintlyInReleaseTabKey: string = 'sprintly-in-release';
@@ -47,6 +46,10 @@ const sprintlyBranchCreatorsTabKey: string = 'sprintly-branch-creators';
 const sprintlyBranchCreatorsTabName: string = 'Branch Creators';
 const sprintlyBranchSearchTabKey: string = 'sprintly-branch-search';
 const sprintlyBranchSearchTabName: string = 'Branch Search';
+const sprintlyEnvironmentVariableViewerTabKey: string =
+    'sprintly-environment-variable-viewer';
+const sprintlyEnvironmentVariableViewerTabName: string =
+    'Environment Variable Viewer';
 
 const selectedTabIdObservable: ObservableValue<string> =
     new ObservableValue<string>('');
@@ -78,33 +81,6 @@ export default class FoundationSprintly extends React.Component<
     private accessToken: string = '';
     private releaseDefinitions: ReleaseDefinition[] = [];
     private buildDefinitions: BuildDefinition[] = [];
-
-    private alwaysAllowedGroups: Common.IAllowedEntity[] = [
-        {
-            displayName: 'Dev Team Leads',
-            originId: '841aee2f-860d-45a1-91a5-779aa4dca78c',
-            descriptor:
-                'vssgp.Uy0xLTktMTU1MTM3NDI0NS00MjgyNjUyNjEyLTI3NDUxOTk2OTMtMjk1ODAyODI0OS0yMTc4MDQ3MTU1LTEtNjQxMDY2NzIxLTg5MzE2MjA2MS0yNzg1NjUwNzE5LTE3MTcxNTU1MDk',
-        },
-        {
-            displayName: 'DevOps',
-            originId: 'b2620fb7-f672-4162-a15f-940b1ec78efe',
-            descriptor:
-                'vssgp.Uy0xLTktMTU1MTM3NDI0NS0xODk1NzMzMjY1LTQ3ODY0Mzg0LTMwMjU3MjkyMzQtOTM5ODg1NzU0LTEtMzA1NDcxNjM4Mi0zNjc1OTA4OTI5LTI3MjY5NzI4MTctMzczODgxNDI4NQ',
-        },
-        // {
-        //     displayName: 'Sample Project Team', // fsllc
-        //     originId: 'fccefee4-a7a9-432a-a7a2-fc6d3d8bc45d',
-        //     descriptor:
-        //         'vssgp.Uy0xLTktMTU1MTM3NDI0NS0zMTEzMzAyODctMzI5MTIzMzA5NC0zMTI4MjY0MTg3LTQwMTUzMTUzOTYtMS0xNTY5MTY5Mjc5LTIzODYzODU5OTQtMjU1MDU2OTgzMi02NDQyOTAwODc',
-        // },
-        // {
-        //     displayName: 'Sample Project Team', // reponzo01
-        //     originId: '221ca28d-8d55-4229-aeee-d96b619d8bf9',
-        //     descriptor:
-        //         'vssgp.Uy0xLTktMTU1MTM3NDI0NS0zNTI2OTIzMzAwLTE2ODEyODk1MzctMjE5OTc3MDkxOC0yNDEwMzk4MTQ4LTEtODgxNTgyODM0LTIyMjg0NjE4OTgtMzA0NDA1NzUwOC03NTYzNzk0ODA',
-        // },
-    ];
 
     constructor(props: {}) {
         super(props);
@@ -145,12 +121,12 @@ export default class FoundationSprintly extends React.Component<
         const userSettings: Common.IUserSettings | undefined =
             await Common.getUserSettings(
                 this.dataManager,
-                userSettingsDataManagerKey
+                Common.USER_SETTINGS_DATA_MANAGER_KEY
             );
         const systemSettings: Common.ISystemSettings | undefined =
             await Common.getSystemSettings(
                 this.dataManager,
-                systemSettingsDataManagerKey
+                Common.SYSTEM_SETTINGS_DATA_MANAGER_KEY
             );
 
         const filteredProjects: TeamProjectReference[] =
@@ -179,10 +155,11 @@ export default class FoundationSprintly extends React.Component<
         let userGroups: Common.IAllowedEntity[] | undefined =
             this.state.systemSettings?.allowedUserGroups;
         if (!userGroups) {
-            userGroups = this.alwaysAllowedGroups;
+            userGroups = Common.ALWAYS_ALLOWED_GROUPS;
         } else {
-            userGroups = userGroups.concat(this.alwaysAllowedGroups);
+            userGroups = userGroups.concat(Common.ALWAYS_ALLOWED_GROUPS);
         }
+        console.log(userGroups);
         if (userGroups) {
             for (const group of userGroups) {
                 this.accessToken = await Common.getOrRefreshToken(
@@ -304,7 +281,7 @@ export default class FoundationSprintly extends React.Component<
     private selectRepositoriesAction(projectRepositoriesId: string): void {
         Common.getUserSettings(
             this.dataManager,
-            userSettingsDataManagerKey
+            Common.USER_SETTINGS_DATA_MANAGER_KEY
         ).then((userSettings: Common.IUserSettings | undefined) => {
             if (!userSettings) {
                 userSettings = {
@@ -316,7 +293,7 @@ export default class FoundationSprintly extends React.Component<
             }
 
             this.dataManager!.setValue<Common.IUserSettings>(
-                userSettingsDataManagerKey,
+                Common.SYSTEM_SETTINGS_DATA_MANAGER_KEY,
                 userSettings,
                 { scopeType: 'User' }
             ).then(() => {
@@ -378,6 +355,12 @@ export default class FoundationSprintly extends React.Component<
                         globalMessagesSvc={this.globalMessagesSvc}
                         organizationName={organizationNameObservable.value}
                         userName={loggedInUserNameObservable.value}
+                    />
+                );
+            case sprintlyEnvironmentVariableViewerTabKey:
+                return (
+                    <SprintlyEnvironmentVariableViewer
+                        dataManager={this.dataManager}
                     />
                 );
             default:
@@ -499,6 +482,10 @@ function renderTabBar(): JSX.Element {
             <Tab
                 name={sprintlyBranchSearchTabName}
                 id={sprintlyBranchSearchTabKey}
+            />
+            <Tab
+                name={sprintlyEnvironmentVariableViewerTabName}
+                id={sprintlyEnvironmentVariableViewerTabKey}
             />
             <Tab name={sprintlySettingsTabName} id={sprintlySettingsTabKey} />
         </TabBar>

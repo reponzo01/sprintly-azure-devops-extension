@@ -71,9 +71,6 @@ const createReleaseBranchColumnWidthObservable: ObservableValue<number> =
     new ObservableValue<number>(-40);
 //#endregion "Observables"
 
-const userSettingsDataManagerKey: string = 'user-settings';
-const systemSettingsDataManagerKey: string = 'system-settings';
-
 let repositoriesToProcess: string[] = [];
 
 // TODO: Clean up arrow functions for the cases in which I thought I
@@ -145,12 +142,12 @@ export default class SprintlyPage extends React.Component<
         const userSettings: Common.IUserSettings | undefined =
             await Common.getUserSettings(
                 this.dataManager,
-                userSettingsDataManagerKey
+                Common.USER_SETTINGS_DATA_MANAGER_KEY
             );
         const systemSettings: Common.ISystemSettings | undefined =
             await Common.getSystemSettings(
                 this.dataManager,
-                systemSettingsDataManagerKey
+                Common.SYSTEM_SETTINGS_DATA_MANAGER_KEY
             );
 
         this.setState({

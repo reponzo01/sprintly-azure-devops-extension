@@ -78,9 +78,6 @@ const deleteBranchColumnWidthObservable: ObservableValue<number> =
 
 //#endregion "Observables"
 
-const userSettingsDataManagerKey: string = 'user-settings';
-const systemSettingsDataManagerKey: string = 'system-settings';
-
 const enum SearchType {
     AllBranches,
     JustMyBranches,
@@ -252,12 +249,12 @@ export default class SprintlyBranchSearchPage extends React.Component<
         const userSettings: Common.IUserSettings | undefined =
             await Common.getUserSettings(
                 this.dataManager,
-                userSettingsDataManagerKey
+                Common.USER_SETTINGS_DATA_MANAGER_KEY
             );
         const systemSettings: Common.ISystemSettings | undefined =
             await Common.getSystemSettings(
                 this.dataManager,
-                systemSettingsDataManagerKey
+                Common.SYSTEM_SETTINGS_DATA_MANAGER_KEY
             );
 
         this.setState({

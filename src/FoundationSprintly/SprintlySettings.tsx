@@ -49,9 +49,6 @@ const addProjectRepositoriesLabelObservable: ObservableValue<string> =
 const isDeleteProjectLabelDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 
-const userSettingsDataManagerKey: string = 'user-settings';
-const systemSettingsDataManagerKey: string = 'system-settings';
-
 // TODO: Clean up arrow functions for the cases in which I thought I
 // couldn't use regular functions because the this.* was undefined errors.
 // The solution is to bind those functions to `this` in the constructor.
@@ -142,12 +139,12 @@ export default class SprintlySettings extends React.Component<
         const userSettings: Common.IUserSettings | undefined =
             await Common.getUserSettings(
                 this.dataManager,
-                userSettingsDataManagerKey
+                Common.USER_SETTINGS_DATA_MANAGER_KEY
             );
         const systemSettings: Common.ISystemSettings | undefined =
             await Common.getSystemSettings(
                 this.dataManager,
-                systemSettingsDataManagerKey
+                Common.SYSTEM_SETTINGS_DATA_MANAGER_KEY
             );
         if (systemSettings && systemSettings.projectRepositories) {
             for (const item of systemSettings.projectRepositories) {
@@ -337,7 +334,7 @@ export default class SprintlySettings extends React.Component<
         }
 
         this.dataManager!.setValue<Common.IUserSettings>(
-            userSettingsDataManagerKey,
+            Common.USER_SETTINGS_DATA_MANAGER_KEY,
             userSettings,
             { scopeType: 'User' }
         ).then(() => {
@@ -391,7 +388,7 @@ export default class SprintlySettings extends React.Component<
         }
 
         this.dataManager!.setValue<Common.ISystemSettings>(
-            systemSettingsDataManagerKey,
+            Common.SYSTEM_SETTINGS_DATA_MANAGER_KEY,
             systemSettings
         ).then(() => {
             this.setState({

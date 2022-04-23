@@ -25,6 +25,8 @@ import {
     IColor,
     IExtensionDataManager,
     IExtensionDataService,
+    IProjectInfo,
+    IProjectPageService,
 } from 'azure-devops-extension-api';
 import {
     CoreRestClient,
@@ -40,6 +42,38 @@ import { Status, Statuses, StatusSize } from 'azure-devops-ui/Status';
 import { DropdownMultiSelection } from 'azure-devops-ui/Utilities/DropdownSelection';
 import axios, { AxiosResponse } from 'axios';
 import React from 'react';
+
+export const ALWAYS_ALLOWED_PROJECTS: String[] = [
+    'Portfolio',
+    'Sample Project',
+];
+
+export const ALWAYS_ALLOWED_GROUPS: IAllowedEntity[] = [
+    {
+        displayName: 'Dev Team Leads',
+        originId: '841aee2f-860d-45a1-91a5-779aa4dca78c',
+        descriptor:
+            'vssgp.Uy0xLTktMTU1MTM3NDI0NS00MjgyNjUyNjEyLTI3NDUxOTk2OTMtMjk1ODAyODI0OS0yMTc4MDQ3MTU1LTEtNjQxMDY2NzIxLTg5MzE2MjA2MS0yNzg1NjUwNzE5LTE3MTcxNTU1MDk',
+    },
+    {
+        displayName: 'DevOps',
+        originId: 'b2620fb7-f672-4162-a15f-940b1ec78efe',
+        descriptor:
+            'vssgp.Uy0xLTktMTU1MTM3NDI0NS0xODk1NzMzMjY1LTQ3ODY0Mzg0LTMwMjU3MjkyMzQtOTM5ODg1NzU0LTEtMzA1NDcxNjM4Mi0zNjc1OTA4OTI5LTI3MjY5NzI4MTctMzczODgxNDI4NQ',
+    },
+    // {
+    //     displayName: 'Sample Project Team', // fsllc
+    //     originId: 'fccefee4-a7a9-432a-a7a2-fc6d3d8bc45d',
+    //     descriptor:
+    //         'vssgp.Uy0xLTktMTU1MTM3NDI0NS0zMTEzMzAyODctMzI5MTIzMzA5NC0zMTI4MjY0MTg3LTQwMTUzMTUzOTYtMS0xNTY5MTY5Mjc5LTIzODYzODU5OTQtMjU1MDU2OTgzMi02NDQyOTAwODc',
+    // },
+    // {
+    //     displayName: 'Sample Project Team', // reponzo01
+    //     originId: '221ca28d-8d55-4229-aeee-d96b619d8bf9',
+    //     descriptor:
+    //         'vssgp.Uy0xLTktMTU1MTM3NDI0NS0zNTI2OTIzMzAwLTE2ODEyODk1MzctMjE5OTc3MDkxOC0yNDEwMzk4MTQ4LTEtODgxNTgyODM0LTIyMjg0NjE4OTgtMzA0NDA1NzUwOC03NTYzNzk0ODA',
+    // },
+];
 
 export const primaryColor: IColor = {
     red: 0,
@@ -94,6 +128,8 @@ export const repositoryTagsFilter: string = 'tags/';
 export const DEVELOP: string = 'develop';
 export const MASTER: string = 'master';
 export const MAIN: string = 'main';
+export const USER_SETTINGS_DATA_MANAGER_KEY: string = 'user-settings';
+export const SYSTEM_SETTINGS_DATA_MANAGER_KEY: string = 'system-settings';
 
 export interface IAllowedEntity {
     displayName: string;
@@ -257,13 +293,18 @@ export async function getFilteredProjects(): Promise<TeamProjectReference[]> {
 
     const filteredProjects: TeamProjectReference[] = projects.filter(
         (project: TeamProjectReference) => {
-            return (
-                project.name === 'Portfolio' ||
-                project.name === 'Sample Project'
-            );
+            return ALWAYS_ALLOWED_PROJECTS.includes(project.name);
         }
     );
     return filteredProjects;
+}
+
+export async function getCurrentProject(): Promise<IProjectInfo | undefined> {
+    const projectService = await SDK.getService<IProjectPageService>(
+        CommonServiceIds.ProjectPageService
+    );
+    const project = await projectService.getProject();
+    return project;
 }
 
 export async function getFilteredProjectRepositories(
@@ -421,11 +462,9 @@ export function sortRepositoryList(
     repositoryList: GitRepository[]
 ): GitRepository[] {
     if (repositoryList.length > 0) {
-        return repositoryList.sort(
-            (a: GitRepository, b: GitRepository) => {
-                return a.name.localeCompare(b.name);
-            }
-        );
+        return repositoryList.sort((a: GitRepository, b: GitRepository) => {
+            return a.name.localeCompare(b.name);
+        });
     }
     return repositoryList;
 }
@@ -456,15 +495,11 @@ export function sortAllowedEntityList(
     return allowedEntityList;
 }
 
-export function sortBranchesList(
-    branchesList: GitRef[]
-): GitRef[] {
+export function sortBranchesList(branchesList: GitRef[]): GitRef[] {
     if (branchesList.length > 0) {
-        return branchesList.sort(
-            (a: GitRef, b: GitRef) => {
-                return a.name.localeCompare(b.name);
-            }
-        );
+        return branchesList.sort((a: GitRef, b: GitRef) => {
+            return a.name.localeCompare(b.name);
+        });
     }
     return branchesList;
 }

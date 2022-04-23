@@ -79,9 +79,6 @@ const deployColumnWidthObservable: ObservableValue<number> =
     new ObservableValue<number>(-80);
 //#endregion "Observables"
 
-const userSettingsDataManagerKey: string = 'user-settings';
-const systemSettingsDataManagerKey: string = 'system-settings';
-
 let repositoriesToProcess: string[] = [];
 
 export default class SprintlyInRelease extends React.Component<
@@ -160,12 +157,12 @@ export default class SprintlyInRelease extends React.Component<
         const userSettings: Common.IUserSettings | undefined =
             await Common.getUserSettings(
                 this.dataManager,
-                userSettingsDataManagerKey
+                Common.USER_SETTINGS_DATA_MANAGER_KEY
             );
         const systemSettings: Common.ISystemSettings | undefined =
             await Common.getSystemSettings(
                 this.dataManager,
-                systemSettingsDataManagerKey
+                Common.SYSTEM_SETTINGS_DATA_MANAGER_KEY
             );
 
         this.setState({
