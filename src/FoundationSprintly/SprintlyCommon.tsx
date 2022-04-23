@@ -39,7 +39,7 @@ import { DropdownMultiSelection } from 'azure-devops-ui/Utilities/DropdownSelect
 import axios, { AxiosResponse } from 'axios';
 import React from 'react';
 
-export const ALLOWED_ENVIRONMENT_VARIABLE_GROUP_IDS: Number[] = [2, 3];
+export const ALLOWED_ENVIRONMENT_VARIABLE_GROUP_IDS: Number[] = [3, 4, 5, 6];
 export const ALWAYS_ALLOWED_GROUPS: IAllowedEntity[] = [
     {
         displayName: 'Dev Team Leads',

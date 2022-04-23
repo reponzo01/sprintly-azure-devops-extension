@@ -94,6 +94,8 @@ const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
 const showAllEnvironmentVariablesObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(true);
+const repositoryHasEnvironmentVariablesObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(false);
 //#endregion "Observables"
 
 const environmentVariableNameFilterKey: string =
@@ -434,9 +436,25 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         this.setState({
             globalEnvironmentVariablesObservable:
                 new ObservableArray<ISearchResultEnvironmentVariableItem>(
-                    resultEnvironmentVariables
+                    this.sortEnvironmentVariableSearchResult(resultEnvironmentVariables)
                 ),
         });
+    }
+
+    private sortEnvironmentVariableSearchResult(
+        environmentVariableList: ISearchResultEnvironmentVariableItem[]
+    ): ISearchResultEnvironmentVariableItem[] {
+        if (environmentVariableList.length > 0) {
+            return environmentVariableList.sort(
+                (
+                    a: ISearchResultEnvironmentVariableItem,
+                    b: ISearchResultEnvironmentVariableItem
+                ) => {
+                    return a.name.localeCompare(b.name);
+                }
+            );
+        }
+        return environmentVariableList;
     }
 
     private updateEnvironmentVariablesExcludeFilter(
@@ -506,8 +524,14 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         return (
             <Observer
                 selectedItem={this.state.repositoryListSelectedItemObservable}
+                repositoryHasEnvironmentVariables={
+                    repositoryHasEnvironmentVariablesObservable
+                }
             >
-                {(observerProps: { selectedItem: GitRepository }) => (
+                {(observerProps: {
+                    selectedItem: GitRepository;
+                    repositoryHasEnvironmentVariables: boolean;
+                }) => (
                     <Page className='flex-grow single-layer-details'>
                         {this.state.repositoryListSelection.selectedCount ===
                             0 && (
@@ -516,15 +540,23 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                 environment variable transforms.
                             </span>
                         )}
-                        {this.state
-                            .repositoryEnvironmentVariablesItemProvider &&
+                        {this.state.repositoryListSelection.selectedCount !==
+                            0 &&
+                            observerProps.repositoryHasEnvironmentVariables ===
+                                false && (
+                                <span className='single-layer-details-contents'>
+                                    This repository does not have any inline
+                                    transforms.
+                                </span>
+                            )}
+                        {observerProps.repositoryHasEnvironmentVariables ===
+                            true &&
                             this.state.repositoryListSelection.selectedCount !==
                                 0 && (
                                 <Page>
                                     <div className='page-content'>
                                         <Card className='bolt-table-card bolt-card-white'>
                                             <Tree<ISearchResultRepositoryEnvironmentVariableItem>
-                                                ariaLabel='Basic tree'
                                                 columns={
                                                     this.repositoryTreeColumns
                                                 }
@@ -666,7 +698,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     ): JSX.Element {
         return (
             <SimpleTableCell
-                key={`col-${columnIndex}-row-${rowIndex}`}
+                key={`appsettings-col-${columnIndex}-row-${rowIndex}`}
                 columnIndex={columnIndex}
                 tableColumn={treeColumn}
                 children={
@@ -719,27 +751,66 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
             treeItem.underlyingItem.data.value.split(regex);
         return (
             <SimpleTableCell
-                key={`col-${columnIndex}-row-${rowIndex}`}
+                key={`transform-col-${columnIndex}-row-${rowIndex}`}
                 columnIndex={columnIndex}
                 tableColumn={treeColumn}
                 children={
                     <>
                         {treeItem.depth === 0 ? (
                             <>
-                                {variableHighlightSplit.map((substring) => {
-                                    if (substring.startsWith('$(')) {
-                                        return (
-                                            <>
-                                                <b>{substring}</b>
-                                            </>
-                                        );
-                                    } else {
-                                        return <>{substring}</>;
+                                {variableHighlightSplit.map(
+                                    (valueSubstring, index) => {
+                                        if (valueSubstring.startsWith('$(')) {
+                                            return (
+                                                <div
+                                                    key={`transform-val-${columnIndex}-row-${rowIndex}-substr-${index}`}
+                                                >
+                                                    <b>{valueSubstring}</b>
+                                                </div>
+                                            );
+                                        } else {
+                                            return (
+                                                <div
+                                                    key={`transform-val-${columnIndex}-row-${rowIndex}-substr-${index}`}
+                                                >
+                                                    {valueSubstring}
+                                                </div>
+                                            );
+                                        }
                                     }
-                                })}
+                                )}
                             </>
                         ) : (
-                            <>{treeItem.underlyingItem.data.value}</>
+                            // <>{treeItem.underlyingItem.data.value}</>
+                            <>
+                                {variableHighlightSplit.map(
+                                    (valueSubstring, index) => {
+                                        if (valueSubstring.startsWith('$(')) {
+                                            return (
+                                                <div
+                                                    key={`transform-envval-${columnIndex}-row-${rowIndex}-substr-${index}`}
+                                                >
+                                                    <b
+                                                        style={{
+                                                            color: '#FF3E3E',
+                                                        }}
+                                                    >
+                                                        {valueSubstring}
+                                                    </b>
+                                                </div>
+                                            );
+                                        } else {
+                                            return (
+                                                <div
+                                                    key={`transform-envval-${columnIndex}-row-${rowIndex}-substr-${index}`}
+                                                >
+                                                    {valueSubstring}
+                                                </div>
+                                            );
+                                        }
+                                    }
+                                )}
+                            </>
                         )}
                     </>
                 }
@@ -748,13 +819,6 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     }
 
     private async selectRepository(): Promise<void> {
-        //TODO: get release defs to be passed in from page 1
-        //get single release for repo
-        //get the inline transform variables and parse them out
-        //build a tree table nesting each environment under each variable (root)
-        //show appsettings transform at root level, second column, and environment value for nested children.
-        console.log(this.releaseDefinitions);
-        console.log(this.state.repositoryListSelectedItemObservable.value);
         const releaseDefinitionIdForRepo =
             Common.getRepositoryReleaseDefinitionId(
                 this.buildDefinitions,
@@ -764,6 +828,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         const repositoryEnvironmentVariablesRootItems: Array<
             ITreeItem<ISearchResultRepositoryEnvironmentVariableItem>
         > = [];
+        let repoHasEnvironmentVariables: boolean = false;
 
         if (
             releaseDefinitionIdForRepo > -1 &&
@@ -771,15 +836,13 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         ) {
             const environmentVariableRegex = /(\$\([^\)]+\))/g;
 
-            console.log(releaseDefinitionIdForRepo);
-
             const releaseDefinition: ReleaseDefinition = await getClient(
                 ReleaseRestClient
             ).getReleaseDefinition(
                 this.currentProject.id,
                 releaseDefinitionIdForRepo
             );
-            console.log(releaseDefinition.variables);
+
             if (releaseDefinition.variables['inlineTransforms'] !== undefined) {
                 if (this.environmentVariablesResponse === undefined) {
                     await this.loadEnvironmentVariables();
@@ -810,15 +873,18 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                         foundEnvironmentVariables !== undefined &&
                         foundEnvironmentVariables !== null
                     ) {
-                        for (const foundEnvironmentVariable of foundEnvironmentVariables) {
-                            const cleanEnvironmentVariable: string =
-                                foundEnvironmentVariable.substring(
-                                    2,
-                                    foundEnvironmentVariable.length - 1
-                                );
+                        repoHasEnvironmentVariables = true;
+                        for (const environmentVariableGroup of this
+                            .environmentVariablesResponse.value) {
+                            let environmentTransformValue: string =
+                                transformValue;
 
-                            for (const environmentVariableGroup of this
-                                .environmentVariablesResponse.value) {
+                            for (const foundEnvironmentVariable of foundEnvironmentVariables) {
+                                const cleanEnvironmentVariable: string =
+                                    foundEnvironmentVariable.substring(
+                                        2,
+                                        foundEnvironmentVariable.length - 1
+                                    );
                                 for (const [
                                     environmentVariableName,
                                     environmentVariableValue,
@@ -829,20 +895,31 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                         environmentVariableName ===
                                         cleanEnvironmentVariable
                                     ) {
-                                        repositoryEnvironmentVariablesTableItem.childItems!.push(
-                                            {
-                                                data: {
-                                                    isRootItem: false,
-                                                    name: environmentVariableGroup.name,
-                                                    value: (
-                                                        environmentVariableValue as any
-                                                    ).value,
-                                                },
-                                            }
+                                        const customRegex: RegExp = new RegExp(
+                                            `\\$\\(${cleanEnvironmentVariable}\\)`,
+                                            'g'
                                         );
+                                        environmentTransformValue =
+                                            environmentTransformValue.replace(
+                                                customRegex,
+                                                (
+                                                    environmentVariableValue as any
+                                                ).value
+                                            );
+                                        break;
                                     }
                                 }
                             }
+
+                            repositoryEnvironmentVariablesTableItem.childItems!.push(
+                                {
+                                    data: {
+                                        isRootItem: false,
+                                        name: environmentVariableGroup.name,
+                                        value: environmentTransformValue,
+                                    },
+                                }
+                            );
                         }
                     }
 
@@ -857,6 +934,8 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 repositoryEnvironmentVariablesRootItems
             ),
         });
+        repositoryHasEnvironmentVariablesObservable.value =
+            repoHasEnvironmentVariables;
     }
 
     private onSize(event: MouseEvent, index: number, width: number): void {
