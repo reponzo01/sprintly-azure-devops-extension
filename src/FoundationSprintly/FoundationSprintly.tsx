@@ -61,6 +61,8 @@ const loggedInUserNameObservable: ObservableValue<string> =
     new ObservableValue<string>('');
 const organizationNameObservable: ObservableValue<string> =
     new ObservableValue<string>('');
+const isReadyObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(false);
 
 export interface IFoundationSprintlyState {
     userSettings?: Common.IUserSettings;
@@ -149,6 +151,7 @@ export default class FoundationSprintly extends React.Component<
 
         await this.loadAllowedUserGroupsUsers();
         this.loadAllowedUsers();
+        isReadyObservable.value = true;
     }
 
     private async loadAllowedUserGroupsUsers(): Promise<void> {
@@ -433,27 +436,45 @@ export default class FoundationSprintly extends React.Component<
                 <Observer
                     selectedTabIdObservable={selectedTabIdObservable}
                     userIsAllowedObservable={userIsAllowedObservable}
+                    isReadyObservable={isReadyObservable}
                 >
                     {(props: {
                         selectedTabIdObservable: string;
                         userIsAllowedObservable: boolean;
+                        isReadyObservable: boolean;
                         refreshDataObservable: boolean;
                     }) => {
                         if (userIsAllowedObservable.value) {
                             return this.renderSelectedTabPage();
                         }
+                        if (isReadyObservable.value) {
+                            return (
+                                <div>
+                                    <ZeroData
+                                        primaryText='Sorry, you do not have access yet.'
+                                        secondaryText={
+                                            <span>
+                                                Please contact the DevOps team or
+                                                your team lead for access to this
+                                                extension.
+                                            </span>
+                                        }
+                                        imageAltText='No Access'
+                                        imagePath={'../static/notfound.png'}
+                                    />
+                                </div>
+                            );
+                        }
                         return (
                             <div>
                                 <ZeroData
-                                    primaryText='Sorry, you do not have access yet.'
+                                    primaryText='Getting things ready...'
                                     secondaryText={
                                         <span>
-                                            Please contact the DevOps team or
-                                            your team lead for access to this
-                                            extension.
+                                            Please wait, Sprintly is starting up...
                                         </span>
                                     }
-                                    imageAltText='No Access'
+                                    imageAltText='Starting up...'
                                     imagePath={'../static/notfound.png'}
                                 />
                             </div>

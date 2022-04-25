@@ -33,7 +33,15 @@ import { Observer } from 'azure-devops-ui/Observer';
 import { Tooltip } from 'azure-devops-ui/TooltipEx';
 import { ButtonGroup } from 'azure-devops-ui/ButtonGroup';
 import { Button } from 'azure-devops-ui/Button';
-import { GitRepository } from 'azure-devops-extension-api/Git';
+import {
+    GitItem,
+    GitRef,
+    GitRepository,
+    GitRestClient,
+    GitVersionDescriptor,
+    GitVersionOptions,
+    GitVersionType,
+} from 'azure-devops-extension-api/Git';
 import {
     IListItemDetails,
     List,
@@ -56,12 +64,15 @@ import {
     ITreeItemProvider,
     TreeItemProvider,
 } from 'azure-devops-ui/Utilities/TreeItemProvider';
+import { Icon } from 'azure-devops-ui/Icon';
+import { Dropdown } from 'azure-devops-ui/Dropdown';
+import { DropdownSelection } from 'azure-devops-ui/Utilities/DropdownSelection';
+import { IListBoxItem, ListBoxItemType } from 'azure-devops-ui/ListBox';
 import {
     ReleaseDefinition,
     ReleaseRestClient,
 } from 'azure-devops-extension-api/Release';
 import { BuildDefinition } from 'azure-devops-extension-api/Build';
-import { Icon } from 'azure-devops-ui/Icon';
 
 export interface ISprintlyEnvironmentVariableViewerState {
     userSettings?: Common.IUserSettings;
@@ -70,7 +81,8 @@ export interface ISprintlyEnvironmentVariableViewerState {
     repositories: ArrayItemProvider<GitRepository>;
     repositoryListSelection: ListSelection;
     repositoryListSelectedItemObservable: ObservableValue<GitRepository>;
-    repositoryEnvironmentVariablesItemProvider: ITreeItemProvider<ISearchResultRepositoryEnvironmentVariableItem>;
+    repositoryEnvironmentVariablesFromCodeItemProvider: ITreeItemProvider<ISearchResultRepositoryEnvironmentVariableItem>;
+    repositoryEnvironmentVariablesFromPipelineItemProvider: ITreeItemProvider<ISearchResultRepositoryEnvironmentVariableItem>;
 }
 
 export interface ISearchResultEnvironmentVariableValue {
@@ -94,7 +106,11 @@ const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
 const showAllEnvironmentVariablesObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(true);
-const repositoryHasEnvironmentVariablesObservable: ObservableValue<boolean> =
+const repositoryHasEnvironmentVariablesFromCodeObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(false);
+const repositoryHasEnvironmentVariablesFromPipelineObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(false);
+const loadingRepositoryObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 //#endregion "Observables"
 
@@ -124,6 +140,10 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     private buildDefinitions: BuildDefinition[];
     private accessToken: string = '';
     private currentProject: IProjectInfo | undefined;
+    private repositoryBranchSelection = new DropdownSelection();
+    private selectedRepositoryBranchesInfo:
+        | Common.IRepositoryBranchInfo
+        | undefined;
 
     private environmentVariablesResponse: any;
     private environmentVariablesExclusionFilter: Set<string> = new Set();
@@ -187,6 +207,12 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
             this.renderRepositoryEnvironmentVariableTransformValueCell.bind(
                 this
             );
+        this.loadInlineTransforms = this.loadInlineTransforms.bind(this);
+        this.loadInlineTransformsFromCode =
+            this.loadInlineTransformsFromCode.bind(this);
+        this.loadInlineTransformsFromPipeline =
+            this.loadInlineTransformsFromPipeline.bind(this);
+        this.getTransforms = this.getTransforms.bind(this);
 
         this.columns = [
             {
@@ -239,7 +265,11 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 selectOnFocus: false,
             }),
             repositoryListSelectedItemObservable: new ObservableValue<any>({}),
-            repositoryEnvironmentVariablesItemProvider:
+            repositoryEnvironmentVariablesFromCodeItemProvider:
+                new TreeItemProvider<ISearchResultRepositoryEnvironmentVariableItem>(
+                    []
+                ),
+            repositoryEnvironmentVariablesFromPipelineItemProvider:
                 new TreeItemProvider<ISearchResultRepositoryEnvironmentVariableItem>(
                     []
                 ),
@@ -528,60 +558,185 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         return (
             <Observer
                 selectedItem={this.state.repositoryListSelectedItemObservable}
-                repositoryHasEnvironmentVariables={
-                    repositoryHasEnvironmentVariablesObservable
+                repositoryHasEnvironmentFromCodeVariables={
+                    repositoryHasEnvironmentVariablesFromCodeObservable
                 }
+                repositoryHasEnvironmentFromPipelineVariables={
+                    repositoryHasEnvironmentVariablesFromPipelineObservable
+                }
+                loadingRepository={loadingRepositoryObservable}
             >
                 {(observerProps: {
                     selectedItem: GitRepository;
-                    repositoryHasEnvironmentVariables: boolean;
+                    repositoryHasEnvironmentFromCodeVariables: boolean;
+                    repositoryHasEnvironmentFromPipelineVariables: boolean;
+                    loadingRepository: boolean;
                 }) => (
                     <Page className='flex-grow single-layer-details'>
+                        {loadingRepositoryObservable.value && (
+                            <div className='page-content-top'>
+                                <Spinner label='loading' />
+                            </div>
+                        )}
                         {this.state.repositoryListSelection.selectedCount ===
                             0 && (
-                            <span className='single-layer-details-contents'>
-                                Select a repository on the right to see its
-                                environment variable transforms.
-                            </span>
+                            <Page>
+                                <div className='page-content'>
+                                    Select a repository on the right to see its
+                                    environment variable transforms.
+                                </div>
+                            </Page>
                         )}
-                        {this.state.repositoryListSelection.selectedCount !==
-                            0 &&
-                            observerProps.repositoryHasEnvironmentVariables ===
+                        {!loadingRepositoryObservable.value &&
+                            this.state.repositoryListSelection.selectedCount !==
+                                0 &&
+                            observerProps.repositoryHasEnvironmentFromCodeVariables ===
                                 false && (
-                                <span className='single-layer-details-contents'>
-                                    This repository does not have any inline
-                                    transforms.
-                                </span>
+                                <Page>
+                                    <div className='page-content'>
+                                        This repository does not have any inline
+                                        transforms or does not have a{' '}
+                                        <code>transforms.json</code> file on
+                                        this branch.
+                                    </div>
+                                </Page>
                             )}
-                        {observerProps.repositoryHasEnvironmentVariables ===
-                            true &&
+                        {!loadingRepositoryObservable.value &&
+                            this.state.repositoryListSelection.selectedCount !==
+                                0 &&
+                            observerProps.repositoryHasEnvironmentFromPipelineVariables ===
+                                false && (
+                                <Page>
+                                    <div className='page-content'>
+                                        This repository does not have any inline
+                                        transforms or does not have an
+                                        <code>inlineTransforms</code> variable
+                                        in the pipeline.
+                                    </div>
+                                </Page>
+                            )}
+                        {!loadingRepositoryObservable.value &&
                             this.state.repositoryListSelection.selectedCount !==
                                 0 && (
                                 <Page>
                                     <div className='page-content'>
-                                        <Card className='bolt-table-card bolt-card-white'>
-                                            <Tree<ISearchResultRepositoryEnvironmentVariableItem>
-                                                columns={
-                                                    this.repositoryTreeColumns
-                                                }
-                                                itemProvider={
-                                                    this.state
-                                                        .repositoryEnvironmentVariablesItemProvider
-                                                }
-                                                onToggle={(
-                                                    event: React.SyntheticEvent<
-                                                        HTMLElement,
-                                                        Event
-                                                    >,
-                                                    treeItem: ITreeItemEx<ISearchResultRepositoryEnvironmentVariableItem>
-                                                ) => {
-                                                    this.state.repositoryEnvironmentVariablesItemProvider.toggle(
-                                                        treeItem.underlyingItem
-                                                    );
-                                                }}
-                                                selectableText={true}
-                                                scrollable={true}
-                                            />
+                                        <Card
+                                            titleProps={{
+                                                text: `${this.state.repositoryListSelectedItemObservable.value.name} (transforms.json)`,
+                                            }}
+                                            headerDescriptionProps={{
+                                                text: (
+                                                    <div>
+                                                        These transforms are
+                                                        sourced from the{' '}
+                                                        <code>
+                                                            /transforms.json
+                                                        </code>{' '}
+                                                        file on the selected{' '}
+                                                        branch.
+                                                    </div>
+                                                ),
+                                            }}
+                                            className='bolt-table-card bolt-card-white'
+                                        >
+                                            <div className='master-row-content'>
+                                                <Dropdown
+                                                    ariaLabel='Button Dropdown'
+                                                    placeholder='Select a branch'
+                                                    selection={
+                                                        this
+                                                            .repositoryBranchSelection
+                                                    }
+                                                    items={this.selectedRepositoryBranchesInfo!.allBranchesAndTags.map(
+                                                        (branchInfo: GitRef) =>
+                                                            Common.getBranchShortName(
+                                                                branchInfo.name
+                                                            )
+                                                    )}
+                                                    onSelect={async (
+                                                        event: React.SyntheticEvent<HTMLElement>,
+                                                        item: IListBoxItem<{}>
+                                                    ) => {
+                                                        loadingRepositoryObservable.value =
+                                                            true;
+                                                        await this.loadInlineTransformsFromCode(
+                                                            item.text!
+                                                        );
+                                                        loadingRepositoryObservable.value =
+                                                            false;
+                                                    }}
+                                                />
+                                                <Tree<ISearchResultRepositoryEnvironmentVariableItem>
+                                                    columns={
+                                                        this
+                                                            .repositoryTreeColumns
+                                                    }
+                                                    itemProvider={
+                                                        this.state
+                                                            .repositoryEnvironmentVariablesFromCodeItemProvider
+                                                    }
+                                                    onToggle={(
+                                                        event: React.SyntheticEvent<
+                                                            HTMLElement,
+                                                            Event
+                                                        >,
+                                                        treeItem: ITreeItemEx<ISearchResultRepositoryEnvironmentVariableItem>
+                                                    ) => {
+                                                        this.state.repositoryEnvironmentVariablesFromCodeItemProvider.toggle(
+                                                            treeItem.underlyingItem
+                                                        );
+                                                    }}
+                                                    selectableText={true}
+                                                    scrollable={true}
+                                                />
+                                            </div>
+                                        </Card>
+                                    </div>
+                                    <div className='page-content'>
+                                        <Card
+                                            titleProps={{
+                                                text: `${this.state.repositoryListSelectedItemObservable.value.name} (Pipeline inlineTransforms)`,
+                                            }}
+                                            headerDescriptionProps={{
+                                                text: (
+                                                    <div>
+                                                        These transforms are
+                                                        sourced from the{' '}
+                                                        <code>
+                                                            inlineTransforms
+                                                        </code>{' '}
+                                                        variable on the release
+                                                        pipeline.
+                                                    </div>
+                                                ),
+                                            }}
+                                            className='bolt-table-card bolt-card-white'
+                                        >
+                                            <div className='master-row-content'>
+                                                <Tree<ISearchResultRepositoryEnvironmentVariableItem>
+                                                    columns={
+                                                        this
+                                                            .repositoryTreeColumns
+                                                    }
+                                                    itemProvider={
+                                                        this.state
+                                                            .repositoryEnvironmentVariablesFromPipelineItemProvider
+                                                    }
+                                                    onToggle={(
+                                                        event: React.SyntheticEvent<
+                                                            HTMLElement,
+                                                            Event
+                                                        >,
+                                                        treeItem: ITreeItemEx<ISearchResultRepositoryEnvironmentVariableItem>
+                                                    ) => {
+                                                        this.state.repositoryEnvironmentVariablesFromPipelineItemProvider.toggle(
+                                                            treeItem.underlyingItem
+                                                        );
+                                                    }}
+                                                    selectableText={true}
+                                                    scrollable={true}
+                                                />
+                                            </div>
                                         </Card>
                                     </div>
                                 </Page>
@@ -830,123 +985,220 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     }
 
     private async selectRepository(): Promise<void> {
-        const releaseDefinitionIdForRepo: number =
-            Common.getRepositoryReleaseDefinitionId(
-                this.buildDefinitions,
-                this.releaseDefinitions,
-                this.state.repositoryListSelectedItemObservable.value.id
+        loadingRepositoryObservable.value = true;
+        this.selectedRepositoryBranchesInfo =
+            await Common.getRepositoryBranchesInfo(
+                this.state.repositoryListSelectedItemObservable.value.id,
+                Common.repositoryHeadsFilter
             );
+
+        this.repositoryBranchSelection.select(
+            this.selectedRepositoryBranchesInfo.allBranchesAndTags.findIndex(
+                (branch) =>
+                    Common.getBranchShortName(branch.name) === Common.DEVELOP
+            )
+        );
+
+        await this.loadInlineTransformsFromCode(Common.DEVELOP);
+        await this.loadInlineTransformsFromPipeline();
+
+        loadingRepositoryObservable.value = false;
+    }
+
+    private async loadInlineTransformsFromCode(
+        branchShortName: string
+    ): Promise<void> {
+        await this.loadInlineTransforms(true, branchShortName);
+    }
+
+    private async loadInlineTransformsFromPipeline(): Promise<void> {
+        await this.loadInlineTransforms(false);
+    }
+
+    private async loadInlineTransforms(
+        fromCode: boolean,
+        branchShortName?: string
+    ): Promise<void> {
         const repositoryEnvironmentVariablesRootItems: Array<
             ITreeItem<ISearchResultRepositoryEnvironmentVariableItem>
         > = [];
         let repoHasEnvironmentVariables: boolean = false;
 
-        if (
-            releaseDefinitionIdForRepo > -1 &&
-            this.currentProject !== undefined
-        ) {
+        if (this.currentProject != undefined) {
             const environmentVariableRegex: RegExp = /(\$\([^\)]+\))/g;
 
-            const releaseDefinition: ReleaseDefinition = await getClient(
-                ReleaseRestClient
-            ).getReleaseDefinition(
-                this.currentProject.id,
-                releaseDefinitionIdForRepo
-            );
+            const inlineTransforms: string | undefined =
+                await this.getTransforms(fromCode, branchShortName);
 
-            if (releaseDefinition.variables['inlineTransforms'] !== undefined) {
-                if (this.environmentVariablesResponse === undefined) {
-                    await this.loadEnvironmentVariables();
-                }
-                const inlineTransforms: any = JSON.parse(
-                    releaseDefinition.variables['inlineTransforms'].value
-                );
-                for (const [appsetting, transform] of Object.entries(
-                    inlineTransforms
-                )) {
-                    const transformValue: string = (
-                        transform as any
-                    ).toString();
-                    const repositoryEnvironmentVariablesTableItem: ITreeItem<ISearchResultRepositoryEnvironmentVariableItem> =
-                        {
-                            childItems: [],
-                            data: {
-                                name: appsetting,
-                                value: transformValue,
-                                isRootItem: true,
-                            },
-                            expanded: true,
-                        };
+            try {
+                if (inlineTransforms !== undefined) {
+                    if (this.environmentVariablesResponse === undefined) {
+                        await this.loadEnvironmentVariables();
+                    }
+                    const inlineTransformsParsed: any =
+                        JSON.parse(inlineTransforms);
+                    for (const [appsetting, transform] of Object.entries(
+                        inlineTransformsParsed
+                    )) {
+                        const transformValue: string = (
+                            transform as any
+                        ).toString();
+                        const repositoryEnvironmentVariablesTableItem: ITreeItem<ISearchResultRepositoryEnvironmentVariableItem> =
+                            {
+                                childItems: [],
+                                data: {
+                                    name: appsetting,
+                                    value: transformValue,
+                                    isRootItem: true,
+                                },
+                                expanded: true,
+                            };
 
-                    const foundEnvironmentVariables: RegExpMatchArray | null =
-                        transformValue.match(environmentVariableRegex);
-                    if (
-                        foundEnvironmentVariables !== undefined &&
-                        foundEnvironmentVariables !== null
-                    ) {
-                        repoHasEnvironmentVariables = true;
-                        for (const environmentVariableGroup of this
-                            .environmentVariablesResponse.value) {
-                            let environmentTransformValue: string =
-                                transformValue;
+                        const foundEnvironmentVariables: RegExpMatchArray | null =
+                            transformValue.match(environmentVariableRegex);
+                        if (
+                            foundEnvironmentVariables !== undefined &&
+                            foundEnvironmentVariables !== null
+                        ) {
+                            repoHasEnvironmentVariables = true;
+                            for (const environmentVariableGroup of this
+                                .environmentVariablesResponse.value) {
+                                let environmentTransformValue: string =
+                                    transformValue;
 
-                            for (const foundEnvironmentVariable of foundEnvironmentVariables) {
-                                const cleanEnvironmentVariable: string =
-                                    foundEnvironmentVariable.substring(
-                                        2,
-                                        foundEnvironmentVariable.length - 1
-                                    );
-                                for (const [
-                                    environmentVariableName,
-                                    environmentVariableValue,
-                                ] of Object.entries(
-                                    environmentVariableGroup.variables
-                                )) {
-                                    if (
-                                        environmentVariableName ===
-                                        cleanEnvironmentVariable
-                                    ) {
-                                        const customRegex: RegExp = new RegExp(
-                                            `\\$\\(${cleanEnvironmentVariable}\\)`,
-                                            'g'
+                                for (const foundEnvironmentVariable of foundEnvironmentVariables) {
+                                    const cleanEnvironmentVariable: string =
+                                        foundEnvironmentVariable.substring(
+                                            2,
+                                            foundEnvironmentVariable.length - 1
                                         );
-                                        environmentTransformValue =
-                                            environmentTransformValue.replace(
-                                                customRegex,
-                                                (
-                                                    environmentVariableValue as any
-                                                ).value
-                                            );
-                                        break;
+                                    for (const [
+                                        environmentVariableName,
+                                        environmentVariableValue,
+                                    ] of Object.entries(
+                                        environmentVariableGroup.variables
+                                    )) {
+                                        if (
+                                            environmentVariableName ===
+                                            cleanEnvironmentVariable
+                                        ) {
+                                            const customRegex: RegExp =
+                                                new RegExp(
+                                                    `\\$\\(${cleanEnvironmentVariable}\\)`,
+                                                    'g'
+                                                );
+                                            environmentTransformValue =
+                                                environmentTransformValue.replace(
+                                                    customRegex,
+                                                    (
+                                                        environmentVariableValue as any
+                                                    ).value
+                                                );
+                                            break;
+                                        }
                                     }
                                 }
+
+                                repositoryEnvironmentVariablesTableItem.childItems!.push(
+                                    {
+                                        data: {
+                                            isRootItem: false,
+                                            name: environmentVariableGroup.name,
+                                            value: environmentTransformValue,
+                                        },
+                                    }
+                                );
                             }
-
-                            repositoryEnvironmentVariablesTableItem.childItems!.push(
-                                {
-                                    data: {
-                                        isRootItem: false,
-                                        name: environmentVariableGroup.name,
-                                        value: environmentTransformValue,
-                                    },
-                                }
-                            );
                         }
-                    }
 
-                    repositoryEnvironmentVariablesRootItems.push(
-                        repositoryEnvironmentVariablesTableItem
+                        repositoryEnvironmentVariablesRootItems.push(
+                            repositoryEnvironmentVariablesTableItem
+                        );
+                    }
+                }
+            } catch (err) {}
+        }
+        if (fromCode) {
+            this.setState({
+                repositoryEnvironmentVariablesFromCodeItemProvider:
+                    new TreeItemProvider(
+                        repositoryEnvironmentVariablesRootItems
+                    ),
+            });
+            repositoryHasEnvironmentVariablesFromCodeObservable.value =
+                repoHasEnvironmentVariables;
+        } else {
+            this.setState({
+                repositoryEnvironmentVariablesFromPipelineItemProvider:
+                    new TreeItemProvider(
+                        repositoryEnvironmentVariablesRootItems
+                    ),
+            });
+            repositoryHasEnvironmentVariablesFromPipelineObservable.value =
+                repoHasEnvironmentVariables;
+        }
+    }
+
+    private async getTransforms(
+        fromCode: boolean,
+        branchShortName?: string
+    ): Promise<string | undefined> {
+        if (this.currentProject !== undefined) {
+            if (!fromCode) {
+                const releaseDefinitionIdForRepo: number =
+                    Common.getRepositoryReleaseDefinitionId(
+                        this.buildDefinitions,
+                        this.releaseDefinitions,
+                        this.state.repositoryListSelectedItemObservable.value.id
                     );
+
+                if (releaseDefinitionIdForRepo > -1) {
+                    const releaseDefinition: ReleaseDefinition =
+                        await getClient(ReleaseRestClient).getReleaseDefinition(
+                            this.currentProject.id,
+                            releaseDefinitionIdForRepo
+                        );
+
+                    if (
+                        releaseDefinition.variables['inlineTransforms'] !==
+                        undefined
+                    ) {
+                        return releaseDefinition.variables['inlineTransforms']
+                            .value;
+                    }
+                }
+            } else {
+                if (branchShortName !== undefined) {
+                    const baseBranch: GitVersionDescriptor = {
+                        version: branchShortName,
+                        versionOptions: GitVersionOptions.None,
+                        versionType: GitVersionType.Branch,
+                    };
+                    try {
+                        const inlineTransformResponse: GitItem =
+                            await getClient(GitRestClient).getItem(
+                                this.state.repositoryListSelectedItemObservable
+                                    .value.id,
+                                '/transforms.json',
+                                this.currentProject.id,
+                                undefined,
+                                undefined,
+                                undefined,
+                                undefined,
+                                undefined,
+                                baseBranch,
+                                true,
+                                undefined
+                            );
+                        if (inlineTransformResponse !== undefined) {
+                            return inlineTransformResponse.content;
+                        }
+                    } catch (err) {}
                 }
             }
         }
-        this.setState({
-            repositoryEnvironmentVariablesItemProvider: new TreeItemProvider(
-                repositoryEnvironmentVariablesRootItems
-            ),
-        });
-        repositoryHasEnvironmentVariablesObservable.value =
-            repoHasEnvironmentVariables;
+
+        return undefined;
     }
 
     private onSize(event: MouseEvent, index: number, width: number): void {
