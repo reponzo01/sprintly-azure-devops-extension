@@ -67,7 +67,7 @@ import {
 import { Icon } from 'azure-devops-ui/Icon';
 import { Dropdown } from 'azure-devops-ui/Dropdown';
 import { DropdownSelection } from 'azure-devops-ui/Utilities/DropdownSelection';
-import { IListBoxItem, ListBoxItemType } from 'azure-devops-ui/ListBox';
+import { IListBoxItem } from 'azure-devops-ui/ListBox';
 import {
     ReleaseDefinition,
     ReleaseRestClient,
@@ -97,8 +97,10 @@ export interface ISearchResultEnvironmentVariableItem {
 
 export interface ISearchResultRepositoryEnvironmentVariableItem {
     name: string;
-    value: string;
+    transformValueFromCode: string;
+    transformValueFromPipeline: string;
     isRootItem: boolean;
+    hasDiscrepancy: boolean;
 }
 
 //#region "Observables"
@@ -196,6 +198,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         super(props);
 
         this.onSize = this.onSize.bind(this);
+        this.onSizeTreeColumn = this.onSizeTreeColumn.bind(this);
         this.renderRepositoryMasterPageList =
             this.renderRepositoryMasterPageList.bind(this);
         this.renderDetailPageContent = this.renderDetailPageContent.bind(this);
@@ -239,8 +242,16 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 width: new ObservableValue<number>(-30),
             },
             {
-                id: 'transformValue',
-                name: 'Transform Value',
+                id: 'transformValueFromCode',
+                name: 'Transform Value From Code',
+                onSize: this.onSizeTreeColumn,
+                renderCell:
+                    this.renderRepositoryEnvironmentVariableTransformValueCell,
+                width: new ObservableValue<number>(-80),
+            },
+            {
+                id: 'transformValueFromPipeline',
+                name: 'Transform Value From Pipeline',
                 onSize: this.onSizeTreeColumn,
                 renderCell:
                     this.renderRepositoryEnvironmentVariableTransformValueCell,
@@ -914,8 +925,19 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         treeItem: ITreeItemEx<ISearchResultRepositoryEnvironmentVariableItem>
     ): JSX.Element {
         const regex: RegExp = /(\$\([^\)]+\))/g;
+        const transformValueFromCodeColumnIndex: number = 1;
+        const transformValueFromPipelineColumnIndex: number = 2;
+
         const variableHighlightSplit: string[] =
-            treeItem.underlyingItem.data.value.split(regex);
+            columnIndex === transformValueFromCodeColumnIndex
+                ? treeItem.underlyingItem.data.transformValueFromCode.split(
+                      regex
+                  )
+                : columnIndex === transformValueFromPipelineColumnIndex
+                ? treeItem.underlyingItem.data.transformValueFromPipeline.split(
+                      regex
+                  )
+                : [];
         return (
             <SimpleTableCell
                 key={`transform-col-${columnIndex}-row-${rowIndex}`}
@@ -931,6 +953,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                             return (
                                                 <div
                                                     key={`transform-val-${columnIndex}-row-${rowIndex}-substr-${index}`}
+                                                    style={{
+                                                        border: treeItem.underlyingItem.data.hasDiscrepancy ? 'red 1px solid' : '',
+                                                    }}
                                                 >
                                                     <b>{valueSubstring}</b>
                                                 </div>
@@ -939,6 +964,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                             return (
                                                 <div
                                                     key={`transform-val-${columnIndex}-row-${rowIndex}-substr-${index}`}
+                                                    style={{
+                                                        border: treeItem.underlyingItem.data.hasDiscrepancy ? 'red 1px solid' : '',
+                                                    }}
                                                 >
                                                     {valueSubstring}
                                                 </div>
@@ -955,6 +983,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                             return (
                                                 <div
                                                     key={`transform-envval-${columnIndex}-row-${rowIndex}-substr-${index}`}
+                                                    style={{
+                                                        border: treeItem.underlyingItem.data.hasDiscrepancy ? 'red 1px solid' : '',
+                                                    }}
                                                 >
                                                     <b
                                                         style={{
@@ -969,6 +1000,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                             return (
                                                 <div
                                                     key={`transform-envval-${columnIndex}-row-${rowIndex}-substr-${index}`}
+                                                    style={{
+                                                        border: treeItem.underlyingItem.data.hasDiscrepancy ? 'red 1px solid' : '',
+                                                    }}
                                                 >
                                                     {valueSubstring}
                                                 </div>
@@ -1019,96 +1053,101 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         fromCode: boolean,
         branchShortName?: string
     ): Promise<void> {
+        const environmentVariableRegex: RegExp = /(\$\([^\)]+\))/g;
         const repositoryEnvironmentVariablesRootItems: Array<
             ITreeItem<ISearchResultRepositoryEnvironmentVariableItem>
         > = [];
         let repoHasEnvironmentVariables: boolean = false;
 
         if (this.currentProject != undefined) {
-            const environmentVariableRegex: RegExp = /(\$\([^\)]+\))/g;
-
-            const inlineTransforms: string | undefined =
-                await this.getTransforms(fromCode, branchShortName);
+            const inlineTransformsFromCode: string | undefined =
+                await this.getTransforms(true, branchShortName); //TODO: Change getTransforms to getTransformsFromCode/FromPipeline
+            const inlineTransformsFromPipeline: string | undefined =
+                await this.getTransforms(false);
 
             try {
-                if (inlineTransforms !== undefined) {
+                if (inlineTransformsFromCode !== undefined) {
                     if (this.environmentVariablesResponse === undefined) {
                         await this.loadEnvironmentVariables();
                     }
-                    const inlineTransformsParsed: any =
-                        JSON.parse(inlineTransforms);
+                    const inlineTransformsFromCodeParsed: any = JSON.parse(
+                        inlineTransformsFromCode
+                    );
+
+                    const inlineTransformsFromPipelineParsed: any =
+                        inlineTransformsFromPipeline !== undefined
+                            ? JSON.parse(inlineTransformsFromPipeline)
+                            : undefined;
+
                     for (const [appsetting, transform] of Object.entries(
-                        inlineTransformsParsed
+                        inlineTransformsFromCodeParsed
                     )) {
-                        const transformValue: string = (
+                        const transformFromCodeValue: string = (
                             transform as any
                         ).toString();
+                        const transformFromPipelineValue: string =
+                            inlineTransformsFromPipelineParsed[appsetting] ??
+                            '';
                         const repositoryEnvironmentVariablesTableItem: ITreeItem<ISearchResultRepositoryEnvironmentVariableItem> =
                             {
                                 childItems: [],
                                 data: {
                                     name: appsetting,
-                                    value: transformValue,
+                                    transformValueFromCode:
+                                        transformFromCodeValue,
+                                    transformValueFromPipeline:
+                                        transformFromPipelineValue,
                                     isRootItem: true,
+                                    hasDiscrepancy: transformFromCodeValue !== transformFromPipelineValue
                                 },
                                 expanded: true,
                             };
 
-                        const foundEnvironmentVariables: RegExpMatchArray | null =
-                            transformValue.match(environmentVariableRegex);
+                        const environmentVariablesInTransformValue: RegExpMatchArray | null =
+                            transformFromCodeValue.match(
+                                environmentVariableRegex
+                            );
                         if (
-                            foundEnvironmentVariables !== undefined &&
-                            foundEnvironmentVariables !== null
+                            environmentVariablesInTransformValue !==
+                                undefined &&
+                            environmentVariablesInTransformValue !== null
                         ) {
                             repoHasEnvironmentVariables = true;
-                            for (const environmentVariableGroup of this
-                                .environmentVariablesResponse.value) {
-                                let environmentTransformValue: string =
-                                    transformValue;
+                        }
 
-                                for (const foundEnvironmentVariable of foundEnvironmentVariables) {
-                                    const cleanEnvironmentVariable: string =
-                                        foundEnvironmentVariable.substring(
-                                            2,
-                                            foundEnvironmentVariable.length - 1
-                                        );
-                                    for (const [
-                                        environmentVariableName,
-                                        environmentVariableValue,
-                                    ] of Object.entries(
-                                        environmentVariableGroup.variables
-                                    )) {
-                                        if (
-                                            environmentVariableName ===
-                                            cleanEnvironmentVariable
-                                        ) {
-                                            const customRegex: RegExp =
-                                                new RegExp(
-                                                    `\\$\\(${cleanEnvironmentVariable}\\)`,
-                                                    'g'
-                                                );
-                                            environmentTransformValue =
-                                                environmentTransformValue.replace(
-                                                    customRegex,
-                                                    (
-                                                        environmentVariableValue as any
-                                                    ).value
-                                                );
-                                            break;
-                                        }
-                                    }
-                                }
+                        for (const environmentVariableGroup of this
+                            .environmentVariablesResponse.value) {
+                            let environmentTransformFromCodeValue: string =
+                                transformFromCodeValue;
+                            let environmentTransformFromPipelineValue: string =
+                                transformFromPipelineValue;
 
-                                repositoryEnvironmentVariablesTableItem.childItems!.push(
-                                    {
-                                        data: {
-                                            isRootItem: false,
-                                            name: environmentVariableGroup.name,
-                                            value: environmentTransformValue,
-                                        },
-                                    }
+                            environmentTransformFromCodeValue =
+                                this.findReplaceEnvironmentVariables(
+                                    environmentVariableGroup,
+                                    environmentTransformFromCodeValue,
+                                    environmentVariableRegex
                                 );
-                            }
+                            environmentTransformFromPipelineValue =
+                                this.findReplaceEnvironmentVariables(
+                                    environmentVariableGroup,
+                                    environmentTransformFromPipelineValue,
+                                    environmentVariableRegex
+                                );
+
+                            repositoryEnvironmentVariablesTableItem.childItems!.push(
+                                {
+                                    data: {
+                                        isRootItem: false,
+                                        name: environmentVariableGroup.name,
+                                        transformValueFromCode:
+                                            environmentTransformFromCodeValue,
+                                        transformValueFromPipeline:
+                                            environmentTransformFromPipelineValue,
+                                        hasDiscrepancy: environmentTransformFromCodeValue !== environmentTransformFromPipelineValue
+                                    },
+                                }
+                            );
                         }
 
                         repositoryEnvironmentVariablesRootItems.push(
@@ -1137,6 +1176,46 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
             repositoryHasEnvironmentVariablesFromPipelineObservable.value =
                 repoHasEnvironmentVariables;
         }
+    }
+
+    private findReplaceEnvironmentVariables(
+        environment: any,
+        environmentTransformValue: string,
+        environmentVariableRegex: RegExp
+    ): string {
+        let returnEnvironmentTransformedValue = environmentTransformValue;
+        const environmentVariablesInTransformValue: RegExpMatchArray | null =
+            environmentTransformValue.match(environmentVariableRegex);
+        if (
+            environmentVariablesInTransformValue !== undefined &&
+            environmentVariablesInTransformValue !== null
+        ) {
+            for (const foundEnvironmentVariable of environmentVariablesInTransformValue) {
+                const cleanEnvironmentVariable: string =
+                    foundEnvironmentVariable.substring(
+                        2,
+                        foundEnvironmentVariable.length - 1
+                    );
+                for (const [
+                    environmentVariableName,
+                    environmentVariableValue,
+                ] of Object.entries(environment.variables)) {
+                    if (environmentVariableName === cleanEnvironmentVariable) {
+                        const customRegex: RegExp = new RegExp(
+                            `\\$\\(${cleanEnvironmentVariable}\\)`,
+                            'g'
+                        );
+                        returnEnvironmentTransformedValue =
+                            returnEnvironmentTransformedValue.replace(
+                                customRegex,
+                                (environmentVariableValue as any).value
+                            );
+                        break;
+                    }
+                }
+            }
+        }
+        return returnEnvironmentTransformedValue;
     }
 
     private async getTransforms(
