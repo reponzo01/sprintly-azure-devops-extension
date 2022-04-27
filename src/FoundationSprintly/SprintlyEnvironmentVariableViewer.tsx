@@ -211,6 +211,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
             this.getJsonTransformsFromCode.bind(this);
         this.getJsonTransformsFromPipeline =
             this.getJsonTransformsFromPipeline.bind(this);
+        this.onSelectBranchAction = this.onSelectBranchAction.bind(this);
 
         this.columns = [
             {
@@ -238,7 +239,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
             },
             {
                 id: 'transformValueFromCode',
-                name: 'Transform Value From Code',
+                name: 'Transform from transforms.json',
                 onSize: this.onSizeTreeColumn,
                 renderCell:
                     this.renderRepositoryEnvironmentVariableTransformValueCell,
@@ -315,7 +316,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         );
 
         if (showAllEnvironmentVariablesObservable.value) {
-            await this.loadEnvironmentVariables();
+            await this.loadAllEnvironmentVariables();
         }
 
         repositoriesToProcess = Common.getSavedRepositoriesToView(
@@ -330,7 +331,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         }
     }
 
-    private async loadEnvironmentVariables(): Promise<void> {
+    private async loadAllEnvironmentVariables(): Promise<void> {
         if (this.currentProject !== undefined) {
             let environmentVariableGroupIds: string = '';
             for (const groupId of Common.ALLOWED_ENVIRONMENT_VARIABLE_GROUP_IDS) {
@@ -584,7 +585,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                         {!loadingRepositoryObservable.value &&
                             this.state.repositoryListSelection.selectedCount !==
                                 0 &&
-                            this.state.repositoryEnvironmentVariablesFromCodeItemProvider.length === 0 && (
+                            this.state
+                                .repositoryEnvironmentVariablesFromCodeItemProvider
+                                .length === 0 && (
                                 <Page>
                                     <div className='page-content'>
                                         This repository does not have any inline
@@ -675,18 +678,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                                                 branchInfo.name
                                                             )
                                                     )}
-                                                    onSelect={async (
-                                                        event: React.SyntheticEvent<HTMLElement>,
-                                                        item: IListBoxItem<{}>
-                                                    ) => {
-                                                        loadingRepositoryObservable.value =
-                                                            true;
-                                                        await this.loadInlineTransforms(
-                                                            item.text!
-                                                        );
-                                                        loadingRepositoryObservable.value =
-                                                            false;
-                                                    }}
+                                                    onSelect={this.onSelectBranchAction}
                                                 />
                                                 <Tree<ISearchResultRepositoryEnvironmentVariableItem>
                                                     columns={
@@ -1060,7 +1052,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
             try {
                 if (inlineTransformsFromCode !== undefined) {
                     if (this.environmentVariablesResponse === undefined) {
-                        await this.loadEnvironmentVariables();
+                        await this.loadAllEnvironmentVariables();
                     }
                     const inlineTransformsFromCodeParsed: any = JSON.parse(
                         inlineTransformsFromCode
@@ -1091,6 +1083,31 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                         repositoryEnvironmentVariablesRootItems.push(
                             repositoryEnvironmentVariablesTableItem
                         );
+                    }
+
+                    console.log(inlineTransformsFromPipelineParsed);
+                    for (const [appsetting, transform] of Object.entries(
+                        inlineTransformsFromPipelineParsed
+                    )) {
+                        const transformFromPipelineValue: string = (
+                            transform as any
+                        ).toString();
+
+                        const transformFromCodeValue: string =
+                            inlineTransformsFromCodeParsed[appsetting] ?? '';
+
+                        if (transformFromCodeValue === '') {
+                            const repositoryEnvironmentVariablesTableItem: ITreeItem<ISearchResultRepositoryEnvironmentVariableItem> =
+                                this.buildSingleTransformTreeItem(
+                                    appsetting,
+                                    transformFromCodeValue,
+                                    transformFromPipelineValue
+                                );
+
+                            repositoryEnvironmentVariablesRootItems.push(
+                                repositoryEnvironmentVariablesTableItem
+                            );
+                        }
                     }
                 }
             } catch (err) {
@@ -1125,6 +1142,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
 
         for (const environmentVariableGroup of this.environmentVariablesResponse
             .value) {
+            //TODO: this now needs to come not from the global env vars, but the ones in the release snapshot
             let environmentTransformFromCodeValue: string =
                 transformFromCodeValue;
             let environmentTransformFromPipelineValue: string =
@@ -1284,6 +1302,15 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         ).value = width;
     }
 
+    private async onSelectBranchAction(
+        event: React.SyntheticEvent<HTMLElement>,
+        item: IListBoxItem<{}>
+    ) {
+        loadingRepositoryObservable.value = true;
+        await this.loadInlineTransforms(item.text!);
+        loadingRepositoryObservable.value = false;
+    }
+
     public render(): JSX.Element {
         return (
             <Observer
@@ -1313,7 +1340,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                         this.environmentVariablesResponse ===
                                         undefined
                                     ) {
-                                        this.loadEnvironmentVariables();
+                                        this.loadAllEnvironmentVariables();
                                     }
                                 }}
                             />
