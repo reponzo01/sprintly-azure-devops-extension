@@ -82,7 +82,6 @@ export interface ISprintlyEnvironmentVariableViewerState {
     repositoryListSelection: ListSelection;
     repositoryListSelectedItemObservable: ObservableValue<GitRepository>;
     repositoryEnvironmentVariablesFromCodeItemProvider: ITreeItemProvider<ISearchResultRepositoryEnvironmentVariableItem>;
-    repositoryEnvironmentVariablesFromPipelineItemProvider: ITreeItemProvider<ISearchResultRepositoryEnvironmentVariableItem>;
 }
 
 export interface ISearchResultEnvironmentVariableValue {
@@ -109,8 +108,6 @@ const totalRepositoriesToProcessObservable: ObservableValue<number> =
 const showAllEnvironmentVariablesObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(true);
 const repositoryHasEnvironmentVariablesFromCodeObservable: ObservableValue<boolean> =
-    new ObservableValue<boolean>(false);
-const repositoryHasEnvironmentVariablesFromPipelineObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const loadingRepositoryObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
@@ -142,7 +139,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     private buildDefinitions: BuildDefinition[];
     private accessToken: string = '';
     private currentProject: IProjectInfo | undefined;
-    private repositoryBranchSelection = new DropdownSelection();
+    private repositoryBranchSelection: DropdownSelection = new DropdownSelection();
     private selectedRepositoryBranchesInfo:
         | Common.IRepositoryBranchInfo
         | undefined;
@@ -211,11 +208,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 this
             );
         this.loadInlineTransforms = this.loadInlineTransforms.bind(this);
-        this.loadInlineTransformsFromCode =
-            this.loadInlineTransformsFromCode.bind(this);
-        this.loadInlineTransformsFromPipeline =
-            this.loadInlineTransformsFromPipeline.bind(this);
-        this.getTransforms = this.getTransforms.bind(this);
+        this.getJsonTransformsFromCode = this.getJsonTransformsFromCode.bind(this);
+        this.getJsonTransformsFromPipeline =
+            this.getJsonTransformsFromPipeline.bind(this);
 
         this.columns = [
             {
@@ -247,7 +242,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 onSize: this.onSizeTreeColumn,
                 renderCell:
                     this.renderRepositoryEnvironmentVariableTransformValueCell,
-                width: new ObservableValue<number>(-80),
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'transformValueFromPipeline',
@@ -255,7 +250,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 onSize: this.onSizeTreeColumn,
                 renderCell:
                     this.renderRepositoryEnvironmentVariableTransformValueCell,
-                width: new ObservableValue<number>(-80),
+                width: new ObservableValue<number>(-40),
             },
         ];
 
@@ -277,10 +272,6 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
             }),
             repositoryListSelectedItemObservable: new ObservableValue<any>({}),
             repositoryEnvironmentVariablesFromCodeItemProvider:
-                new TreeItemProvider<ISearchResultRepositoryEnvironmentVariableItem>(
-                    []
-                ),
-            repositoryEnvironmentVariablesFromPipelineItemProvider:
                 new TreeItemProvider<ISearchResultRepositoryEnvironmentVariableItem>(
                     []
                 ),
@@ -572,15 +563,11 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 repositoryHasEnvironmentFromCodeVariables={
                     repositoryHasEnvironmentVariablesFromCodeObservable
                 }
-                repositoryHasEnvironmentFromPipelineVariables={
-                    repositoryHasEnvironmentVariablesFromPipelineObservable
-                }
                 loadingRepository={loadingRepositoryObservable}
             >
                 {(observerProps: {
                     selectedItem: GitRepository;
                     repositoryHasEnvironmentFromCodeVariables: boolean;
-                    repositoryHasEnvironmentFromPipelineVariables: boolean;
                     loadingRepository: boolean;
                 }) => (
                     <Page className='flex-grow single-layer-details'>
@@ -614,26 +601,12 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                             )}
                         {!loadingRepositoryObservable.value &&
                             this.state.repositoryListSelection.selectedCount !==
-                                0 &&
-                            observerProps.repositoryHasEnvironmentFromPipelineVariables ===
-                                false && (
-                                <Page>
-                                    <div className='page-content'>
-                                        This repository does not have any inline
-                                        transforms or does not have an
-                                        <code>inlineTransforms</code> variable
-                                        in the pipeline.
-                                    </div>
-                                </Page>
-                            )}
-                        {!loadingRepositoryObservable.value &&
-                            this.state.repositoryListSelection.selectedCount !==
                                 0 && (
                                 <Page>
                                     <div className='page-content'>
                                         <Card
                                             titleProps={{
-                                                text: `${this.state.repositoryListSelectedItemObservable.value.name} (transforms.json)`,
+                                                text: `${this.state.repositoryListSelectedItemObservable.value.name}`,
                                             }}
                                             headerDescriptionProps={{
                                                 text: (
@@ -644,14 +617,57 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                                             /transforms.json
                                                         </code>{' '}
                                                         file on the selected{' '}
-                                                        branch.
+                                                        branch compared with the{' '}
+                                                        <code>
+                                                            inlineTransforms
+                                                        </code>{' '}
+                                                        variable on the release
+                                                        pipeline.
                                                     </div>
                                                 ),
                                             }}
                                             className='bolt-table-card bolt-card-white'
                                         >
                                             <div className='master-row-content'>
+                                                <div className='flex-row'>
+                                                    <div
+                                                        style={{
+                                                            color: '#FF3E3E',
+                                                            fontWeight: 'bold',
+                                                        }}
+                                                    >
+                                                        $(VariableName)
+                                                    </div>
+                                                    <div>
+                                                        &nbsp; = This means this
+                                                        variable does not exist
+                                                        in this environment
+                                                    </div>
+                                                </div>
+                                                <div className='flex-row'>
+                                                    <div
+                                                        style={{
+                                                            border: 'red 1px solid',
+                                                        }}
+                                                    >
+                                                        TransformValue
+                                                    </div>
+                                                    <div>
+                                                        &nbsp; = This means a
+                                                        discrepancy between{' '}
+                                                        <code>
+                                                            transforms.json
+                                                        </code>{' '}
+                                                        and the{' '}
+                                                        <code>
+                                                            inlineTransforms
+                                                        </code>{' '}
+                                                        variable from the
+                                                        release pipeline.
+                                                    </div>
+                                                </div>
                                                 <Dropdown
+                                                    className='page-content-top'
                                                     ariaLabel='Button Dropdown'
                                                     placeholder='Select a branch'
                                                     selection={
@@ -670,7 +686,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                                     ) => {
                                                         loadingRepositoryObservable.value =
                                                             true;
-                                                        await this.loadInlineTransformsFromCode(
+                                                        await this.loadInlineTransforms(
                                                             item.text!
                                                         );
                                                         loadingRepositoryObservable.value =
@@ -694,53 +710,6 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                                         treeItem: ITreeItemEx<ISearchResultRepositoryEnvironmentVariableItem>
                                                     ) => {
                                                         this.state.repositoryEnvironmentVariablesFromCodeItemProvider.toggle(
-                                                            treeItem.underlyingItem
-                                                        );
-                                                    }}
-                                                    selectableText={true}
-                                                    scrollable={true}
-                                                />
-                                            </div>
-                                        </Card>
-                                    </div>
-                                    <div className='page-content'>
-                                        <Card
-                                            titleProps={{
-                                                text: `${this.state.repositoryListSelectedItemObservable.value.name} (Pipeline inlineTransforms)`,
-                                            }}
-                                            headerDescriptionProps={{
-                                                text: (
-                                                    <div>
-                                                        These transforms are
-                                                        sourced from the{' '}
-                                                        <code>
-                                                            inlineTransforms
-                                                        </code>{' '}
-                                                        variable on the release
-                                                        pipeline.
-                                                    </div>
-                                                ),
-                                            }}
-                                            className='bolt-table-card bolt-card-white'
-                                        >
-                                            <div className='master-row-content'>
-                                                <Tree<ISearchResultRepositoryEnvironmentVariableItem>
-                                                    columns={
-                                                        this
-                                                            .repositoryTreeColumns
-                                                    }
-                                                    itemProvider={
-                                                        this.state
-                                                            .repositoryEnvironmentVariablesFromPipelineItemProvider
-                                                    }
-                                                    onToggle={(
-                                                        event: React.SyntheticEvent<
-                                                            HTMLElement,
-                                                            Event
-                                                        >,
-                                                        treeItem: ITreeItemEx<ISearchResultRepositoryEnvironmentVariableItem>
-                                                    ) => {
-                                                        this.state.repositoryEnvironmentVariablesFromPipelineItemProvider.toggle(
                                                             treeItem.underlyingItem
                                                         );
                                                     }}
@@ -896,9 +865,11 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                     className='icon-margin'
                                     style={{ color: '#0081E3' }}
                                 ></Icon>
-                                <span className='icon-margin'>
-                                    {treeItem.underlyingItem.data.name}
-                                </span>
+                                <Tooltip overflowOnly={true}>
+                                    <span className='icon-margin text-ellipsis'>
+                                        {treeItem.underlyingItem.data.name}
+                                    </span>
+                                </Tooltip>
                             </>
                         ) : (
                             <>
@@ -909,7 +880,11 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                         marginLeft: `${treeItem.depth * 16}px`,
                                     }}
                                 ></Icon>
-                                {treeItem.underlyingItem.data.name}
+                                <Tooltip overflowOnly={true}>
+                                    <div className='text-ellipsis'>
+                                        {treeItem.underlyingItem.data.name}
+                                    </div>
+                                </Tooltip>
                             </>
                         )}
                     </>
@@ -944,75 +919,113 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 columnIndex={columnIndex}
                 tableColumn={treeColumn}
                 children={
-                    <>
-                        {treeItem.depth === 0 ? (
-                            <>
-                                {variableHighlightSplit.map(
-                                    (valueSubstring: string, index: number) => {
-                                        if (valueSubstring.startsWith('$(')) {
-                                            return (
-                                                <div
-                                                    key={`transform-val-${columnIndex}-row-${rowIndex}-substr-${index}`}
-                                                    style={{
-                                                        border: treeItem.underlyingItem.data.hasDiscrepancy ? 'red 1px solid' : '',
-                                                    }}
-                                                >
-                                                    <b>{valueSubstring}</b>
-                                                </div>
-                                            );
-                                        } else {
-                                            return (
-                                                <div
-                                                    key={`transform-val-${columnIndex}-row-${rowIndex}-substr-${index}`}
-                                                    style={{
-                                                        border: treeItem.underlyingItem.data.hasDiscrepancy ? 'red 1px solid' : '',
-                                                    }}
-                                                >
-                                                    {valueSubstring}
-                                                </div>
-                                            );
-                                        }
-                                    }
-                                )}
-                            </>
-                        ) : (
-                            <>
-                                {variableHighlightSplit.map(
-                                    (valueSubstring: string, index: number) => {
-                                        if (valueSubstring.startsWith('$(')) {
-                                            return (
-                                                <div
-                                                    key={`transform-envval-${columnIndex}-row-${rowIndex}-substr-${index}`}
-                                                    style={{
-                                                        border: treeItem.underlyingItem.data.hasDiscrepancy ? 'red 1px solid' : '',
-                                                    }}
-                                                >
-                                                    <b
+                    <Tooltip overflowOnly={true}>
+                        <div className='text-ellipsis flex-row'>
+                            {treeItem.depth === 0 ? (
+                                <>
+                                    {variableHighlightSplit.map(
+                                        (
+                                            valueSubstring: string,
+                                            index: number
+                                        ) => {
+                                            if (
+                                                valueSubstring.startsWith('$(')
+                                            ) {
+                                                return (
+                                                    <div
+                                                        key={`transform-val-${columnIndex}-row-${rowIndex}-substr-${index}`}
                                                         style={{
-                                                            color: '#FF3E3E',
+                                                            border: treeItem
+                                                                .underlyingItem
+                                                                .data
+                                                                .hasDiscrepancy
+                                                                ? 'red 1px solid'
+                                                                : '',
+                                                        }}
+                                                    >
+                                                        <b>{valueSubstring}</b>
+                                                    </div>
+                                                );
+                                            } else {
+                                                return (
+                                                    <div
+                                                        key={`transform-val-${columnIndex}-row-${rowIndex}-substr-${index}`}
+                                                        style={{
+                                                            border:
+                                                                valueSubstring.length >
+                                                                    0 &&
+                                                                treeItem
+                                                                    .underlyingItem
+                                                                    .data
+                                                                    .hasDiscrepancy
+                                                                    ? 'red 1px solid'
+                                                                    : '',
                                                         }}
                                                     >
                                                         {valueSubstring}
-                                                    </b>
-                                                </div>
-                                            );
-                                        } else {
-                                            return (
-                                                <div
-                                                    key={`transform-envval-${columnIndex}-row-${rowIndex}-substr-${index}`}
-                                                    style={{
-                                                        border: treeItem.underlyingItem.data.hasDiscrepancy ? 'red 1px solid' : '',
-                                                    }}
-                                                >
-                                                    {valueSubstring}
-                                                </div>
-                                            );
+                                                    </div>
+                                                );
+                                            }
                                         }
-                                    }
-                                )}
-                            </>
-                        )}
-                    </>
+                                    )}
+                                </>
+                            ) : (
+                                <>
+                                    {variableHighlightSplit.map(
+                                        (
+                                            valueSubstring: string,
+                                            index: number
+                                        ) => {
+                                            if (
+                                                valueSubstring.startsWith('$(')
+                                            ) {
+                                                return (
+                                                    <div
+                                                        key={`transform-envval-${columnIndex}-row-${rowIndex}-substr-${index}`}
+                                                        style={{
+                                                            border: treeItem
+                                                                .underlyingItem
+                                                                .data
+                                                                .hasDiscrepancy
+                                                                ? 'red 1px solid'
+                                                                : '',
+                                                        }}
+                                                    >
+                                                        <b
+                                                            style={{
+                                                                color: '#FF3E3E',
+                                                            }}
+                                                        >
+                                                            {valueSubstring}
+                                                        </b>
+                                                    </div>
+                                                );
+                                            } else {
+                                                return (
+                                                    <div
+                                                        key={`transform-envval-${columnIndex}-row-${rowIndex}-substr-${index}`}
+                                                        style={{
+                                                            border:
+                                                                valueSubstring.length >
+                                                                    0 &&
+                                                                treeItem
+                                                                    .underlyingItem
+                                                                    .data
+                                                                    .hasDiscrepancy
+                                                                    ? 'red 1px solid'
+                                                                    : '',
+                                                        }}
+                                                    >
+                                                        {valueSubstring}
+                                                    </div>
+                                                );
+                                            }
+                                        }
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </Tooltip>
                 }
             ></SimpleTableCell>
         );
@@ -1028,42 +1041,28 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
 
         this.repositoryBranchSelection.select(
             this.selectedRepositoryBranchesInfo.allBranchesAndTags.findIndex(
-                (branch) =>
+                (branch: GitRef) =>
                     Common.getBranchShortName(branch.name) === Common.DEVELOP
             )
         );
 
-        await this.loadInlineTransformsFromCode(Common.DEVELOP);
-        await this.loadInlineTransformsFromPipeline();
+        await this.loadInlineTransforms(Common.DEVELOP);
 
         loadingRepositoryObservable.value = false;
     }
 
-    private async loadInlineTransformsFromCode(
-        branchShortName: string
-    ): Promise<void> {
-        await this.loadInlineTransforms(true, branchShortName);
-    }
-
-    private async loadInlineTransformsFromPipeline(): Promise<void> {
-        await this.loadInlineTransforms(false);
-    }
-
-    private async loadInlineTransforms(
-        fromCode: boolean,
-        branchShortName?: string
-    ): Promise<void> {
+    private async loadInlineTransforms(branchShortName: string): Promise<void> {
         const environmentVariableRegex: RegExp = /(\$\([^\)]+\))/g;
         const repositoryEnvironmentVariablesRootItems: Array<
             ITreeItem<ISearchResultRepositoryEnvironmentVariableItem>
         > = [];
         let repoHasEnvironmentVariables: boolean = false;
 
-        if (this.currentProject != undefined) {
+        if (this.currentProject !== undefined) {
             const inlineTransformsFromCode: string | undefined =
-                await this.getTransforms(true, branchShortName); //TODO: Change getTransforms to getTransformsFromCode/FromPipeline
+                await this.getJsonTransformsFromCode(branchShortName);
             const inlineTransformsFromPipeline: string | undefined =
-                await this.getTransforms(false);
+                await this.getJsonTransformsFromPipeline();
 
             try {
                 if (inlineTransformsFromCode !== undefined) {
@@ -1081,7 +1080,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
 
                     for (const [appsetting, transform] of Object.entries(
                         inlineTransformsFromCodeParsed
-                    )) {
+                    )) { //TODO: May have to extract this to a method
                         const transformFromCodeValue: string = (
                             transform as any
                         ).toString();
@@ -1098,7 +1097,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                     transformValueFromPipeline:
                                         transformFromPipelineValue,
                                     isRootItem: true,
-                                    hasDiscrepancy: transformFromCodeValue !== transformFromPipelineValue
+                                    hasDiscrepancy:
+                                        transformFromCodeValue !==
+                                        transformFromPipelineValue,
                                 },
                                 expanded: true,
                             };
@@ -1112,7 +1113,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                 undefined &&
                             environmentVariablesInTransformValue !== null
                         ) {
-                            repoHasEnvironmentVariables = true;
+                            repoHasEnvironmentVariables = true; //TODO: This is not extractable yet
                         }
 
                         for (const environmentVariableGroup of this
@@ -1144,38 +1145,31 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                             environmentTransformFromCodeValue,
                                         transformValueFromPipeline:
                                             environmentTransformFromPipelineValue,
-                                        hasDiscrepancy: environmentTransformFromCodeValue !== environmentTransformFromPipelineValue
+                                        hasDiscrepancy:
+                                            environmentTransformFromCodeValue !==
+                                            environmentTransformFromPipelineValue,
                                     },
                                 }
                             );
                         }
 
+                        //TODO: have this extracted method return repositoryEnvironmentVariablesTableItem
+                        //then push to repositoryEnvironmentVariablesRootItems
                         repositoryEnvironmentVariablesRootItems.push(
                             repositoryEnvironmentVariablesTableItem
                         );
                     }
                 }
-            } catch (err) {}
+            } catch (err) {
+                console.error('Error retrieving transforms: ', err);
+            }
         }
-        if (fromCode) {
-            this.setState({
-                repositoryEnvironmentVariablesFromCodeItemProvider:
-                    new TreeItemProvider(
-                        repositoryEnvironmentVariablesRootItems
-                    ),
-            });
-            repositoryHasEnvironmentVariablesFromCodeObservable.value =
-                repoHasEnvironmentVariables;
-        } else {
-            this.setState({
-                repositoryEnvironmentVariablesFromPipelineItemProvider:
-                    new TreeItemProvider(
-                        repositoryEnvironmentVariablesRootItems
-                    ),
-            });
-            repositoryHasEnvironmentVariablesFromPipelineObservable.value =
-                repoHasEnvironmentVariables;
-        }
+        this.setState({
+            repositoryEnvironmentVariablesFromCodeItemProvider:
+                new TreeItemProvider(repositoryEnvironmentVariablesRootItems),
+        });
+        repositoryHasEnvironmentVariablesFromCodeObservable.value =
+            repoHasEnvironmentVariables;
     }
 
     private findReplaceEnvironmentVariables(
@@ -1183,7 +1177,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         environmentTransformValue: string,
         environmentVariableRegex: RegExp
     ): string {
-        let returnEnvironmentTransformedValue = environmentTransformValue;
+        let returnEnvironmentTransformedValue: string = environmentTransformValue;
         const environmentVariablesInTransformValue: RegExpMatchArray | null =
             environmentTransformValue.match(environmentVariableRegex);
         if (
@@ -1218,61 +1212,68 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         return returnEnvironmentTransformedValue;
     }
 
-    private async getTransforms(
-        fromCode: boolean,
-        branchShortName?: string
+    private async getJsonTransformsFromCode(
+        branchShortName: string
     ): Promise<string | undefined> {
         if (this.currentProject !== undefined) {
-            if (!fromCode) {
-                const releaseDefinitionIdForRepo: number =
-                    Common.getRepositoryReleaseDefinitionId(
-                        this.buildDefinitions,
-                        this.releaseDefinitions,
-                        this.state.repositoryListSelectedItemObservable.value.id
-                    );
-
-                if (releaseDefinitionIdForRepo > -1) {
-                    const releaseDefinition: ReleaseDefinition =
-                        await getClient(ReleaseRestClient).getReleaseDefinition(
-                            this.currentProject.id,
-                            releaseDefinitionIdForRepo
-                        );
-
-                    if (
-                        releaseDefinition.variables['inlineTransforms'] !==
+            if (branchShortName !== undefined) {
+                const baseBranch: GitVersionDescriptor = {
+                    version: branchShortName,
+                    versionOptions: GitVersionOptions.None,
+                    versionType: GitVersionType.Branch,
+                };
+                try {
+                    const inlineTransformResponse: GitItem = await getClient(
+                        GitRestClient
+                    ).getItem(
+                        this.state.repositoryListSelectedItemObservable.value
+                            .id,
+                        '/transforms.json',
+                        this.currentProject.id,
+                        undefined,
+                        undefined,
+                        undefined,
+                        undefined,
+                        undefined,
+                        baseBranch,
+                        true,
                         undefined
-                    ) {
-                        return releaseDefinition.variables['inlineTransforms']
-                            .value;
+                    );
+                    if (inlineTransformResponse !== undefined) {
+                        return inlineTransformResponse.content;
                     }
+                } catch (err) {
+                    console.error('Error retrieving transforms: ', err);
                 }
-            } else {
-                if (branchShortName !== undefined) {
-                    const baseBranch: GitVersionDescriptor = {
-                        version: branchShortName,
-                        versionOptions: GitVersionOptions.None,
-                        versionType: GitVersionType.Branch,
-                    };
-                    try {
-                        const inlineTransformResponse: GitItem =
-                            await getClient(GitRestClient).getItem(
-                                this.state.repositoryListSelectedItemObservable
-                                    .value.id,
-                                '/transforms.json',
-                                this.currentProject.id,
-                                undefined,
-                                undefined,
-                                undefined,
-                                undefined,
-                                undefined,
-                                baseBranch,
-                                true,
-                                undefined
-                            );
-                        if (inlineTransformResponse !== undefined) {
-                            return inlineTransformResponse.content;
-                        }
-                    } catch (err) {}
+            }
+        }
+
+        return undefined;
+    }
+
+    private async getJsonTransformsFromPipeline(): Promise<string | undefined> {
+        if (this.currentProject !== undefined) {
+            const releaseDefinitionIdForRepo: number =
+                Common.getRepositoryReleaseDefinitionId(
+                    this.buildDefinitions,
+                    this.releaseDefinitions,
+                    this.state.repositoryListSelectedItemObservable.value.id
+                );
+
+            if (releaseDefinitionIdForRepo > -1) {
+                const releaseDefinition: ReleaseDefinition = await getClient(
+                    ReleaseRestClient
+                ).getReleaseDefinition(
+                    this.currentProject.id,
+                    releaseDefinitionIdForRepo
+                );
+
+                if (
+                    releaseDefinition.variables['inlineTransforms'] !==
+                    undefined
+                ) {
+                    return releaseDefinition.variables['inlineTransforms']
+                        .value;
                 }
             }
         }
