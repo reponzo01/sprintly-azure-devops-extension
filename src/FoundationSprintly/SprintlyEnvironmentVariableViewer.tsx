@@ -107,8 +107,6 @@ const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
 const showAllEnvironmentVariablesObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(true);
-const repositoryHasEnvironmentVariablesFromCodeObservable: ObservableValue<boolean> =
-    new ObservableValue<boolean>(false);
 const loadingRepositoryObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 //#endregion "Observables"
@@ -139,7 +137,8 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     private buildDefinitions: BuildDefinition[];
     private accessToken: string = '';
     private currentProject: IProjectInfo | undefined;
-    private repositoryBranchSelection: DropdownSelection = new DropdownSelection();
+    private repositoryBranchSelection: DropdownSelection =
+        new DropdownSelection();
     private selectedRepositoryBranchesInfo:
         | Common.IRepositoryBranchInfo
         | undefined;
@@ -208,7 +207,8 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 this
             );
         this.loadInlineTransforms = this.loadInlineTransforms.bind(this);
-        this.getJsonTransformsFromCode = this.getJsonTransformsFromCode.bind(this);
+        this.getJsonTransformsFromCode =
+            this.getJsonTransformsFromCode.bind(this);
         this.getJsonTransformsFromPipeline =
             this.getJsonTransformsFromPipeline.bind(this);
 
@@ -560,14 +560,10 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         return (
             <Observer
                 selectedItem={this.state.repositoryListSelectedItemObservable}
-                repositoryHasEnvironmentFromCodeVariables={
-                    repositoryHasEnvironmentVariablesFromCodeObservable
-                }
                 loadingRepository={loadingRepositoryObservable}
             >
                 {(observerProps: {
                     selectedItem: GitRepository;
-                    repositoryHasEnvironmentFromCodeVariables: boolean;
                     loadingRepository: boolean;
                 }) => (
                     <Page className='flex-grow single-layer-details'>
@@ -588,8 +584,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                         {!loadingRepositoryObservable.value &&
                             this.state.repositoryListSelection.selectedCount !==
                                 0 &&
-                            observerProps.repositoryHasEnvironmentFromCodeVariables ===
-                                false && (
+                            this.state.repositoryEnvironmentVariablesFromCodeItemProvider.length === 0 && (
                                 <Page>
                                     <div className='page-content'>
                                         This repository does not have any inline
@@ -653,7 +648,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                                         TransformValue
                                                     </div>
                                                     <div>
-                                                        &nbsp; = This means a
+                                                        &nbsp; = This shows a
                                                         discrepancy between{' '}
                                                         <code>
                                                             transforms.json
@@ -1052,11 +1047,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     }
 
     private async loadInlineTransforms(branchShortName: string): Promise<void> {
-        const environmentVariableRegex: RegExp = /(\$\([^\)]+\))/g;
         const repositoryEnvironmentVariablesRootItems: Array<
             ITreeItem<ISearchResultRepositoryEnvironmentVariableItem>
         > = [];
-        let repoHasEnvironmentVariables: boolean = false;
 
         if (this.currentProject !== undefined) {
             const inlineTransformsFromCode: string | undefined =
@@ -1080,81 +1073,21 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
 
                     for (const [appsetting, transform] of Object.entries(
                         inlineTransformsFromCodeParsed
-                    )) { //TODO: May have to extract this to a method
+                    )) {
                         const transformFromCodeValue: string = (
                             transform as any
                         ).toString();
                         const transformFromPipelineValue: string =
                             inlineTransformsFromPipelineParsed[appsetting] ??
                             '';
+
                         const repositoryEnvironmentVariablesTableItem: ITreeItem<ISearchResultRepositoryEnvironmentVariableItem> =
-                            {
-                                childItems: [],
-                                data: {
-                                    name: appsetting,
-                                    transformValueFromCode:
-                                        transformFromCodeValue,
-                                    transformValueFromPipeline:
-                                        transformFromPipelineValue,
-                                    isRootItem: true,
-                                    hasDiscrepancy:
-                                        transformFromCodeValue !==
-                                        transformFromPipelineValue,
-                                },
-                                expanded: true,
-                            };
-
-                        const environmentVariablesInTransformValue: RegExpMatchArray | null =
-                            transformFromCodeValue.match(
-                                environmentVariableRegex
+                            this.buildSingleTransformTreeItem(
+                                appsetting,
+                                transformFromCodeValue,
+                                transformFromPipelineValue
                             );
-                        if (
-                            environmentVariablesInTransformValue !==
-                                undefined &&
-                            environmentVariablesInTransformValue !== null
-                        ) {
-                            repoHasEnvironmentVariables = true; //TODO: This is not extractable yet
-                        }
 
-                        for (const environmentVariableGroup of this
-                            .environmentVariablesResponse.value) {
-                            let environmentTransformFromCodeValue: string =
-                                transformFromCodeValue;
-                            let environmentTransformFromPipelineValue: string =
-                                transformFromPipelineValue;
-
-                            environmentTransformFromCodeValue =
-                                this.findReplaceEnvironmentVariables(
-                                    environmentVariableGroup,
-                                    environmentTransformFromCodeValue,
-                                    environmentVariableRegex
-                                );
-                            environmentTransformFromPipelineValue =
-                                this.findReplaceEnvironmentVariables(
-                                    environmentVariableGroup,
-                                    environmentTransformFromPipelineValue,
-                                    environmentVariableRegex
-                                );
-
-                            repositoryEnvironmentVariablesTableItem.childItems!.push(
-                                {
-                                    data: {
-                                        isRootItem: false,
-                                        name: environmentVariableGroup.name,
-                                        transformValueFromCode:
-                                            environmentTransformFromCodeValue,
-                                        transformValueFromPipeline:
-                                            environmentTransformFromPipelineValue,
-                                        hasDiscrepancy:
-                                            environmentTransformFromCodeValue !==
-                                            environmentTransformFromPipelineValue,
-                                    },
-                                }
-                            );
-                        }
-
-                        //TODO: have this extracted method return repositoryEnvironmentVariablesTableItem
-                        //then push to repositoryEnvironmentVariablesRootItems
                         repositoryEnvironmentVariablesRootItems.push(
                             repositoryEnvironmentVariablesTableItem
                         );
@@ -1168,8 +1101,63 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
             repositoryEnvironmentVariablesFromCodeItemProvider:
                 new TreeItemProvider(repositoryEnvironmentVariablesRootItems),
         });
-        repositoryHasEnvironmentVariablesFromCodeObservable.value =
-            repoHasEnvironmentVariables;
+    }
+
+    private buildSingleTransformTreeItem(
+        appsetting: string,
+        transformFromCodeValue: string,
+        transformFromPipelineValue: string
+    ): ITreeItem<ISearchResultRepositoryEnvironmentVariableItem> {
+        const environmentVariableRegex: RegExp = /(\$\([^\)]+\))/g;
+        const repositoryEnvironmentVariablesTableItem: ITreeItem<ISearchResultRepositoryEnvironmentVariableItem> =
+            {
+                childItems: [],
+                data: {
+                    name: appsetting,
+                    transformValueFromCode: transformFromCodeValue,
+                    transformValueFromPipeline: transformFromPipelineValue,
+                    isRootItem: true,
+                    hasDiscrepancy:
+                        transformFromCodeValue !== transformFromPipelineValue,
+                },
+                expanded: true,
+            };
+
+        for (const environmentVariableGroup of this.environmentVariablesResponse
+            .value) {
+            let environmentTransformFromCodeValue: string =
+                transformFromCodeValue;
+            let environmentTransformFromPipelineValue: string =
+                transformFromPipelineValue;
+
+            environmentTransformFromCodeValue =
+                this.findReplaceEnvironmentVariables(
+                    environmentVariableGroup,
+                    environmentTransformFromCodeValue,
+                    environmentVariableRegex
+                );
+            environmentTransformFromPipelineValue =
+                this.findReplaceEnvironmentVariables(
+                    environmentVariableGroup,
+                    environmentTransformFromPipelineValue,
+                    environmentVariableRegex
+                );
+
+            repositoryEnvironmentVariablesTableItem.childItems!.push({
+                data: {
+                    isRootItem: false,
+                    name: environmentVariableGroup.name,
+                    transformValueFromCode: environmentTransformFromCodeValue,
+                    transformValueFromPipeline:
+                        environmentTransformFromPipelineValue,
+                    hasDiscrepancy:
+                        environmentTransformFromCodeValue !==
+                        environmentTransformFromPipelineValue,
+                },
+            });
+        }
+
+        return repositoryEnvironmentVariablesTableItem;
     }
 
     private findReplaceEnvironmentVariables(
@@ -1177,7 +1165,8 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         environmentTransformValue: string,
         environmentVariableRegex: RegExp
     ): string {
-        let returnEnvironmentTransformedValue: string = environmentTransformValue;
+        let returnEnvironmentTransformedValue: string =
+            environmentTransformValue;
         const environmentVariablesInTransformValue: RegExpMatchArray | null =
             environmentTransformValue.match(environmentVariableRegex);
         if (
