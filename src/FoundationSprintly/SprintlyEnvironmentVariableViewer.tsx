@@ -443,12 +443,17 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                             environmentVariableName === environmentVariable.name
                         ) {
                             variableIsSaved = true;
+                            const environmentVariableValueString:
+                                | string
+                                | undefined = environmentVariableValue.isSecret
+                                ? secretValueText
+                                : environmentVariableValue.value;
                             if (
                                 environmentVariableValue === undefined ||
-                                environmentVariableValue.value === undefined ||
+                                environmentVariableValueString === undefined ||
                                 environmentVariableValueSearchFilterString.length ===
                                     0 ||
-                                environmentVariableValue.value
+                                    environmentVariableValueString
                                     .toLowerCase()
                                     .includes(
                                         environmentVariableValueSearchFilterString.toLowerCase()
@@ -457,9 +462,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                 environmentVariable.values.push({
                                     environmentName:
                                         environmentVariableGroup.name,
-                                    value: environmentVariableValue.isSecret
-                                        ? secretValueText
-                                        : environmentVariableValue.value,
+                                    value: environmentVariableValueString,
                                 });
                             }
                         }
@@ -474,12 +477,17 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                     environmentVariableNameSearchFilterString.toLowerCase()
                                 )
                         ) {
+                            const environmentVariableValueString:
+                                | string
+                                | undefined = environmentVariableValue.isSecret
+                                ? secretValueText
+                                : environmentVariableValue.value;
                             if (
                                 environmentVariableValue === undefined ||
-                                environmentVariableValue.value === undefined ||
+                                environmentVariableValueString === undefined ||
                                 environmentVariableValueSearchFilterString.length ===
                                     0 ||
-                                environmentVariableValue.value
+                                    environmentVariableValueString
                                     .toLowerCase()
                                     .includes(
                                         environmentVariableValueSearchFilterString.toLowerCase()
@@ -491,9 +499,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                         {
                                             environmentName:
                                                 environmentVariableGroup.name,
-                                            value: environmentVariableValue.isSecret
-                                                ? secretValueText
-                                                : environmentVariableValue.value,
+                                            value: environmentVariableValueString,
                                         },
                                     ],
                                 });
