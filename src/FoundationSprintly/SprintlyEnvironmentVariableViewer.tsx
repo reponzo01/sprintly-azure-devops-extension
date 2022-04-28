@@ -70,6 +70,7 @@ import { DropdownSelection } from 'azure-devops-ui/Utilities/DropdownSelection';
 import { IListBoxItem } from 'azure-devops-ui/ListBox';
 import {
     Artifact,
+    ConfigurationVariableValue,
     Release,
     ReleaseDefinition,
     ReleaseRestClient,
@@ -776,7 +777,10 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 : this.state
                       .repositoryEnvironmentVariablesFromConfigSettingsItemProvider;
 
-        const title: string = transformsType === TransformsTypeEnum.AppSettings ? 'Transforms for appsettings.json' : 'Transforms for resource-level application configuration settings'
+        const title: string =
+            transformsType === TransformsTypeEnum.AppSettings
+                ? 'Transforms for appsettings.json'
+                : 'Transforms for resource-level application configuration settings';
 
         return (
             <>
@@ -811,9 +815,11 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                                 file on the selected branch
                                                 compared with the{' '}
                                                 <code>
-                                                    $({
+                                                    $(
+                                                    {
                                                         pipelineTransformsVariableName
-                                                    })
+                                                    }
+                                                    )
                                                 </code>{' '}
                                                 variable on the release
                                                 pipeline.
@@ -854,9 +860,11 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                                 </code>{' '}
                                                 and the{' '}
                                                 <code>
-                                                    $({
+                                                    $(
+                                                    {
                                                         pipelineTransformsVariableName
-                                                    })
+                                                    }
+                                                    )
                                                 </code>{' '}
                                                 variable from the release
                                                 pipeline.
@@ -864,24 +872,31 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                         </div>
                                         {transformsType ===
                                             TransformsTypeEnum.AppSettings && (
-                                            <Dropdown
-                                                className='page-content-top'
-                                                ariaLabel='Button Dropdown'
-                                                placeholder='Select a branch'
-                                                selection={
-                                                    this
-                                                        .repositoryBranchSelection
-                                                }
-                                                items={this.selectedRepositoryBranchesInfo!.allBranchesAndTags.map(
-                                                    (branchInfo: GitRef) =>
-                                                        Common.getBranchShortName(
-                                                            branchInfo.name
-                                                        )
-                                                )}
-                                                onSelect={
-                                                    this.onSelectBranchAction
-                                                }
-                                            />
+                                            <>
+                                                <div className='page-content-top'>
+                                                    Select a branch to use its
+                                                    latest build artifact.
+                                                </div>
+                                                <Dropdown
+                                                    className='page-content-top'
+                                                    ariaLabel='Button Dropdown'
+                                                    placeholder='Select a branch'
+                                                    selection={
+                                                        this
+                                                            .repositoryBranchSelection
+                                                    }
+                                                    items={this.selectedRepositoryBranchesInfo!.allBranchesAndTags.map(
+                                                        (branchInfo: GitRef) =>
+                                                            Common.getBranchShortName(
+                                                                branchInfo.name
+                                                            )
+                                                    )}
+                                                    onSelect={
+                                                        this
+                                                            .onSelectBranchAction
+                                                    }
+                                                />
+                                            </>
                                         )}
 
                                         <Tree<ISearchResultRepositoryEnvironmentVariableItem>
@@ -1386,9 +1401,21 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                     releaseDefinitionIdForRepo
                 );
 
-                if (releaseDefinition.variables[variableName] !== undefined) {
+                let pipelineVariableValues: ConfigurationVariableValue =
+                    releaseDefinition.variables[variableName];
+                if (pipelineVariableValues === undefined) {
+                    const tryLowerCaseVariableName: string =
+                        variableName.toLowerCase();
+                    pipelineVariableValues =
+                        releaseDefinition.variables[tryLowerCaseVariableName];
+                }
+
+                if (
+                    pipelineVariableValues !==
+                    undefined
+                ) {
                     const variableText: string =
-                        releaseDefinition.variables[variableName].value.trim();
+                    pipelineVariableValues.value.trim();
                     if (variableText[0] === '-') {
                         const variableTextClean: string =
                             variableText.substring(1, variableText.length);
@@ -1401,11 +1428,16 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                             if (transformVariableSplit[1] === undefined) {
                                 returnObject[transformVariableSplit[0]] = '';
                             } else {
-                                let cleanValue: string = transformVariableSplit[1].trim();
+                                let cleanValue: string =
+                                    transformVariableSplit[1].trim();
                                 if (cleanValue.length > 1) {
-                                    cleanValue = cleanValue.substring(1, cleanValue.length - 1);
+                                    cleanValue = cleanValue.substring(
+                                        1,
+                                        cleanValue.length - 1
+                                    );
                                 }
-                                returnObject[transformVariableSplit[0]] = cleanValue;
+                                returnObject[transformVariableSplit[0]] =
+                                    cleanValue;
                             }
                         }
                         return returnObject;
@@ -1441,11 +1473,12 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     private async loadBaseCommitAndEnvironmentVariablesFromSelectedBuildArtifact(
         branchName: string
     ): Promise<void> {
-        const releaseDefinitionForRepo: ReleaseDefinition | undefined = Common.getReleaseDefinitionForRepo(
-            this.buildDefinitions,
-            this.releaseDefinitions,
-            this.state.repositoryListSelectedItemObservable.value.id
-        );
+        const releaseDefinitionForRepo: ReleaseDefinition | undefined =
+            Common.getReleaseDefinitionForRepo(
+                this.buildDefinitions,
+                this.releaseDefinitions,
+                this.state.repositoryListSelectedItemObservable.value.id
+            );
 
         this.repositoryBranchBuildArtifactBaseCommit = '';
         this.repositoryBranchBuildArtifactEnvironmentVariables = [];
