@@ -33,6 +33,7 @@ import { TextField, TextFieldStyle } from 'azure-devops-ui/TextField';
 import { ITableColumn, SimpleTableCell, Table } from 'azure-devops-ui/Table';
 import { ArrayItemProvider } from 'azure-devops-ui/Utilities/Provider';
 import { Dialog } from 'azure-devops-ui/Dialog';
+import { Icon } from 'azure-devops-ui/Icon';
 
 export interface ISprintlySettingsState {
     userSettings?: Common.IUserSettings;
@@ -46,6 +47,8 @@ export interface ISprintlySettingsState {
 const addProjectRepositoriesLabelObservable: ObservableValue<string> =
     new ObservableValue<string>('');
 const isDeleteProjectLabelDialogOpenObservable: ObservableValue<boolean> =
+    new ObservableValue<boolean>(false);
+const isSaveSystemSettingsConfirmDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 
 // TODO: Clean up arrow functions for the cases in which I thought I
@@ -311,7 +314,7 @@ export default class SprintlySettings extends React.Component<
         }
     }
 
-    private onSaveUserSettingsData = (): void => {
+    private saveUserSettingsData = (): void => {
         this.setState({ ready: false });
 
         const repositoriesSelectedArray: Common.IAllowedEntity[] =
@@ -350,6 +353,11 @@ export default class SprintlySettings extends React.Component<
     };
 
     private onSaveSystemSettingsData = (): void => {
+        isSaveSystemSettingsConfirmDialogOpenObservable.value = true;
+    };
+
+    private saveSystemSettingsData = (): void => {
+        isSaveSystemSettingsConfirmDialogOpenObservable.value = false;
         this.setState({ ready: false });
 
         const userGroupsSelectedArray: Common.IAllowedEntity[] =
@@ -665,7 +673,7 @@ export default class SprintlySettings extends React.Component<
                             important: true,
                             text: 'Save User Settings',
                             isPrimary: true,
-                            onActivate: this.onSaveUserSettingsData,
+                            onActivate: this.saveUserSettingsData,
                             disabled: !this.state.ready,
                         },
                     ]}
@@ -836,8 +844,59 @@ export default class SprintlySettings extends React.Component<
         );
     }
 
+    private renderSaveSystemSettingsConfirmAction(): JSX.Element {
+        return (
+            <Observer
+                isSaveSystemSettingsConfirmDialogOpen={
+                    isSaveSystemSettingsConfirmDialogOpenObservable
+                }
+            >
+                {(observerProps: {
+                    isSaveSystemSettingsConfirmDialogOpen: boolean;
+                }) => {
+                    return observerProps.isSaveSystemSettingsConfirmDialogOpen ? (
+                        <Dialog
+                            titleProps={{ text: 'Save System Settings' }}
+                            footerButtonProps={[
+                                {
+                                    text: 'Cancel',
+                                    onClick:
+                                        this
+                                            .onDismissSaveSystemSettingsConfirmActionModal,
+                                },
+                                {
+                                    text: 'Save System Settings',
+                                    onClick: this.saveSystemSettingsData,
+                                    primary: true
+                                },
+                            ]}
+                            onDismiss={
+                                this
+                                    .onDismissSaveSystemSettingsConfirmActionModal
+                            }
+                        >
+                            <Icon
+                                ariaLabel='Warning'
+                                iconName='Warning'
+                                style={{ color: 'orange' }}
+                            />
+                            You are about to save System Settings. These
+                            settings are meant to be public settings and are
+                            visible and used by everyone. Whatever you save on
+                            this side can be used by anyone.
+                        </Dialog>
+                    ) : null;
+                }}
+            </Observer>
+        );
+    }
+
     private onDismissDeleteProjectLabelActionModal(): void {
         isDeleteProjectLabelDialogOpenObservable.value = false;
+    }
+
+    private onDismissSaveSystemSettingsConfirmActionModal(): void {
+        isSaveSystemSettingsConfirmDialogOpenObservable.value = false;
     }
 
     private deleteProjectLabelAction(): void {
@@ -985,6 +1044,7 @@ export default class SprintlySettings extends React.Component<
                         onRenderFarElement={this.renderSystemSettings}
                     />
                     {this.renderDeleteProjectRepositoriesAction()}
+                    {this.renderSaveSystemSettingsConfirmAction()}
                 </div>
             </Page>
         );
