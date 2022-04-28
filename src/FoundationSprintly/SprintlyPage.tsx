@@ -6,9 +6,9 @@ import {
     getClient,
     IExtensionDataManager,
     IGlobalMessagesService,
+    IProjectInfo,
 } from 'azure-devops-extension-api';
 
-import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
     GitRestClient,
     GitBaseVersionDescriptor,
@@ -60,19 +60,7 @@ const tagsObservable: ObservableValue<string[]> = new ObservableValue<string[]>(
 );
 const totalRepositoriesToProcessObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
-
-const nameColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const releaseNeededColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const tagsColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const createReleaseBranchColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-40);
 //#endregion "Observables"
-
-const userSettingsDataManagerKey: string = 'user-settings';
-const systemSettingsDataManagerKey: string = 'system-settings';
 
 let repositoriesToProcess: string[] = [];
 
@@ -108,27 +96,27 @@ export default class SprintlyPage extends React.Component<
                 name: 'Repository',
                 onSize: this.onSize,
                 renderCell: this.renderNameCell,
-                width: nameColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'releaseNeeded',
                 name: 'Release Needed?',
                 onSize: this.onSize,
                 renderCell: this.renderReleaseNeededCell,
-                width: releaseNeededColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'tags',
                 name: 'Tags',
                 onSize: this.onSize,
                 renderCell: this.renderTagsCell,
-                width: tagsColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'createReleaseBranch',
                 name: 'Create Release Branch',
                 renderCell: this.renderCreateReleaseBranchCell,
-                width: createReleaseBranchColumnWidthObservable,
+                width: new ObservableValue<number>(-40),
             },
         ];
 
@@ -145,12 +133,12 @@ export default class SprintlyPage extends React.Component<
         const userSettings: Common.IUserSettings | undefined =
             await Common.getUserSettings(
                 this.dataManager,
-                userSettingsDataManagerKey
+                Common.USER_SETTINGS_DATA_MANAGER_KEY
             );
         const systemSettings: Common.ISystemSettings | undefined =
             await Common.getSystemSettings(
                 this.dataManager,
-                systemSettingsDataManagerKey
+                Common.SYSTEM_SETTINGS_DATA_MANAGER_KEY
             );
 
         this.setState({
@@ -167,19 +155,19 @@ export default class SprintlyPage extends React.Component<
             repositoriesToProcess.length;
         if (repositoriesToProcess.length > 0) {
             await this.loadRepositoriesDisplayState(
-                await Common.getFilteredProjects()
+                await Common.getCurrentProject()
             );
         }
     }
 
     private async loadRepositoriesDisplayState(
-        projects: TeamProjectReference[]
+        currentProject: IProjectInfo | undefined
     ): Promise<void> {
         const reposExtended: Common.IGitRepositoryExtended[] = [];
-        for (const project of projects) {
+        if (currentProject !== undefined) {
             const filteredRepos: GitRepository[] =
                 await Common.getFilteredProjectRepositories(
-                    project.id,
+                    currentProject.id,
                     repositoriesToProcess
                 );
 

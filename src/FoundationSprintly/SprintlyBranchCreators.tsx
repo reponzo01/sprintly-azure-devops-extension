@@ -4,9 +4,9 @@ import {
     getClient,
     IExtensionDataManager,
     IGlobalMessagesService,
+    IProjectInfo,
     MessageBannerLevel,
 } from 'azure-devops-extension-api';
-import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
     GitBranchStats,
     GitRef,
@@ -25,7 +25,7 @@ import {
     ObservableArray,
     ObservableValue,
 } from 'azure-devops-ui/Core/Observable';
-import { Icon, IconSize } from 'azure-devops-ui/Icon';
+import { Icon } from 'azure-devops-ui/Icon';
 import { Link } from 'azure-devops-ui/Link';
 import {
     IListItemDetails,
@@ -78,20 +78,7 @@ const isDeleteSingleBranchDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const isDeleteBatchBranchDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
-const nameColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const latestCommitColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const statsColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const branchCreatorColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const deleteBranchColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-40);
 //#endregion "Observables"
-
-const userSettingsDataManagerKey: string = 'user-settings';
-const systemSettingsDataManagerKey: string = 'system-settings';
 
 let repositoriesToProcess: string[] = [];
 
@@ -185,21 +172,21 @@ export default class SprintlyBranchCreators extends React.Component<
                     ariaLabelAscending: 'Sorted A to Z',
                     ariaLabelDescending: 'Sorted Z to A',
                 },
-                width: nameColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'commit',
                 name: 'Latest Commit',
                 onSize: this.onSize,
                 renderCell: this.renderLatestCommitCell,
-                width: latestCommitColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'stats',
                 name: 'Behind Develop | Ahead Of Develop',
                 onSize: this.onSize,
                 renderCell: this.renderStatsCell,
-                width: statsColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'creator',
@@ -210,14 +197,14 @@ export default class SprintlyBranchCreators extends React.Component<
                     ariaLabelAscending: 'Sorted A to Z',
                     ariaLabelDescending: 'Sorted Z to A',
                 },
-                width: branchCreatorColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'delete',
                 name: 'Delete Branch',
                 onSize: this.onSize,
                 renderCell: this.renderDeleteBranchCell,
-                width: deleteBranchColumnWidthObservable,
+                width: new ObservableValue<number>(-40),
             },
         ];
 
@@ -244,12 +231,12 @@ export default class SprintlyBranchCreators extends React.Component<
         const userSettings: Common.IUserSettings | undefined =
             await Common.getUserSettings(
                 this.dataManager,
-                userSettingsDataManagerKey
+                Common.USER_SETTINGS_DATA_MANAGER_KEY
             );
         const systemSettings: Common.ISystemSettings | undefined =
             await Common.getSystemSettings(
                 this.dataManager,
-                systemSettingsDataManagerKey
+                Common.SYSTEM_SETTINGS_DATA_MANAGER_KEY
             );
 
         this.setState({
@@ -265,21 +252,21 @@ export default class SprintlyBranchCreators extends React.Component<
         totalRepositoriesToProcessObservable.value =
             repositoriesToProcess.length;
         if (repositoriesToProcess.length > 0) {
-            const filteredProjects: TeamProjectReference[] =
-                await Common.getFilteredProjects();
-            await this.loadRepositoriesDisplayState(filteredProjects);
+            const currentProject: IProjectInfo | undefined =
+                await Common.getCurrentProject();
+            await this.loadRepositoriesDisplayState(currentProject);
         }
     }
 
     private async loadRepositoriesDisplayState(
-        projects: TeamProjectReference[]
+        currentProject: IProjectInfo | undefined
     ): Promise<void> {
         let repos: GitRepository[] = [];
         totalRepositoriesToProcessObservable.value = 0;
-        for (const project of projects) {
+        if (currentProject !== undefined) {
             const filteredRepos: GitRepository[] =
                 await Common.getFilteredProjectRepositories(
-                    project.id,
+                    currentProject.id,
                     repositoriesToProcess
                 );
 

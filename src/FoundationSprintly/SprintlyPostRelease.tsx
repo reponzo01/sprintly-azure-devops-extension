@@ -6,9 +6,9 @@ import {
     IColor,
     IExtensionDataManager,
     IGlobalMessagesService,
+    IProjectInfo,
     MessageBannerLevel,
 } from 'azure-devops-extension-api';
-import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
     GitAnnotatedTag,
     GitObjectType,
@@ -133,9 +133,6 @@ const createTagDescriptionObservable: ObservableValue<string> =
     new ObservableValue<string>('');
 //#endregion "Observables"
 
-const userSettingsDataManagerKey: string = 'user-settings';
-const systemSettingsDataManagerKey: string = 'system-settings';
-
 let repositoriesToProcess: string[] = [];
 
 // TODO: Clean up arrow functions for the cases in which I thought I
@@ -223,12 +220,12 @@ export default class SprintlyPostRelease extends React.Component<
             const userSettings: Common.IUserSettings | undefined =
                 await Common.getUserSettings(
                     this.dataManager,
-                    userSettingsDataManagerKey
+                    Common.USER_SETTINGS_DATA_MANAGER_KEY
                 );
             const systemSettings: Common.ISystemSettings | undefined =
                 await Common.getSystemSettings(
                     this.dataManager,
-                    systemSettingsDataManagerKey
+                    Common.SYSTEM_SETTINGS_DATA_MANAGER_KEY
                 );
 
             this.setState({
@@ -244,14 +241,14 @@ export default class SprintlyPostRelease extends React.Component<
             totalRepositoriesToProcessObservable.value =
                 repositoriesToProcess.length;
             if (repositoriesToProcess.length > 0) {
-                const filteredProjects: TeamProjectReference[] =
-                    await Common.getFilteredProjects();
+                const currentProject: IProjectInfo | undefined =
+                    await Common.getCurrentProject();
                 const pullRequests: GitPullRequest[] =
-                    await Common.getPullRequests(filteredProjects);
+                    await Common.getPullRequests(currentProject);
                 this.setState({
                     pullRequests,
                 });
-                await this.loadRepositoriesDisplayState(filteredProjects);
+                await this.loadRepositoriesDisplayState(currentProject);
             }
         }
     }
@@ -270,13 +267,13 @@ export default class SprintlyPostRelease extends React.Component<
     }
 
     private async loadRepositoriesDisplayState(
-        projects: TeamProjectReference[]
+        currentProject: IProjectInfo | undefined
     ): Promise<void> {
         const reposExtended: Common.IGitRepositoryExtended[] = [];
-        for (const project of projects) {
+        if (currentProject !== undefined) {
             const filteredRepos: GitRepository[] =
                 await Common.getFilteredProjectRepositories(
-                    project.id,
+                    currentProject.id,
                     repositoriesToProcess
                 );
 
@@ -409,27 +406,20 @@ export default class SprintlyPostRelease extends React.Component<
         this.state.releaseBranchListSelectedItemObservable.value = {} as any;
         const repositoryInfo: Common.IGitRepositoryExtended =
             this.state.repositoryListSelectedItemObservable.value;
-        const buildDefinitionForRepo: BuildDefinition | undefined =
-            this.buildDefinitions.find(
-                (buildDef: BuildDefinition) =>
-                    buildDef.repository.id === repositoryInfo.id
-            );
 
         for (const releaseBranch of this.state
             .repositoryListSelectedItemObservable.value
             .existingReleaseBranches) {
-            if (buildDefinitionForRepo) {
-                await Common.fetchAndStoreBranchReleaseInfoIntoObservable(
-                    allBranchesReleaseInfoObservable,
-                    buildDefinitionForRepo,
-                    this.releaseDefinitions,
-                    releaseBranch,
-                    repositoryInfo.project.id,
-                    repositoryInfo.id,
-                    this.organizationName,
-                    this.accessToken
-                );
-            }
+            await Common.fetchAndStoreBranchReleaseInfoIntoObservable(
+                allBranchesReleaseInfoObservable,
+                this.buildDefinitions,
+                this.releaseDefinitions,
+                releaseBranch,
+                repositoryInfo.project.id,
+                repositoryInfo.id,
+                this.organizationName,
+                this.accessToken
+            );
         }
 
         bindSelectionToObservable(

@@ -4,10 +4,10 @@ import * as SDK from 'azure-devops-extension-sdk';
 import {
     IExtensionDataManager,
     IGlobalMessagesService,
+    IProjectInfo,
     MessageBannerLevel,
 } from 'azure-devops-extension-api';
 import { GitRef, GitRepository } from 'azure-devops-extension-api/Git';
-import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 import {
     EnvironmentStatus,
     ProjectReference,
@@ -72,15 +72,7 @@ const clickedDeployReleaseIdObservable: ObservableValue<number> =
     new ObservableValue<number>(0);
 const clickedDeployProjectReferenceObservable: ObservableValue<ProjectReference> =
     new ObservableValue<any>({});
-
-const nameColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const deployColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-80);
 //#endregion "Observables"
-
-const userSettingsDataManagerKey: string = 'user-settings';
-const systemSettingsDataManagerKey: string = 'system-settings';
 
 let repositoriesToProcess: string[] = [];
 
@@ -125,14 +117,14 @@ export default class SprintlyInRelease extends React.Component<
                 name: 'Repository Release Branches',
                 onSize: this.onSize,
                 renderCell: this.renderBranchColumn,
-                width: nameColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'deploy',
                 name: 'Deploy Status',
                 onSize: this.onSize,
                 renderCell: this.renderDeployStatusColumn,
-                width: deployColumnWidthObservable,
+                width: new ObservableValue<number>(-80),
             },
         ];
 
@@ -160,12 +152,12 @@ export default class SprintlyInRelease extends React.Component<
         const userSettings: Common.IUserSettings | undefined =
             await Common.getUserSettings(
                 this.dataManager,
-                userSettingsDataManagerKey
+                Common.USER_SETTINGS_DATA_MANAGER_KEY
             );
         const systemSettings: Common.ISystemSettings | undefined =
             await Common.getSystemSettings(
                 this.dataManager,
-                systemSettingsDataManagerKey
+                Common.SYSTEM_SETTINGS_DATA_MANAGER_KEY
             );
 
         this.setState({
@@ -181,9 +173,9 @@ export default class SprintlyInRelease extends React.Component<
         totalRepositoriesToProcessObservable.value =
             repositoriesToProcess.length;
         if (repositoriesToProcess.length > 0) {
-            const filteredProjects: TeamProjectReference[] =
-                await Common.getFilteredProjects();
-            await this.loadRepositoriesDisplayState(filteredProjects);
+            const currentProject: IProjectInfo | undefined =
+                await Common.getCurrentProject();
+            await this.loadRepositoriesDisplayState(currentProject);
         }
     }
 
@@ -199,13 +191,13 @@ export default class SprintlyInRelease extends React.Component<
     }
 
     private async loadRepositoriesDisplayState(
-        projects: TeamProjectReference[]
+        currentProject: IProjectInfo | undefined
     ): Promise<void> {
         const reposExtended: Common.IGitRepositoryExtended[] = [];
-        for (const project of projects) {
+        if (currentProject !== undefined) {
             const filteredRepos: GitRepository[] =
                 await Common.getFilteredProjectRepositories(
-                    project.id,
+                    currentProject.id,
                     repositoriesToProcess
                 );
             const releaseBranchRootItems: Array<
@@ -216,12 +208,6 @@ export default class SprintlyInRelease extends React.Component<
                     await Common.getRepositoryBranchesInfo(
                         repo.id,
                         Common.repositoryHeadsFilter
-                    );
-
-                const buildDefinitionForRepo: BuildDefinition | undefined =
-                    this.buildDefinitions.find(
-                        (buildDef: BuildDefinition) =>
-                            buildDef.repository.id === repo.id
                     );
 
                 const existingReleaseBranches: Common.IReleaseBranchInfo[] =
@@ -247,18 +233,16 @@ export default class SprintlyInRelease extends React.Component<
                     };
 
                 for (const releaseBranch of existingReleaseBranches) {
-                    if (buildDefinitionForRepo) {
-                        await Common.fetchAndStoreBranchReleaseInfoIntoObservable(
-                            allBranchesReleaseInfoObservable,
-                            buildDefinitionForRepo,
-                            this.releaseDefinitions,
-                            releaseBranch,
-                            repo.project.id,
-                            repo.id,
-                            this.organizationName,
-                            this.accessToken
-                        );
-                    }
+                    await Common.fetchAndStoreBranchReleaseInfoIntoObservable(
+                        allBranchesReleaseInfoObservable,
+                        this.buildDefinitions,
+                        this.releaseDefinitions,
+                        releaseBranch,
+                        repo.project.id,
+                        repo.id,
+                        this.organizationName,
+                        this.accessToken
+                    );
 
                     releaseBranchDeployTableItem.childItems!.push({
                         data: {
@@ -468,28 +452,13 @@ export default class SprintlyInRelease extends React.Component<
     }
 
     private renderDeployConfirmAction(): JSX.Element {
-        let envStatusEnumValue: string = '';
-
-        if (this.state.clickedDeployEnvironmentStatus) {
-            for (const idx in EnvironmentStatus) {
-                if (
-                    idx.toLowerCase() ===
-                    this.state.clickedDeployEnvironmentStatus
-                        .toString()
-                        .toLowerCase()
-                ) {
-                    envStatusEnumValue = EnvironmentStatus[idx];
-                }
-            }
-        }
-
         return (
             <Observer isDeployDialogOpen={isDeployDialogOpenObservable}>
                 {(props: { isDeployDialogOpen: boolean }) => {
                     return props.isDeployDialogOpen ? (
-                        parseInt(envStatusEnumValue) ===
+                        this.state.clickedDeployEnvironmentStatus ===
                             EnvironmentStatus.InProgress ||
-                        parseInt(envStatusEnumValue) ===
+                            this.state.clickedDeployEnvironmentStatus ===
                             EnvironmentStatus.Queued ? (
                             <Dialog
                                 titleProps={{
@@ -536,7 +505,7 @@ export default class SprintlyInRelease extends React.Component<
                             <Dialog
                                 titleProps={{
                                     text: `${
-                                        parseInt(envStatusEnumValue) ===
+                                        this.state.clickedDeployEnvironmentStatus ===
                                         EnvironmentStatus.Succeeded
                                             ? 'Redeploy'
                                             : 'Deploy'
@@ -564,7 +533,7 @@ export default class SprintlyInRelease extends React.Component<
                                     },
                                     {
                                         text:
-                                            parseInt(envStatusEnumValue) ===
+                                        this.state.clickedDeployEnvironmentStatus ===
                                             EnvironmentStatus.Succeeded
                                                 ? 'Redeploy'
                                                 : 'Deploy',
@@ -575,7 +544,7 @@ export default class SprintlyInRelease extends React.Component<
                                 onDismiss={this.onDismissDeployActionModal}
                             >
                                 You are about to{' '}
-                                {parseInt(envStatusEnumValue) ===
+                                {this.state.clickedDeployEnvironmentStatus ===
                                 EnvironmentStatus.Succeeded
                                     ? 'redeploy'
                                     : 'deploy'}{' '}

@@ -4,6 +4,7 @@ import {
     getClient,
     IExtensionDataManager,
     IGlobalMessagesService,
+    IProjectInfo,
     MessageBannerLevel,
 } from 'azure-devops-extension-api';
 import {
@@ -18,8 +19,6 @@ import {
     GitVersionOptions,
     GitVersionType,
 } from 'azure-devops-extension-api/Git';
-import { IdentityRef } from 'azure-devops-extension-api/WebApi';
-import { TeamProjectReference } from 'azure-devops-extension-api/Core';
 
 import {
     ObservableArray,
@@ -65,21 +64,7 @@ const isDeleteSingleBranchDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const isDeleteBatchBranchDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
-const nameColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const repositoryColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const statsColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const branchCreatorColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-30);
-const deleteBranchColumnWidthObservable: ObservableValue<number> =
-    new ObservableValue<number>(-40);
-
 //#endregion "Observables"
-
-const userSettingsDataManagerKey: string = 'user-settings';
-const systemSettingsDataManagerKey: string = 'system-settings';
 
 const enum SearchType {
     AllBranches,
@@ -191,7 +176,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
                     ariaLabelAscending: 'Sorted A to Z',
                     ariaLabelDescending: 'Sorted Z to A',
                 },
-                width: nameColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'repository',
@@ -202,14 +187,14 @@ export default class SprintlyBranchSearchPage extends React.Component<
                     ariaLabelAscending: 'Sorted A to Z',
                     ariaLabelDescending: 'Sorted Z to A',
                 },
-                width: repositoryColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'stats',
                 name: 'Behind Develop | Ahead Of Develop',
                 onSize: this.onSize,
                 renderCell: this.renderStatsCell,
-                width: statsColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'creator',
@@ -220,14 +205,14 @@ export default class SprintlyBranchSearchPage extends React.Component<
                     ariaLabelAscending: 'Sorted A to Z',
                     ariaLabelDescending: 'Sorted Z to A',
                 },
-                width: branchCreatorColumnWidthObservable,
+                width: new ObservableValue<number>(-30),
             },
             {
                 id: 'delete',
                 name: 'Delete Branch',
                 onSize: this.onSize,
                 renderCell: this.renderDeleteBranchCell,
-                width: deleteBranchColumnWidthObservable,
+                width: new ObservableValue<number>(-40),
             },
         ];
 
@@ -252,12 +237,12 @@ export default class SprintlyBranchSearchPage extends React.Component<
         const userSettings: Common.IUserSettings | undefined =
             await Common.getUserSettings(
                 this.dataManager,
-                userSettingsDataManagerKey
+                Common.USER_SETTINGS_DATA_MANAGER_KEY
             );
         const systemSettings: Common.ISystemSettings | undefined =
             await Common.getSystemSettings(
                 this.dataManager,
-                systemSettingsDataManagerKey
+                Common.SYSTEM_SETTINGS_DATA_MANAGER_KEY
             );
 
         this.setState({
@@ -273,21 +258,21 @@ export default class SprintlyBranchSearchPage extends React.Component<
         totalRepositoriesToProcessObservable.value =
             repositoriesToProcess.length;
         if (repositoriesToProcess.length > 0) {
-            const filteredProjects: TeamProjectReference[] =
-                await Common.getFilteredProjects();
-            await this.loadRepositoriesState(filteredProjects);
+            const currentProject: IProjectInfo | undefined =
+                await Common.getCurrentProject();
+            await this.loadRepositoriesState(currentProject);
         }
     }
 
     private async loadRepositoriesState(
-        projects: TeamProjectReference[]
+        currentProject: IProjectInfo | undefined
     ): Promise<void> {
         let repos: GitRepository[] = [];
         totalRepositoriesToProcessObservable.value = 0;
-        for (const project of projects) {
+        if (currentProject !== undefined) {
             const filteredRepos: GitRepository[] =
                 await Common.getFilteredProjectRepositories(
-                    project.id,
+                    currentProject.id,
                     repositoriesToProcess
                 );
 
@@ -552,9 +537,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
                         );
                     if (searchResultsBranches.length > 0) {
                         let branchStatsBatch: GitBranchStats[] = [];
-                        let repositoryDevelopBranch:
-                            | GitBranchStats
-                            | undefined;
+                        let repositoryDevelopBranch: GitBranchStats | undefined;
                         try {
                             repositoryDevelopBranch = await getClient(
                                 GitRestClient

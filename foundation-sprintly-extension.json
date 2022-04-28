@@ -11,7 +11,8 @@
         "vso.tokens",
         "vso.project",
         "vso.release_manage",
-        "vso.build"
+        "vso.build",
+        "vso.variablegroups_read"
     ],
     "categories": ["Azure Repos"],
     "branding": {
