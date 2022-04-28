@@ -77,6 +77,7 @@ import {
     VariableGroup,
 } from 'azure-devops-extension-api/Release';
 import { BuildDefinition } from 'azure-devops-extension-api/Build';
+import { ZeroData } from 'azure-devops-ui/ZeroData';
 
 export interface ISprintlyEnvironmentVariableViewerState {
     userSettings?: Common.IUserSettings;
@@ -442,9 +443,11 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                         ) {
                             variableIsSaved = true;
                             if (
+                                environmentVariableValue === undefined ||
+                                environmentVariableValue.value === undefined ||
                                 environmentVariableValueSearchFilterString.length ===
                                     0 ||
-                                (environmentVariableValue as any).value
+                                environmentVariableValue.value
                                     .toLowerCase()
                                     .includes(
                                         environmentVariableValueSearchFilterString.toLowerCase()
@@ -453,8 +456,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                 environmentVariable.values.push({
                                     environmentName:
                                         environmentVariableGroup.name,
-                                    value: (environmentVariableValue as any)
-                                        .value,
+                                    value: environmentVariableValue.value,
                                 });
                             }
                         }
@@ -470,9 +472,11 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                 )
                         ) {
                             if (
+                                environmentVariableValue === undefined ||
+                                environmentVariableValue.value === undefined ||
                                 environmentVariableValueSearchFilterString.length ===
                                     0 ||
-                                (environmentVariableValue as any).value
+                                environmentVariableValue.value
                                     .toLowerCase()
                                     .includes(
                                         environmentVariableValueSearchFilterString.toLowerCase()
@@ -484,9 +488,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                         {
                                             environmentName:
                                                 environmentVariableGroup.name,
-                                            value: (
-                                                environmentVariableValue as any
-                                            ).value,
+                                            value: environmentVariableValue.value,
                                         },
                                     ],
                                 });
@@ -1410,12 +1412,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                         releaseDefinition.variables[tryLowerCaseVariableName];
                 }
 
-                if (
-                    pipelineVariableValues !==
-                    undefined
-                ) {
+                if (pipelineVariableValues !== undefined) {
                     const variableText: string =
-                    pipelineVariableValues.value.trim();
+                        pipelineVariableValues.value.trim();
                     if (variableText[0] === '-') {
                         const variableTextClean: string =
                             variableText.substring(1, variableText.length);
@@ -1534,6 +1533,21 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     }
 
     private renderRepositoryEnvironmentVariablesTransformsPage(): JSX.Element {
+        if (totalRepositoriesToProcessObservable.value === 0) {
+            return (
+                <ZeroData
+                    primaryText='No repositories.'
+                    secondaryText={
+                        <span>
+                            Please select valid repositories from the Settings
+                            page.
+                        </span>
+                    }
+                    imageAltText='No repositories.'
+                    imagePath={'../static/notfound.png'}
+                />
+            );
+        }
         return (
             <>
                 <Splitter

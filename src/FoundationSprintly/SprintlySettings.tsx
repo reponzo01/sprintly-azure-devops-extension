@@ -694,7 +694,7 @@ export default class SprintlySettings extends React.Component<
         return (
             <Page>
                 <Header
-                    title='System Settings'
+                    title='System Settings (Affects ALL Users)'
                     titleSize={TitleSize.Medium}
                     titleIconProps={{
                         iconName: 'People',
