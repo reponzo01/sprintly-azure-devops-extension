@@ -18,6 +18,9 @@ import {
     Release,
     ReleaseDefinition,
     ReleaseEnvironment,
+    ReleaseExpands,
+    ReleaseQueryOrder,
+    ReleaseRestClient,
 } from 'azure-devops-extension-api/Release';
 import {
     CommonServiceIds,
@@ -279,9 +282,10 @@ export function getSavedRepositoriesToView(
 }
 
 export async function getCurrentProject(): Promise<IProjectInfo | undefined> {
-    const projectService: IProjectPageService = await SDK.getService<IProjectPageService>(
-        CommonServiceIds.ProjectPageService
-    );
+    const projectService: IProjectPageService =
+        await SDK.getService<IProjectPageService>(
+            CommonServiceIds.ProjectPageService
+        );
     const project: IProjectInfo | undefined = await projectService.getProject();
     return project;
 }
@@ -516,7 +520,8 @@ export function getRepositoryReleaseDefinitionId(
                         artifact.definitionReference['definition'];
                     if (releaseDefBuildDef) {
                         if (
-                            releaseDefBuildDef.id === buildDefinitionId.toString()
+                            releaseDefBuildDef.id ===
+                            buildDefinitionId.toString()
                         ) {
                             releaseDefinitionId = releaseDefinition.id;
                             break;
@@ -531,9 +536,40 @@ export function getRepositoryReleaseDefinitionId(
     return releaseDefinitionId;
 }
 
+export function getReleaseDefinitionForRepo(
+    buildDefinitions: BuildDefinition[],
+    releaseDefinitions: ReleaseDefinition[],
+    repositoryId: string
+): ReleaseDefinition | undefined {
+    const buildDefinitionForRepo: BuildDefinition | undefined =
+        buildDefinitions.find(
+            (buildDef: BuildDefinition) =>
+                buildDef.repository.id === repositoryId
+        );
+    if (buildDefinitionForRepo !== undefined) {
+        for (const releaseDefinition of releaseDefinitions) {
+            for (const artifact of releaseDefinition.artifacts) {
+                if (artifact.isPrimary) {
+                    const releaseDefBuildDef: ArtifactSourceReference =
+                        artifact.definitionReference['definition'];
+                    if (releaseDefBuildDef) {
+                        if (
+                            releaseDefBuildDef.id ===
+                            buildDefinitionForRepo.id.toString()
+                        ) {
+                            return releaseDefinition;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return undefined;
+}
+
 export async function fetchAndStoreBranchReleaseInfoIntoObservable(
     releaseInfoObservable: ObservableArray<IReleaseInfo>,
-    buildDefinitionForRepo: BuildDefinition,
+    buildDefinitions: BuildDefinition[],
     releaseDefinitions: ReleaseDefinition[],
     releaseBranch: IReleaseBranchInfo,
     projectId: string,
@@ -541,36 +577,72 @@ export async function fetchAndStoreBranchReleaseInfoIntoObservable(
     organizationName: string,
     accessToken: string
 ): Promise<void> {
-    const buildDefinitionId: number = buildDefinitionForRepo.id;
-    let releaseDefinitionId: number = -1;
-    for (const releaseDefinition of releaseDefinitions) {
-        for (const artifact of releaseDefinition.artifacts) {
-            if (artifact.isPrimary) {
-                const releaseDefBuildDef: ArtifactSourceReference =
-                    artifact.definitionReference['definition'];
-                if (releaseDefBuildDef) {
-                    if (
-                        releaseDefBuildDef.id === buildDefinitionId.toString()
-                    ) {
-                        releaseDefinitionId = releaseDefinition.id;
-                        break;
-                    }
-                }
-            }
-        }
-        if (releaseDefinitionId > -1) break;
-    }
-    if (releaseDefinitionId > -1) {
+    const releaseDefinitionForRepo: ReleaseDefinition | undefined =
+        getReleaseDefinitionForRepo(
+            buildDefinitions,
+            releaseDefinitions,
+            repositoryId
+        );
+    if (releaseDefinitionForRepo !== undefined) {
         await getReleasesForReleaseBranch(
             releaseInfoObservable,
             releaseBranch,
-            releaseDefinitionId,
+            releaseDefinitionForRepo.id,
             projectId,
             repositoryId,
             organizationName,
             accessToken
         );
     }
+}
+
+export async function getReleaseInfoData(
+    projectId: string,
+    releaseDefinitionId: number
+): Promise<Release> {
+    return await getClient(ReleaseRestClient).getRelease(
+        projectId,
+        releaseDefinitionId,
+        undefined,
+        undefined,
+        undefined,
+        undefined
+    );
+}
+
+export async function getTopReleasesForBranch(
+    projectId: string,
+    releaseDefinitionId: number,
+    top: number,
+    sourceBranchFilter?: string | undefined,
+    expandEnvironments?: boolean | undefined
+): Promise<Release[]> {
+    return await getClient(ReleaseRestClient).getReleases(
+        projectId,
+        releaseDefinitionId,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        ReleaseQueryOrder.Descending,
+        top,
+        undefined,
+        expandEnvironments !== undefined && expandEnvironments === true
+            ? ReleaseExpands.Environments
+            : ReleaseExpands.None,
+        undefined,
+        undefined,
+        undefined,
+        sourceBranchFilter,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined
+    );
 }
 
 export async function getReleasesForReleaseBranch(
@@ -580,25 +652,39 @@ export async function getReleasesForReleaseBranch(
     projectId: string,
     repositoryId: string,
     organizationName: string,
-    accessToken: string
+    accessToken: string,
+    top: number = 50
 ): Promise<void> {
-    accessToken = await getOrRefreshToken(accessToken);
-    const response: AxiosResponse<never> = await axios
-        .get(
-            `https://vsrm.dev.azure.com/${organizationName}/${projectId}/_apis/release/releases?$expand=environments&sourceBranchFilter=${releaseBranch.targetBranch.name}&definitionId=${releaseDefinitionId}&api-version=6.0`,
-            {
-                headers: {
-                    Authorization: `Bearer ${accessToken}`,
-                },
-            }
-        )
-        .catch((error: any) => {
-            console.error(error);
-            throw error;
-        });
+    // accessToken = await getOrRefreshToken(accessToken);
+    // const response: AxiosResponse<never> = await axios
+    //     .get(
+    //         `https://vsrm.dev.azure.com/${organizationName}/${projectId}/_apis/release/releases?$expand=2&sourceBranchFilter=${releaseBranch.targetBranch.name}&definitionId=${releaseDefinitionId}&api-version=6.0`,
+    //         {
+    //             headers: {
+    //                 Authorization: `Bearer ${accessToken}`,
+    //             },
+    //         }
+    //     )
+    //     .catch((error: any) => {
+    //         console.error(error);
+    //         throw error;
+    //     });
 
-    const data: { count: number; value: Release[] } = response.data;
-    if (data && data.count > 0) {
+    // const releases: { count: number; value: Release[] } = response.data;
+
+    const data = await getTopReleasesForBranch(
+        projectId,
+        releaseDefinitionId,
+        top,
+        releaseBranch.targetBranch.name,
+        true
+    );
+    const releases: any = {
+        count: data.length,
+        value: data,
+    };
+
+    if (releases && releases.count > 0) {
         const existingIndex: number = releaseInfoObservable.value.findIndex(
             (item: IReleaseInfo) =>
                 item.releaseBranch.targetBranch.name ===
@@ -608,7 +694,7 @@ export async function getReleasesForReleaseBranch(
         const releaseInfo: IReleaseInfo = {
             repositoryId,
             releaseBranch,
-            releases: data.value,
+            releases: releases.value,
         };
         if (existingIndex < 0) {
             releaseInfoObservable.push(releaseInfo);
@@ -815,15 +901,10 @@ export function getSingleEnvironmentStatusPillJsxElement(
     environment: ReleaseEnvironment,
     onClickAction?: () => void
 ): JSX.Element {
-    let envStatusEnumValue: string = '';
     let statusIconName: string = 'Cancel';
     let divTextClassName: string = 'sprintly-text-white';
-    for (const idx in EnvironmentStatus) {
-        if (idx.toLowerCase() === environment.status.toString().toLowerCase()) {
-            envStatusEnumValue = EnvironmentStatus[idx];
-        }
-    }
-    switch (parseInt(envStatusEnumValue)) {
+
+    switch (environment.status) {
         case EnvironmentStatus.NotStarted:
             statusIconName = 'CircleRing';
             divTextClassName = '';
@@ -846,7 +927,7 @@ export function getSingleEnvironmentStatusPillJsxElement(
     }
     return environmentStatusPillJsxElement(
         environment,
-        envStatusEnumValue,
+        environment.status,
         divTextClassName,
         statusIconName,
         onClickAction
@@ -855,7 +936,7 @@ export function getSingleEnvironmentStatusPillJsxElement(
 
 export function environmentStatusPillJsxElement(
     environment: ReleaseEnvironment,
-    envStatusEnumString: string,
+    envStatusEnum: EnvironmentStatus,
     divTextClassName: string,
     statusIconName: string,
     onClickAction?: () => void
@@ -865,19 +946,12 @@ export function environmentStatusPillJsxElement(
             onClick={onClickAction}
             key={environment.id}
             color={
-                parseInt(envStatusEnumString) ===
-                parseInt(EnvironmentStatus.Succeeded.toString())
+                envStatusEnum === EnvironmentStatus.Succeeded
                     ? successColor
-                    : parseInt(envStatusEnumString) ===
-                          parseInt(EnvironmentStatus.Undefined.toString()) ||
-                      parseInt(envStatusEnumString) ===
-                          parseInt(EnvironmentStatus.Canceled.toString()) ||
-                      parseInt(envStatusEnumString) ===
-                          parseInt(EnvironmentStatus.Rejected.toString()) ||
-                      parseInt(envStatusEnumString) ===
-                          parseInt(
-                              EnvironmentStatus.PartiallySucceeded.toString()
-                          )
+                    : envStatusEnum === EnvironmentStatus.Undefined ||
+                      envStatusEnum === EnvironmentStatus.Canceled ||
+                      envStatusEnum === EnvironmentStatus.Rejected ||
+                      envStatusEnum === EnvironmentStatus.PartiallySucceeded
                     ? failedColor
                     : undefined
             }

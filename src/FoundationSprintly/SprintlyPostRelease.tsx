@@ -406,27 +406,20 @@ export default class SprintlyPostRelease extends React.Component<
         this.state.releaseBranchListSelectedItemObservable.value = {} as any;
         const repositoryInfo: Common.IGitRepositoryExtended =
             this.state.repositoryListSelectedItemObservable.value;
-        const buildDefinitionForRepo: BuildDefinition | undefined =
-            this.buildDefinitions.find(
-                (buildDef: BuildDefinition) =>
-                    buildDef.repository.id === repositoryInfo.id
-            );
 
         for (const releaseBranch of this.state
             .repositoryListSelectedItemObservable.value
             .existingReleaseBranches) {
-            if (buildDefinitionForRepo) {
-                await Common.fetchAndStoreBranchReleaseInfoIntoObservable(
-                    allBranchesReleaseInfoObservable,
-                    buildDefinitionForRepo,
-                    this.releaseDefinitions,
-                    releaseBranch,
-                    repositoryInfo.project.id,
-                    repositoryInfo.id,
-                    this.organizationName,
-                    this.accessToken
-                );
-            }
+            await Common.fetchAndStoreBranchReleaseInfoIntoObservable(
+                allBranchesReleaseInfoObservable,
+                this.buildDefinitions,
+                this.releaseDefinitions,
+                releaseBranch,
+                repositoryInfo.project.id,
+                repositoryInfo.id,
+                this.organizationName,
+                this.accessToken
+            );
         }
 
         bindSelectionToObservable(

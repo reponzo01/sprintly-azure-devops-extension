@@ -210,12 +210,6 @@ export default class SprintlyInRelease extends React.Component<
                         Common.repositoryHeadsFilter
                     );
 
-                const buildDefinitionForRepo: BuildDefinition | undefined =
-                    this.buildDefinitions.find(
-                        (buildDef: BuildDefinition) =>
-                            buildDef.repository.id === repo.id
-                    );
-
                 const existingReleaseBranches: Common.IReleaseBranchInfo[] =
                     repositoryBranchInfo.releaseBranches.map<Common.IReleaseBranchInfo>(
                         (releaseBranch: GitRef) => {
@@ -239,18 +233,16 @@ export default class SprintlyInRelease extends React.Component<
                     };
 
                 for (const releaseBranch of existingReleaseBranches) {
-                    if (buildDefinitionForRepo) {
-                        await Common.fetchAndStoreBranchReleaseInfoIntoObservable(
-                            allBranchesReleaseInfoObservable,
-                            buildDefinitionForRepo,
-                            this.releaseDefinitions,
-                            releaseBranch,
-                            repo.project.id,
-                            repo.id,
-                            this.organizationName,
-                            this.accessToken
-                        );
-                    }
+                    await Common.fetchAndStoreBranchReleaseInfoIntoObservable(
+                        allBranchesReleaseInfoObservable,
+                        this.buildDefinitions,
+                        this.releaseDefinitions,
+                        releaseBranch,
+                        repo.project.id,
+                        repo.id,
+                        this.organizationName,
+                        this.accessToken
+                    );
 
                     releaseBranchDeployTableItem.childItems!.push({
                         data: {
@@ -274,6 +266,8 @@ export default class SprintlyInRelease extends React.Component<
 
                 releaseBranchRootItems.push(releaseBranchDeployTableItem);
             }
+
+            console.log(allBranchesReleaseInfoObservable.value);
 
             this.setState({
                 releaseBranchDeployItemProvider: new TreeItemProvider(
@@ -460,28 +454,13 @@ export default class SprintlyInRelease extends React.Component<
     }
 
     private renderDeployConfirmAction(): JSX.Element {
-        let envStatusEnumValue: string = '';
-
-        if (this.state.clickedDeployEnvironmentStatus) {
-            for (const idx in EnvironmentStatus) {
-                if (
-                    idx.toLowerCase() ===
-                    this.state.clickedDeployEnvironmentStatus
-                        .toString()
-                        .toLowerCase()
-                ) {
-                    envStatusEnumValue = EnvironmentStatus[idx];
-                }
-            }
-        }
-
         return (
             <Observer isDeployDialogOpen={isDeployDialogOpenObservable}>
                 {(props: { isDeployDialogOpen: boolean }) => {
                     return props.isDeployDialogOpen ? (
-                        parseInt(envStatusEnumValue) ===
+                        this.state.clickedDeployEnvironmentStatus ===
                             EnvironmentStatus.InProgress ||
-                        parseInt(envStatusEnumValue) ===
+                            this.state.clickedDeployEnvironmentStatus ===
                             EnvironmentStatus.Queued ? (
                             <Dialog
                                 titleProps={{
@@ -528,7 +507,7 @@ export default class SprintlyInRelease extends React.Component<
                             <Dialog
                                 titleProps={{
                                     text: `${
-                                        parseInt(envStatusEnumValue) ===
+                                        this.state.clickedDeployEnvironmentStatus ===
                                         EnvironmentStatus.Succeeded
                                             ? 'Redeploy'
                                             : 'Deploy'
@@ -556,7 +535,7 @@ export default class SprintlyInRelease extends React.Component<
                                     },
                                     {
                                         text:
-                                            parseInt(envStatusEnumValue) ===
+                                        this.state.clickedDeployEnvironmentStatus ===
                                             EnvironmentStatus.Succeeded
                                                 ? 'Redeploy'
                                                 : 'Deploy',
@@ -567,7 +546,7 @@ export default class SprintlyInRelease extends React.Component<
                                 onDismiss={this.onDismissDeployActionModal}
                             >
                                 You are about to{' '}
-                                {parseInt(envStatusEnumValue) ===
+                                {this.state.clickedDeployEnvironmentStatus ===
                                 EnvironmentStatus.Succeeded
                                     ? 'redeploy'
                                     : 'deploy'}{' '}
