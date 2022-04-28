@@ -132,6 +132,7 @@ const appSettingsTransformsFileName: string = 'transforms.json';
 const configSettingsTransformsFileName: string = 'ENVTransforms.json';
 const appSettingsTransformsPipelineVariableName: string = 'inlineTransforms';
 const configSettingsTransformsPipelineVariableName: string = 'appSettings';
+const secretValueText: string = '*********';
 
 let repositoriesToProcess: string[] = [];
 
@@ -456,7 +457,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                 environmentVariable.values.push({
                                     environmentName:
                                         environmentVariableGroup.name,
-                                    value: environmentVariableValue.value,
+                                    value: environmentVariableValue.isSecret
+                                        ? secretValueText
+                                        : environmentVariableValue.value,
                                 });
                             }
                         }
@@ -488,7 +491,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                         {
                                             environmentName:
                                                 environmentVariableGroup.name,
-                                            value: environmentVariableValue.value,
+                                            value: environmentVariableValue.isSecret
+                                                ? secretValueText
+                                                : environmentVariableValue.value,
                                         },
                                     ],
                                 });
@@ -1296,7 +1301,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     }
 
     private findReplaceEnvironmentVariables(
-        environment: any,
+        environment: VariableGroup,
         environmentTransformValue: string,
         environmentVariableRegex: RegExp
     ): string {
@@ -1326,8 +1331,11 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                         returnEnvironmentTransformedValue =
                             returnEnvironmentTransformedValue.replace(
                                 customRegex,
-                                (environmentVariableValue as any).value
+                                environmentVariableValue.isSecret
+                                    ? secretValueText
+                                    : environmentVariableValue.value
                             );
+
                         break;
                     }
                 }
