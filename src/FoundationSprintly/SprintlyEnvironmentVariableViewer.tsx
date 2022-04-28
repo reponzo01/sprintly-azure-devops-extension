@@ -83,7 +83,8 @@ export interface ISprintlyEnvironmentVariableViewerState {
     repositories: ArrayItemProvider<GitRepository>;
     repositoryListSelection: ListSelection;
     repositoryListSelectedItemObservable: ObservableValue<GitRepository>;
-    repositoryEnvironmentVariablesFromCodeItemProvider: ITreeItemProvider<ISearchResultRepositoryEnvironmentVariableItem>;
+    repositoryEnvironmentVariablesFromAppSettingsItemProvider: ITreeItemProvider<ISearchResultRepositoryEnvironmentVariableItem>;
+    repositoryEnvironmentVariablesFromConfigSettingsItemProvider: ITreeItemProvider<ISearchResultRepositoryEnvironmentVariableItem>;
 }
 
 export interface ISearchResultEnvironmentVariableValue {
@@ -102,6 +103,11 @@ export interface ISearchResultRepositoryEnvironmentVariableItem {
     transformValueFromPipeline: string;
     isRootItem: boolean;
     hasDiscrepancy: boolean;
+}
+
+export enum TransformsTypeEnum {
+    AppSettings = 0,
+    ConfigSettings = 1,
 }
 
 //#region "Observables"
@@ -223,7 +229,9 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
             this.getJsonTransformsFromPipeline.bind(this);
         this.onSelectBranchAction = this.onSelectBranchAction.bind(this);
         this.loadBaseCommitAndEnvironmentVariablesFromSelectedBuildArtifact =
-            this.loadBaseCommitAndEnvironmentVariablesFromSelectedBuildArtifact.bind(this);
+            this.loadBaseCommitAndEnvironmentVariablesFromSelectedBuildArtifact.bind(
+                this
+            );
 
         this.columns = [
             {
@@ -251,7 +259,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
             },
             {
                 id: 'transformValueFromCode',
-                name: 'Transform from transforms.json',
+                name: 'Transform from code base',
                 onSize: this.onSizeTreeColumn,
                 renderCell:
                     this.renderRepositoryEnvironmentVariableTransformValueCell,
@@ -284,7 +292,11 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 selectOnFocus: false,
             }),
             repositoryListSelectedItemObservable: new ObservableValue<any>({}),
-            repositoryEnvironmentVariablesFromCodeItemProvider:
+            repositoryEnvironmentVariablesFromAppSettingsItemProvider:
+                new TreeItemProvider<ISearchResultRepositoryEnvironmentVariableItem>(
+                    []
+                ),
+            repositoryEnvironmentVariablesFromConfigSettingsItemProvider:
                 new TreeItemProvider<ISearchResultRepositoryEnvironmentVariableItem>(
                     []
                 ),
@@ -734,138 +746,167 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                                 </div>
                             </Page>
                         )}
-                        {!loadingRepositoryObservable.value &&
-                            this.state.repositoryListSelection.selectedCount !==
-                                0 &&
-                            this.state
-                                .repositoryEnvironmentVariablesFromCodeItemProvider
-                                .length === 0 && (
-                                <Page>
-                                    <div className='page-content'>
-                                        Please ensure there is a{' '}
-                                        <code>transforms.json</code> file on
-                                        this branch and that a build artifact
-                                        has been created.
-                                    </div>
-                                </Page>
-                            )}
-                        {!loadingRepositoryObservable.value &&
-                            this.state.repositoryListSelection.selectedCount !==
-                                0 && (
-                                <Page>
-                                    <div className='page-content'>
-                                        <Card
-                                            titleProps={{
-                                                text: `${this.state.repositoryListSelectedItemObservable.value.name}`,
-                                            }}
-                                            headerDescriptionProps={{
-                                                text: (
-                                                    <div>
-                                                        These transforms are
-                                                        sourced from the{' '}
-                                                        <code>
-                                                            /transforms.json
-                                                        </code>{' '}
-                                                        file on the selected{' '}
-                                                        branch compared with the{' '}
-                                                        <code>
-                                                            inlineTransforms
-                                                        </code>{' '}
-                                                        variable on the release
-                                                        pipeline.
-                                                    </div>
-                                                ),
-                                            }}
-                                            className='bolt-table-card bolt-card-white'
-                                        >
-                                            <div className='master-row-content'>
-                                                <div className='flex-row'>
-                                                    <div
-                                                        style={{
-                                                            color: '#FF3E3E',
-                                                            fontWeight: 'bold',
-                                                        }}
-                                                    >
-                                                        $(VariableName)
-                                                    </div>
-                                                    <div>
-                                                        &nbsp; = This means this
-                                                        variable does not exist
-                                                        in this environment
-                                                    </div>
-                                                </div>
-                                                <div className='flex-row'>
-                                                    <div
-                                                        style={{
-                                                            border: 'red 1px solid',
-                                                        }}
-                                                    >
-                                                        TransformValue
-                                                    </div>
-                                                    <div>
-                                                        &nbsp; = This shows a
-                                                        discrepancy between{' '}
-                                                        <code>
-                                                            transforms.json
-                                                        </code>{' '}
-                                                        and the{' '}
-                                                        <code>
-                                                            inlineTransforms
-                                                        </code>{' '}
-                                                        variable from the
-                                                        release pipeline.
-                                                    </div>
-                                                </div>
-                                                <Dropdown
-                                                    className='page-content-top'
-                                                    ariaLabel='Button Dropdown'
-                                                    placeholder='Select a branch'
-                                                    selection={
-                                                        this
-                                                            .repositoryBranchSelection
-                                                    }
-                                                    items={this.selectedRepositoryBranchesInfo!.allBranchesAndTags.map(
-                                                        (branchInfo: GitRef) =>
-                                                            Common.getBranchShortName(
-                                                                branchInfo.name
-                                                            )
-                                                    )}
-                                                    onSelect={
-                                                        this
-                                                            .onSelectBranchAction
-                                                    }
-                                                />
-                                                <Tree<ISearchResultRepositoryEnvironmentVariableItem>
-                                                    columns={
-                                                        this
-                                                            .repositoryTreeColumns
-                                                    }
-                                                    itemProvider={
-                                                        this.state
-                                                            .repositoryEnvironmentVariablesFromCodeItemProvider
-                                                    }
-                                                    onToggle={(
-                                                        event: React.SyntheticEvent<
-                                                            HTMLElement,
-                                                            Event
-                                                        >,
-                                                        treeItem: ITreeItemEx<ISearchResultRepositoryEnvironmentVariableItem>
-                                                    ) => {
-                                                        this.state.repositoryEnvironmentVariablesFromCodeItemProvider.toggle(
-                                                            treeItem.underlyingItem
-                                                        );
-                                                    }}
-                                                    selectableText={true}
-                                                    scrollable={true}
-                                                />
-                                            </div>
-                                        </Card>
-                                    </div>
-                                </Page>
-                            )}
+                        {this.renderTreeTablePage(
+                            TransformsTypeEnum.AppSettings
+                        )}
+                        {this.renderTreeTablePage(
+                            TransformsTypeEnum.ConfigSettings
+                        )}
                     </Page>
                 )}
             </Observer>
+        );
+    }
+
+    private renderTreeTablePage(
+        transformsType: TransformsTypeEnum
+    ): JSX.Element {
+        const codeTransformsFileName =
+            transformsType === TransformsTypeEnum.AppSettings
+                ? appSettingsTransformsFileName
+                : configSettingsTransformsFileName;
+        const pipelineTransformsVariableName =
+            transformsType === TransformsTypeEnum.AppSettings
+                ? appSettingsTransformsPipelineVariableName
+                : configSettingsTransformsPipelineVariableName;
+        const treeItemProvider =
+            transformsType === TransformsTypeEnum.AppSettings
+                ? this.state
+                      .repositoryEnvironmentVariablesFromAppSettingsItemProvider
+                : this.state
+                      .repositoryEnvironmentVariablesFromConfigSettingsItemProvider;
+
+        const title = transformsType === TransformsTypeEnum.AppSettings ? 'Transforms for appsettings.json' : 'Transforms for resource-level application configuration settings'
+
+        return (
+            <>
+                {!loadingRepositoryObservable.value &&
+                    this.state.repositoryListSelection.selectedCount !== 0 &&
+                    treeItemProvider.length === 0 && (
+                        <Page>
+                            <div className='page-content'>
+                                Please ensure there is a{' '}
+                                <code>{codeTransformsFileName}</code> file on
+                                this branch and that a build artifact has been
+                                created.
+                            </div>
+                        </Page>
+                    )}
+                {!loadingRepositoryObservable.value &&
+                    this.state.repositoryListSelection.selectedCount !== 0 && (
+                        <Page>
+                            <div className='page-content'>
+                                <Card
+                                    titleProps={{
+                                        text: title,
+                                    }}
+                                    headerDescriptionProps={{
+                                        text: (
+                                            <div>
+                                                These transforms are sourced
+                                                from the{' '}
+                                                <code>
+                                                    /{codeTransformsFileName}
+                                                </code>{' '}
+                                                file on the selected branch
+                                                compared with the{' '}
+                                                <code>
+                                                    $({
+                                                        pipelineTransformsVariableName
+                                                    })
+                                                </code>{' '}
+                                                variable on the release
+                                                pipeline.
+                                            </div>
+                                        ),
+                                    }}
+                                    className='bolt-table-card bolt-card-white'
+                                >
+                                    <div className='master-row-content'>
+                                        <div className='flex-row'>
+                                            <div
+                                                style={{
+                                                    color: '#FF3E3E',
+                                                    fontWeight: 'bold',
+                                                }}
+                                            >
+                                                $(VariableName)
+                                            </div>
+                                            <div>
+                                                &nbsp; = This means this
+                                                variable does not exist in this
+                                                environment
+                                            </div>
+                                        </div>
+                                        <div className='flex-row'>
+                                            <div
+                                                style={{
+                                                    border: 'red 1px solid',
+                                                }}
+                                            >
+                                                TransformValue
+                                            </div>
+                                            <div>
+                                                &nbsp; = This shows a
+                                                discrepancy between{' '}
+                                                <code>
+                                                    {codeTransformsFileName}
+                                                </code>{' '}
+                                                and the{' '}
+                                                <code>
+                                                    $({
+                                                        pipelineTransformsVariableName
+                                                    })
+                                                </code>{' '}
+                                                variable from the release
+                                                pipeline.
+                                            </div>
+                                        </div>
+                                        {transformsType ===
+                                            TransformsTypeEnum.AppSettings && (
+                                            <Dropdown
+                                                className='page-content-top'
+                                                ariaLabel='Button Dropdown'
+                                                placeholder='Select a branch'
+                                                selection={
+                                                    this
+                                                        .repositoryBranchSelection
+                                                }
+                                                items={this.selectedRepositoryBranchesInfo!.allBranchesAndTags.map(
+                                                    (branchInfo: GitRef) =>
+                                                        Common.getBranchShortName(
+                                                            branchInfo.name
+                                                        )
+                                                )}
+                                                onSelect={
+                                                    this.onSelectBranchAction
+                                                }
+                                            />
+                                        )}
+
+                                        <Tree<ISearchResultRepositoryEnvironmentVariableItem>
+                                            columns={this.repositoryTreeColumns}
+                                            itemProvider={treeItemProvider}
+                                            onToggle={(
+                                                event: React.SyntheticEvent<
+                                                    HTMLElement,
+                                                    Event
+                                                >,
+                                                treeItem: ITreeItemEx<ISearchResultRepositoryEnvironmentVariableItem>
+                                            ) => {
+                                                treeItemProvider.toggle(
+                                                    treeItem.underlyingItem
+                                                );
+                                            }}
+                                            selectableText={true}
+                                            scrollable={true}
+                                        />
+                                    </div>
+                                </Card>
+                            </div>
+                        </Page>
+                    )}
+            </>
         );
     }
 
@@ -1081,37 +1122,38 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         await this.loadBaseCommitAndEnvironmentVariablesFromSelectedBuildArtifact(
             Common.DEVELOP
         );
-        await this.loadInlineTransforms();
+        await this.loadInlineTransforms(TransformsTypeEnum.AppSettings);
+        await this.loadInlineTransforms(TransformsTypeEnum.ConfigSettings);
 
         loadingRepositoryObservable.value = false;
     }
 
-    private async loadInlineTransforms(): Promise<void> {
+    private async loadInlineTransforms(
+        transformsType: TransformsTypeEnum
+    ): Promise<void> {
+        const codeTransformsFileName =
+            transformsType === TransformsTypeEnum.AppSettings
+                ? appSettingsTransformsFileName
+                : configSettingsTransformsFileName;
+        const pipelineTransformsVariableName =
+            transformsType === TransformsTypeEnum.AppSettings
+                ? appSettingsTransformsPipelineVariableName
+                : configSettingsTransformsPipelineVariableName;
+
         const repositoryEnvironmentVariablesRootItems: Array<
             ITreeItem<ISearchResultRepositoryEnvironmentVariableItem>
         > = [];
 
         if (this.currentProject !== undefined) {
-            const inlineTransformsFromCode: string | undefined =
-                await this.getTransformsFileFromCode(
-                    appSettingsTransformsFileName
-                );
-            const inlineTransformsFromPipeline: string | undefined =
+            const inlineTransformsFromCodeParsed: any | undefined =
+                await this.getTransformsFileFromCode(codeTransformsFileName);
+            const inlineTransformsFromPipelineParsed: any | undefined =
                 await this.getJsonTransformsFromPipeline(
-                    appSettingsTransformsPipelineVariableName
+                    pipelineTransformsVariableName
                 );
 
             try {
-                if (inlineTransformsFromCode !== undefined) {
-                    const inlineTransformsFromCodeParsed: any = JSON.parse(
-                        inlineTransformsFromCode
-                    );
-
-                    const inlineTransformsFromPipelineParsed: any =
-                        inlineTransformsFromPipeline !== undefined
-                            ? JSON.parse(inlineTransformsFromPipeline)
-                            : undefined;
-
+                if (inlineTransformsFromCodeParsed !== undefined) {
                     for (const [appsetting, transform] of Object.entries(
                         inlineTransformsFromCodeParsed
                     )) {
@@ -1163,10 +1205,21 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 console.error('Error retrieving transforms: ', err);
             }
         }
-        this.setState({
-            repositoryEnvironmentVariablesFromCodeItemProvider:
-                new TreeItemProvider(repositoryEnvironmentVariablesRootItems),
-        });
+        if (transformsType === TransformsTypeEnum.AppSettings) {
+            this.setState({
+                repositoryEnvironmentVariablesFromAppSettingsItemProvider:
+                    new TreeItemProvider(
+                        repositoryEnvironmentVariablesRootItems
+                    ),
+            });
+        } else {
+            this.setState({
+                repositoryEnvironmentVariablesFromConfigSettingsItemProvider:
+                    new TreeItemProvider(
+                        repositoryEnvironmentVariablesRootItems
+                    ),
+            });
+        }
     }
 
     private buildSingleTransformTreeItem(
@@ -1269,7 +1322,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
 
     private async getTransformsFileFromCode(
         fileName: string
-    ): Promise<string | undefined> {
+    ): Promise<any | undefined> {
         if (this.currentProject !== undefined) {
             if (
                 this.repositoryBranchBuildArtifactBaseCommit !== undefined &&
@@ -1298,7 +1351,13 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                         undefined
                     );
                     if (inlineTransformResponse !== undefined) {
-                        return inlineTransformResponse.content;
+                        try {
+                            return JSON.parse(
+                                inlineTransformResponse.content.trim()
+                            );
+                        } catch (err) {
+                            console.error('Error parsing JSON file: ', err);
+                        }
                     }
                 } catch (err) {
                     console.error('Error retrieving transforms: ', err);
@@ -1329,6 +1388,35 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 );
 
                 if (releaseDefinition.variables[variableName] !== undefined) {
+                    const variableText: string =
+                        releaseDefinition.variables[variableName].value.trim();
+                    if (variableText[0] === '-') {
+                        const variableTextClean: string =
+                            variableText.substring(1, variableText.length);
+                        const variableTextSplit: string[] =
+                            variableTextClean.split(/\s+-/);
+                        const returnObject: any = {};
+                        for (const transformVariable of variableTextSplit) {
+                            const transformVariableSplit: string[] =
+                                transformVariable.split(/(?<=^\S+)\s/);
+                            if (transformVariableSplit[1] == undefined) {
+                                returnObject[transformVariableSplit[0]] = '';
+                            } else {
+                                let cleanValue: string = transformVariableSplit[1].trim();
+                                if (cleanValue.length > 1) {
+                                    cleanValue = cleanValue.substring(1, cleanValue.length - 1);
+                                }
+                                returnObject[transformVariableSplit[0]] = cleanValue;
+                            }
+                        }
+                        return returnObject;
+                    } else {
+                        try {
+                            return JSON.parse(variableText);
+                        } catch (err) {
+                            console.error('Error parsing JSON file: ', err);
+                        }
+                    }
                     //TODO: Try to parse json as is, if it is ok, it is the inlineVariable
                     //Otherwise, text manipulate it into an object
                     return releaseDefinition.variables[variableName].value;
@@ -1347,7 +1435,8 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
         await this.loadBaseCommitAndEnvironmentVariablesFromSelectedBuildArtifact(
             item.text!
         );
-        await this.loadInlineTransforms();
+        await this.loadInlineTransforms(TransformsTypeEnum.AppSettings);
+        await this.loadInlineTransforms(TransformsTypeEnum.ConfigSettings);
         loadingRepositoryObservable.value = false;
     }
 
