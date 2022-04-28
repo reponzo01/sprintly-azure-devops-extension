@@ -267,8 +267,6 @@ export default class SprintlyInRelease extends React.Component<
                 releaseBranchRootItems.push(releaseBranchDeployTableItem);
             }
 
-            console.log(allBranchesReleaseInfoObservable.value);
-
             this.setState({
                 releaseBranchDeployItemProvider: new TreeItemProvider(
                     releaseBranchRootItems

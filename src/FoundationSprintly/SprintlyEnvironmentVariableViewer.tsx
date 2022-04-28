@@ -70,6 +70,7 @@ import { DropdownSelection } from 'azure-devops-ui/Utilities/DropdownSelection';
 import { IListBoxItem } from 'azure-devops-ui/ListBox';
 import {
     Artifact,
+    Release,
     ReleaseDefinition,
     ReleaseRestClient,
     VariableGroup,
@@ -374,7 +375,6 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                     throw error;
                 });
             this.globalEnvironmentVariables = (response.data as any).value; // No defined type exists in the api
-            console.log(this.globalEnvironmentVariables);
 
             this.redrawEnvironmentVariablesSearchResult();
         }
@@ -761,22 +761,22 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     private renderTreeTablePage(
         transformsType: TransformsTypeEnum
     ): JSX.Element {
-        const codeTransformsFileName =
+        const codeTransformsFileName: string =
             transformsType === TransformsTypeEnum.AppSettings
                 ? appSettingsTransformsFileName
                 : configSettingsTransformsFileName;
-        const pipelineTransformsVariableName =
+        const pipelineTransformsVariableName: string =
             transformsType === TransformsTypeEnum.AppSettings
                 ? appSettingsTransformsPipelineVariableName
                 : configSettingsTransformsPipelineVariableName;
-        const treeItemProvider =
+        const treeItemProvider: ITreeItemProvider<ISearchResultRepositoryEnvironmentVariableItem> =
             transformsType === TransformsTypeEnum.AppSettings
                 ? this.state
                       .repositoryEnvironmentVariablesFromAppSettingsItemProvider
                 : this.state
                       .repositoryEnvironmentVariablesFromConfigSettingsItemProvider;
 
-        const title = transformsType === TransformsTypeEnum.AppSettings ? 'Transforms for appsettings.json' : 'Transforms for resource-level application configuration settings'
+        const title: string = transformsType === TransformsTypeEnum.AppSettings ? 'Transforms for appsettings.json' : 'Transforms for resource-level application configuration settings'
 
         return (
             <>
@@ -1131,11 +1131,11 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     private async loadInlineTransforms(
         transformsType: TransformsTypeEnum
     ): Promise<void> {
-        const codeTransformsFileName =
+        const codeTransformsFileName: string =
             transformsType === TransformsTypeEnum.AppSettings
                 ? appSettingsTransformsFileName
                 : configSettingsTransformsFileName;
-        const pipelineTransformsVariableName =
+        const pipelineTransformsVariableName: string =
             transformsType === TransformsTypeEnum.AppSettings
                 ? appSettingsTransformsPipelineVariableName
                 : configSettingsTransformsPipelineVariableName;
@@ -1176,7 +1176,6 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                         );
                     }
 
-                    console.log(inlineTransformsFromPipelineParsed);
                     for (const [appsetting, transform] of Object.entries(
                         inlineTransformsFromPipelineParsed
                     )) {
@@ -1399,7 +1398,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                         for (const transformVariable of variableTextSplit) {
                             const transformVariableSplit: string[] =
                                 transformVariable.split(/(?<=^\S+)\s/);
-                            if (transformVariableSplit[1] == undefined) {
+                            if (transformVariableSplit[1] === undefined) {
                                 returnObject[transformVariableSplit[0]] = '';
                             } else {
                                 let cleanValue: string = transformVariableSplit[1].trim();
@@ -1417,8 +1416,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                             console.error('Error parsing JSON file: ', err);
                         }
                     }
-                    //TODO: Try to parse json as is, if it is ok, it is the inlineVariable
-                    //Otherwise, text manipulate it into an object
+
                     return releaseDefinition.variables[variableName].value;
                 }
             }
@@ -1430,7 +1428,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     private async onSelectBranchAction(
         event: React.SyntheticEvent<HTMLElement>,
         item: IListBoxItem<{}>
-    ) {
+    ): Promise<void> {
         loadingRepositoryObservable.value = true;
         await this.loadBaseCommitAndEnvironmentVariablesFromSelectedBuildArtifact(
             item.text!
@@ -1443,7 +1441,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     private async loadBaseCommitAndEnvironmentVariablesFromSelectedBuildArtifact(
         branchName: string
     ): Promise<void> {
-        const releaseDefinitionForRepo = Common.getReleaseDefinitionForRepo(
+        const releaseDefinitionForRepo: ReleaseDefinition | undefined = Common.getReleaseDefinitionForRepo(
             this.buildDefinitions,
             this.releaseDefinitions,
             this.state.repositoryListSelectedItemObservable.value.id
@@ -1456,7 +1454,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
             this.currentProject !== undefined &&
             releaseDefinitionForRepo !== undefined
         ) {
-            const mostRecentReleasesForBranch =
+            const mostRecentReleasesForBranch: Release[] =
                 await Common.getTopReleasesForBranch(
                     this.currentProject.id,
                     releaseDefinitionForRepo.id,
@@ -1467,14 +1465,13 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 mostRecentReleasesForBranch !== undefined &&
                 mostRecentReleasesForBranch.length > 0
             ) {
-                const mostRecentReleaseForBranch =
+                const mostRecentReleaseForBranch: Release =
                     await Common.getReleaseInfoData(
                         this.currentProject.id,
                         mostRecentReleasesForBranch[0].id
                     );
-                console.log(mostRecentReleaseForBranch);
                 if (mostRecentReleaseForBranch.artifacts.length > 0) {
-                    const buildArtifact =
+                    const buildArtifact: Artifact | undefined =
                         mostRecentReleaseForBranch.artifacts.find(
                             (artifact: Artifact) =>
                                 artifact.type.toLowerCase() === 'build'

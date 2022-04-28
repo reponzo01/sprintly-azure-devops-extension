@@ -655,36 +655,15 @@ export async function getReleasesForReleaseBranch(
     accessToken: string,
     top: number = 50
 ): Promise<void> {
-    // accessToken = await getOrRefreshToken(accessToken);
-    // const response: AxiosResponse<never> = await axios
-    //     .get(
-    //         `https://vsrm.dev.azure.com/${organizationName}/${projectId}/_apis/release/releases?$expand=2&sourceBranchFilter=${releaseBranch.targetBranch.name}&definitionId=${releaseDefinitionId}&api-version=6.0`,
-    //         {
-    //             headers: {
-    //                 Authorization: `Bearer ${accessToken}`,
-    //             },
-    //         }
-    //     )
-    //     .catch((error: any) => {
-    //         console.error(error);
-    //         throw error;
-    //     });
-
-    // const releases: { count: number; value: Release[] } = response.data;
-
-    const data = await getTopReleasesForBranch(
+    const releases: Release[] = await getTopReleasesForBranch(
         projectId,
         releaseDefinitionId,
         top,
         releaseBranch.targetBranch.name,
         true
     );
-    const releases: any = {
-        count: data.length,
-        value: data,
-    };
 
-    if (releases && releases.count > 0) {
+    if (releases && releases.length > 0) {
         const existingIndex: number = releaseInfoObservable.value.findIndex(
             (item: IReleaseInfo) =>
                 item.releaseBranch.targetBranch.name ===
@@ -694,7 +673,7 @@ export async function getReleasesForReleaseBranch(
         const releaseInfo: IReleaseInfo = {
             repositoryId,
             releaseBranch,
-            releases: releases.value,
+            releases,
         };
         if (existingIndex < 0) {
             releaseInfoObservable.push(releaseInfo);
