@@ -138,7 +138,6 @@ let repositoriesToProcess: string[] = [];
 
 export default class SprintlyEnvironmentVariableViewer extends React.Component<
     {
-        dataManager: IExtensionDataManager;
         organizationName: string;
         userDescriptor: string;
         releaseDefinitions: ReleaseDefinition[];
@@ -146,7 +145,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     },
     ISprintlyEnvironmentVariableViewerState
 > {
-    private dataManager: IExtensionDataManager;
+    private dataManager!: IExtensionDataManager;
     private organizationName: string;
     private userDescriptor: string;
     private releaseDefinitions: ReleaseDefinition[];
@@ -205,7 +204,6 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
     ];
 
     constructor(props: {
-        dataManager: IExtensionDataManager;
         organizationName: string;
         userDescriptor: string;
         releaseDefinitions: ReleaseDefinition[];
@@ -306,7 +304,6 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
                 ),
         };
 
-        this.dataManager = props.dataManager;
         this.organizationName = props.organizationName;
         this.userDescriptor = props.userDescriptor;
         this.releaseDefinitions = props.releaseDefinitions;
@@ -319,6 +316,7 @@ export default class SprintlyEnvironmentVariableViewer extends React.Component<
 
     private async initializeComponent(): Promise<void> {
         this.accessToken = await SDK.getAccessToken();
+        this.dataManager = await Common.initializeDataManager(this.accessToken);
         this.currentProject = await Common.getCurrentProject();
 
         const userSettings: Common.IUserSettings | undefined =

@@ -310,7 +310,7 @@ export default class FoundationSprintly extends React.Component<
             case '':
                 return (
                     <SprintlyPage
-                        dataManager={this.dataManager}
+                        accessToken={this.accessToken}
                         globalMessagesSvc={this.globalMessagesSvc}
                     />
                 );
@@ -319,7 +319,6 @@ export default class FoundationSprintly extends React.Component<
                     <SprintlySettings
                         organizationName={organizationNameObservable.value}
                         globalMessagesSvc={this.globalMessagesSvc}
-                        dataManager={this.dataManager}
                     />
                 );
             case sprintlyInReleaseTabKey:
@@ -327,7 +326,6 @@ export default class FoundationSprintly extends React.Component<
                     <SprintlyInRelease
                         organizationName={organizationNameObservable.value}
                         globalMessagesSvc={this.globalMessagesSvc}
-                        dataManager={this.dataManager}
                         releaseDefinitions={this.releaseDefinitions}
                         buildDefinitions={this.buildDefinitions}
                     />
@@ -337,7 +335,6 @@ export default class FoundationSprintly extends React.Component<
                     <SprintlyPostRelease
                         organizationName={organizationNameObservable.value}
                         globalMessagesSvc={this.globalMessagesSvc}
-                        dataManager={this.dataManager}
                         releaseDefinitions={this.releaseDefinitions}
                         buildDefinitions={this.buildDefinitions}
                     />
@@ -345,7 +342,7 @@ export default class FoundationSprintly extends React.Component<
             case sprintlyBranchCreatorsTabKey:
                 return (
                     <SprintlyBranchCreators
-                        dataManager={this.dataManager}
+                        accessToken={this.accessToken}
                         globalMessagesSvc={this.globalMessagesSvc}
                         organizationName={organizationNameObservable.value}
                     />
@@ -353,7 +350,7 @@ export default class FoundationSprintly extends React.Component<
             case sprintlyBranchSearchTabKey:
                 return (
                     <SprintlyBranchSearch
-                        dataManager={this.dataManager}
+                        accessToken={this.accessToken}
                         globalMessagesSvc={this.globalMessagesSvc}
                         organizationName={organizationNameObservable.value}
                         userName={loggedInUserNameObservable.value}
@@ -362,7 +359,6 @@ export default class FoundationSprintly extends React.Component<
             case sprintlyEnvironmentVariableViewerTabKey:
                 return (
                     <SprintlyEnvironmentVariableViewer
-                        dataManager={this.dataManager}
                         organizationName={organizationNameObservable.value}
                         userDescriptor={loggedInUserDescriptorObservable.value}
                         releaseDefinitions={this.releaseDefinitions}
@@ -454,9 +450,9 @@ export default class FoundationSprintly extends React.Component<
                                         primaryText='Sorry, you do not have access yet.'
                                         secondaryText={
                                             <span>
-                                                Please contact the DevOps team or
-                                                your team lead for access to this
-                                                extension.
+                                                Please contact the DevOps team
+                                                or your team lead for access to
+                                                this extension.
                                             </span>
                                         }
                                         imageAltText='No Access'
@@ -471,7 +467,8 @@ export default class FoundationSprintly extends React.Component<
                                     primaryText='Getting things ready...'
                                     secondaryText={
                                         <span>
-                                            Please wait, Sprintly is starting up...
+                                            Please wait, Sprintly is starting
+                                            up...
                                         </span>
                                     }
                                     imageAltText='Starting up...'

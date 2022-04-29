@@ -84,13 +84,14 @@ let repositoriesToProcess: string[] = [];
 
 export default class SprintlyBranchCreators extends React.Component<
     {
-        dataManager: IExtensionDataManager;
+        accessToken: string;
         organizationName: string;
         globalMessagesSvc: IGlobalMessagesService;
     },
     ISprintlyBranchCreatorsState
 > {
-    private dataManager: IExtensionDataManager;
+    private dataManager!: IExtensionDataManager;
+    private accessToken: string;
     private organizationName: string;
     private globalMessagesSvc: IGlobalMessagesService;
     private branchToDelete?: Common.ISearchResultBranch;
@@ -143,7 +144,7 @@ export default class SprintlyBranchCreators extends React.Component<
     ];
 
     constructor(props: {
-        dataManager: IExtensionDataManager;
+        accessToken: string;
         globalMessagesSvc: IGlobalMessagesService;
         organizationName: string;
     }) {
@@ -218,7 +219,7 @@ export default class SprintlyBranchCreators extends React.Component<
             repositoryListSelectedItemObservable: new ObservableValue<any>({}),
         };
 
-        this.dataManager = props.dataManager;
+        this.accessToken = props.accessToken;
         this.globalMessagesSvc = props.globalMessagesSvc;
         this.organizationName = props.organizationName;
     }
@@ -228,6 +229,9 @@ export default class SprintlyBranchCreators extends React.Component<
     }
 
     private async initializeComponent(): Promise<void> {
+        this.dataManager = await Common.initializeDataManager(
+            await Common.getOrRefreshToken(this.accessToken)
+        );
         const userSettings: Common.IUserSettings | undefined =
             await Common.getUserSettings(
                 this.dataManager,

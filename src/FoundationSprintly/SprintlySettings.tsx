@@ -59,7 +59,6 @@ export default class SprintlySettings extends React.Component<
     {
         organizationName: string;
         globalMessagesSvc: IGlobalMessagesService;
-        dataManager?: IExtensionDataManager;
     },
     ISprintlySettingsState
 > {
@@ -74,7 +73,7 @@ export default class SprintlySettings extends React.Component<
     private allUsers: Common.IAllowedEntity[] = [];
     private allRepositories: Common.IAllowedEntity[] = [];
 
-    private dataManager: IExtensionDataManager;
+    private dataManager!: IExtensionDataManager;
     private globalMessagesSvc: IGlobalMessagesService;
     private accessToken: string = '';
     private organizationName: string;
@@ -84,7 +83,6 @@ export default class SprintlySettings extends React.Component<
     constructor(props: {
         organizationName: string;
         globalMessagesSvc: IGlobalMessagesService;
-        dataManager: IExtensionDataManager;
     }) {
         super(props);
 
@@ -103,7 +101,6 @@ export default class SprintlySettings extends React.Component<
 
         this.organizationName = props.organizationName;
         this.globalMessagesSvc = props.globalMessagesSvc;
-        this.dataManager = props.dataManager;
 
         this.projectRepositoriesTableColumns = [
             {
@@ -133,6 +130,7 @@ export default class SprintlySettings extends React.Component<
 
     private async initializeComponent(): Promise<void> {
         this.accessToken = await SDK.getAccessToken();
+        this.dataManager = await Common.initializeDataManager(this.accessToken);
 
         await this.loadGroups();
         await this.loadUsers();

@@ -80,13 +80,12 @@ export default class SprintlyInRelease extends React.Component<
     {
         organizationName: string;
         globalMessagesSvc: IGlobalMessagesService;
-        dataManager: IExtensionDataManager;
         releaseDefinitions: ReleaseDefinition[];
         buildDefinitions: BuildDefinition[];
     },
     ISprintlyInReleaseState
 > {
-    private dataManager: IExtensionDataManager;
+    private dataManager!: IExtensionDataManager;
     private globalMessagesSvc: IGlobalMessagesService;
     private accessToken: string = '';
     private organizationName: string;
@@ -98,7 +97,6 @@ export default class SprintlyInRelease extends React.Component<
     constructor(props: {
         organizationName: string;
         globalMessagesSvc: IGlobalMessagesService;
-        dataManager: IExtensionDataManager;
         releaseDefinitions: ReleaseDefinition[];
         buildDefinitions: BuildDefinition[];
     }) {
@@ -137,7 +135,6 @@ export default class SprintlyInRelease extends React.Component<
 
         this.organizationName = props.organizationName;
         this.globalMessagesSvc = props.globalMessagesSvc;
-        this.dataManager = props.dataManager;
         this.releaseDefinitions = props.releaseDefinitions;
         this.buildDefinitions = props.buildDefinitions;
     }
@@ -148,6 +145,7 @@ export default class SprintlyInRelease extends React.Component<
 
     private async initializeComponent(): Promise<void> {
         this.accessToken = await SDK.getAccessToken();
+        this.dataManager = await Common.initializeDataManager(this.accessToken);
 
         const userSettings: Common.IUserSettings | undefined =
             await Common.getUserSettings(

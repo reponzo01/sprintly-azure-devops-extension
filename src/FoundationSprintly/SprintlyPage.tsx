@@ -70,18 +70,19 @@ let repositoriesToProcess: string[] = [];
 // See SprintlyPostRelease as an example.
 export default class SprintlyPage extends React.Component<
     {
-        dataManager: IExtensionDataManager;
+        accessToken: string;
         globalMessagesSvc: IGlobalMessagesService;
     },
     ISprintlyPageState
 > {
-    private dataManager: IExtensionDataManager;
+    private dataManager!: IExtensionDataManager;
+    private accessToken: string;
     private globalMessagesSvc: IGlobalMessagesService;
 
     private columns: any = [];
 
     constructor(props: {
-        dataManager: IExtensionDataManager;
+        accessToken: string;
         globalMessagesSvc: IGlobalMessagesService;
     }) {
         super(props);
@@ -121,7 +122,7 @@ export default class SprintlyPage extends React.Component<
         ];
 
         this.state = {};
-        this.dataManager = props.dataManager;
+        this.accessToken = props.accessToken;
         this.globalMessagesSvc = props.globalMessagesSvc;
     }
 
@@ -130,6 +131,9 @@ export default class SprintlyPage extends React.Component<
     }
 
     private async initializeComponent(): Promise<void> {
+        this.dataManager = await Common.initializeDataManager(
+            await Common.getOrRefreshToken(this.accessToken)
+        );
         const userSettings: Common.IUserSettings | undefined =
             await Common.getUserSettings(
                 this.dataManager,

@@ -83,14 +83,15 @@ export interface ISprintlyBranchSearchPageState {
 
 export default class SprintlyBranchSearchPage extends React.Component<
     {
-        dataManager: IExtensionDataManager;
+        accessToken: string;
         organizationName: string;
         userName: string;
         globalMessagesSvc: IGlobalMessagesService;
     },
     ISprintlyBranchSearchPageState
 > {
-    private dataManager: IExtensionDataManager;
+    private dataManager!: IExtensionDataManager;
+    private accessToken: string;
     private organizationName: string;
     private userName: string;
     private globalMessagesSvc: IGlobalMessagesService;
@@ -149,7 +150,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
     ];
 
     constructor(props: {
-        dataManager: IExtensionDataManager;
+        accessToken: string;
         globalMessagesSvc: IGlobalMessagesService;
         organizationName: string;
         userName: string;
@@ -222,7 +223,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
                 new ObservableArray<Common.ISearchResultBranch>([]),
         };
 
-        this.dataManager = props.dataManager;
+        this.accessToken = props.accessToken;
         this.globalMessagesSvc = props.globalMessagesSvc;
         this.organizationName = props.organizationName;
         this.userName = props.userName;
@@ -233,6 +234,9 @@ export default class SprintlyBranchSearchPage extends React.Component<
     }
 
     private async initializeComponent(): Promise<void> {
+        this.dataManager = await Common.initializeDataManager(
+            await Common.getOrRefreshToken(this.accessToken)
+        );
         searchObservable.value = '';
         const userSettings: Common.IUserSettings | undefined =
             await Common.getUserSettings(
