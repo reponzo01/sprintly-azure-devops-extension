@@ -295,7 +295,7 @@ export default class FoundationSprintly extends React.Component<
             }
 
             this.dataManager!.setValue<Common.IUserSettings>(
-                Common.SYSTEM_SETTINGS_DATA_MANAGER_KEY,
+                Common.USER_SETTINGS_DATA_MANAGER_KEY,
                 userSettings,
                 { scopeType: 'User' }
             ).then(() => {
