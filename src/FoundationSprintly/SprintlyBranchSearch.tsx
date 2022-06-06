@@ -667,7 +667,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
                     return props.isDeleteBatchBranchDialogOpen ? (
                         <Dialog
                             titleProps={{
-                                text: 'Delete branchs',
+                                text: 'Delete branches',
                             }}
                             footerButtonProps={[
                                 {
@@ -701,7 +701,7 @@ export default class SprintlyBranchSearchPage extends React.Component<
         branchesToDelete: Common.ISearchResultBranch[]
     ): void {
         if (branchesToDelete.length > 0) {
-            const createRefOptions: GitRefUpdate[] = [];
+            let createRefOptions: GitRefUpdate[] = [];
 
             const uniqueRepositories: string[] = branchesToDelete
                 .map((branch: Common.ISearchResultBranch) => {
@@ -713,8 +713,12 @@ export default class SprintlyBranchSearchPage extends React.Component<
                 );
 
             for (const repositoryId of uniqueRepositories) {
+                createRefOptions = [];
                 for (const branchToDelete of branchesToDelete) {
-                    if (branchToDelete.branchStats) {
+                    if (
+                        branchToDelete.branchStats &&
+                        branchToDelete.repository.id === repositoryId
+                    ) {
                         const branchShortName: string =
                             Common.getBranchShortName(
                                 branchToDelete.branchName
