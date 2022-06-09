@@ -74,21 +74,21 @@ const enum SearchType {
 
 let repositoriesToProcess: string[] = [];
 
-export interface ISprintlyBranchSearchPageState {
+export interface ISprintlyBranchNameSearchPageState {
     userSettings?: Common.IUserSettings;
     systemSettings?: Common.ISystemSettings;
     repositories: GitRepository[];
     searchResultBranchesObservable: ObservableArray<Common.ISearchResultBranch>;
 }
 
-export default class SprintlyBranchSearchPage extends React.Component<
+export default class SprintlyBranchNameSearchPage extends React.Component<
     {
         accessToken: string;
         organizationName: string;
         userName: string;
         globalMessagesSvc: IGlobalMessagesService;
     },
-    ISprintlyBranchSearchPageState
+    ISprintlyBranchNameSearchPageState
 > {
     private dataManager!: IExtensionDataManager;
     private accessToken: string;
@@ -870,35 +870,35 @@ export default class SprintlyBranchSearchPage extends React.Component<
                     Search for a branch name across all of the repositories you
                     have set up in the Settings tab.
                 </div>
+                <TextField
+                    prefixIconProps={{ iconName: 'Search' }}
+                    value={searchObservable}
+                    onChange={(
+                        event: React.ChangeEvent<
+                            HTMLInputElement | HTMLTextAreaElement
+                        >,
+                        newValue: string
+                    ) => (searchObservable.value = newValue)}
+                    placeholder='Search Branch Name'
+                    width={TextFieldWidth.standard}
+                />
                 <ButtonGroup>
-                    <TextField
-                        prefixIconProps={{ iconName: 'Search' }}
-                        value={searchObservable}
-                        onChange={(
-                            event: React.ChangeEvent<
-                                HTMLInputElement | HTMLTextAreaElement
-                            >,
-                            newValue: string
-                        ) => (searchObservable.value = newValue)}
-                        placeholder='Search Branch Name'
-                        width={TextFieldWidth.standard}
-                    />
                     <Button
-                        text='Search All Branches'
+                        text='Search all branches across my saved selected repos'
                         primary={true}
                         onClick={async () =>
                             await this.searchAction(SearchType.AllBranches)
                         }
                     />
                     <Button
-                        text='Just My Branches'
+                        text='Search only branches I created across my saved selected repos'
                         primary={true}
                         onClick={async () =>
                             await this.searchAction(SearchType.JustMyBranches)
                         }
                     />
                     <Button
-                        text='All My Branches (Ignore Search Term)'
+                        text='Show me all my branches, regardless of search term, across my saved selected repos'
                         primary={true}
                         onClick={async () =>
                             await this.searchAction(SearchType.AllMyBranches)

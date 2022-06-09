@@ -27,7 +27,7 @@ import SprintlyInRelease from './SprintlyInRelease';
 import SprintlyPostRelease from './SprintlyPostRelease';
 import SprintlySettings from './SprintlySettings';
 import SprintlyBranchCreators from './SprintlyBranchCreators';
-import SprintlyBranchSearch from './SprintlyBranchSearch';
+import SprintlyBranchNameSearch from './SprintlyBranchNameSearch';
 import SprintlyEnvironmentVariableViewer from './SprintlyEnvironmentVariableViewer';
 import * as Common from './SprintlyCommon';
 
@@ -44,8 +44,8 @@ const sprintlySettingsTabKey: string = 'sprintly-settings';
 const sprintlySettingsTabName: string = 'Settings';
 const sprintlyBranchCreatorsTabKey: string = 'sprintly-branch-creators';
 const sprintlyBranchCreatorsTabName: string = 'Branch Creators';
-const sprintlyBranchSearchTabKey: string = 'sprintly-branch-search';
-const sprintlyBranchSearchTabName: string = 'Branch Search';
+const sprintlyBranchNameSearchTabKey: string = 'sprintly-branch-name-search';
+const sprintlyBranchNameSearchTabName: string = 'Branch Name Search';
 const sprintlyEnvironmentVariableViewerTabKey: string =
     'sprintly-environment-variable-viewer';
 const sprintlyEnvironmentVariableViewerTabName: string =
@@ -347,9 +347,9 @@ export default class FoundationSprintly extends React.Component<
                         organizationName={organizationNameObservable.value}
                     />
                 );
-            case sprintlyBranchSearchTabKey:
+            case sprintlyBranchNameSearchTabKey:
                 return (
-                    <SprintlyBranchSearch
+                    <SprintlyBranchNameSearch
                         accessToken={this.accessToken}
                         globalMessagesSvc={this.globalMessagesSvc}
                         organizationName={organizationNameObservable.value}
@@ -501,8 +501,8 @@ function renderTabBar(): JSX.Element {
                 id={sprintlyBranchCreatorsTabKey}
             />
             <Tab
-                name={sprintlyBranchSearchTabName}
-                id={sprintlyBranchSearchTabKey}
+                name={sprintlyBranchNameSearchTabName}
+                id={sprintlyBranchNameSearchTabKey}
             />
             <Tab
                 name={sprintlyEnvironmentVariableViewerTabName}
