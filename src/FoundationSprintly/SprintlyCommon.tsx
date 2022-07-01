@@ -42,7 +42,9 @@ import { DropdownMultiSelection } from 'azure-devops-ui/Utilities/DropdownSelect
 import axios, { AxiosResponse } from 'axios';
 import React from 'react';
 
-export const ALLOWED_ENVIRONMENT_VARIABLE_GROUP_IDS: number[] = [3, 4, 5, 6, 14];
+export const ALLOWED_ENVIRONMENT_VARIABLE_GROUP_IDS: number[] = [
+    3, 4, 5, 6, 14,
+];
 export const ALWAYS_ALLOWED_GROUPS: IAllowedEntity[] = [
     {
         displayName: 'Dev Team Leads',
@@ -808,15 +810,22 @@ export function repositoryLinkJsxElement(
     repositoryName: string
 ): JSX.Element {
     return (
-        <Link
-            excludeTabStop
-            href={webUrl + '/branches'}
-            subtle={true}
-            target='_blank'
-            className={className}
-        >
-            <u>{repositoryName}</u>
-        </Link>
+        <>
+            <Link
+                excludeTabStop
+                href={webUrl + '/branches'}
+                subtle={false}
+                target='_blank'
+                className={className}
+            >
+                <Icon
+                    iconName='NavigateExternalInline'
+                    ariaLabel='Navigate to repository'
+                    title='Navigate to repository'
+                />
+            </Link>{' '}
+            {repositoryName}
+        </>
     );
 }
 
