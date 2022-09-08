@@ -737,6 +737,10 @@ export async function getBuildDefinitions(
             });
 
         const data: { count: number; value: BuildDefinition[] } = response.data;
+        data.value = data.value.filter(
+            (def) => (def.queueStatus as any) === 'enabled'
+        );
+        data.count = data.value.length;
         if (data && data.count > 0) {
             return data.value;
         }
