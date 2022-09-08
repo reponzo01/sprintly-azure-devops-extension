@@ -299,9 +299,14 @@ export async function getFilteredProjectRepositories(
     const repos: GitRepository[] = await getClient(
         GitRestClient
     ).getRepositories(projectId);
+    const isDisabledProperty = 'isDisabled';
     let filteredRepos: GitRepository[] = repos;
-    filteredRepos = repos.filter((repo: GitRepository) =>
-        savedRepos.includes(repo.id)
+    filteredRepos = repos.filter(
+        (repo: GitRepository) =>
+            savedRepos.includes(repo.id) &&
+            ((repo.hasOwnProperty(isDisabledProperty) &&
+                (repo as any)[isDisabledProperty] === false) ||
+                !repo.hasOwnProperty(isDisabledProperty))
     );
     return filteredRepos;
 }
