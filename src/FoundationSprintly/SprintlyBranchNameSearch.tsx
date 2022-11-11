@@ -500,8 +500,8 @@ export default class SprintlyBranchNameSearchPage extends React.Component<
         if (searchType === SearchType.JustMyBranches) {
             repositoryBranches = repositoryBranches.filter(
                 (branch: GitRef) =>
-                    Common.getBranchShortName(branch.name).includes(
-                        searchTerm
+                    Common.getBranchShortName(branch.name.toLowerCase()).includes(
+                        searchTerm.toLowerCase()
                     ) && branch.creator.uniqueName === this.userName
             );
         }
