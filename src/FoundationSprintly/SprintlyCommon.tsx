@@ -43,7 +43,7 @@ import axios, { AxiosResponse } from 'axios';
 import React from 'react';
 
 export const ALLOWED_ENVIRONMENT_VARIABLE_GROUP_IDS: number[] = [
-    3, 4, 5, 6, 14,
+    3, 4, 5, 6, 14, 28, 29, 30, 31
 ];
 export const ALWAYS_ALLOWED_GROUPS: IAllowedEntity[] = [
     {
