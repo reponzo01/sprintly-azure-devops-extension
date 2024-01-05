@@ -44,6 +44,7 @@ export class TagsModal extends React.Component<{
                     itemProvider={
                         new ArrayItemProvider<string>(this.props.tags)
                     }
+                    scrollable={true}
                 />
             </Dialog>
         ) : null;
