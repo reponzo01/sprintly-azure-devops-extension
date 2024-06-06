@@ -149,8 +149,13 @@ export default class FoundationSprintly extends React.Component<
             systemSettings,
         });
 
-        await this.loadAllowedUserGroupsUsers();
-        this.loadAllowedUsers();
+        if (Common.USE_GRANULAR_ACCESS) {
+            await this.loadAllowedUserGroupsUsers();
+            this.loadAllowedUsers();
+        } else {
+            userIsAllowedObservable.value = true;
+        }
+
         isReadyObservable.value = true;
     }
 

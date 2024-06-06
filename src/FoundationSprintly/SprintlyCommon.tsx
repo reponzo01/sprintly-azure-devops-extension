@@ -127,6 +127,7 @@ export const MASTER: string = 'master';
 export const MAIN: string = 'main';
 export const USER_SETTINGS_DATA_MANAGER_KEY: string = 'user-settings';
 export const SYSTEM_SETTINGS_DATA_MANAGER_KEY: string = 'system-settings';
+export const USE_GRANULAR_ACCESS: boolean = false;
 
 export interface IAllowedEntity {
     displayName: string;

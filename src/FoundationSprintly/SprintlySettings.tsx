@@ -722,32 +722,36 @@ export default class SprintlySettings extends React.Component<
                         },
                     ]}
                 />
-                <div className='page-content page-content-top'>
-                    <Card className='bolt-card-white'>
-                        <Page className='sprintly-width-100'>
-                            <Header
-                                title='Permissions'
-                                titleSize={TitleSize.Medium}
-                                titleIconProps={{ iconName: 'Permissions' }}
-                            />
-                            <div className='page-content page-content-top'>
-                                By default the Azure groups{' '}
-                                <u>
-                                    <code>Dev Team Leads</code>
-                                </u>{' '}
-                                and{' '}
-                                <u>
-                                    <code>DevOps</code>
-                                </u>{' '}
-                                have access to this extension. Use the dropdowns
-                                to add more groups or individual users.
-                            </div>
-                            {this.renderUserGroupsDropdown()}
-                            {this.renderUsersDropdown()}
-                        </Page>
-                    </Card>
-                </div>
-                <div className='page-content'>
+                {
+                    Common.USE_GRANULAR_ACCESS &&
+                    <div className='page-content page-content-top'>
+                        <Card className='bolt-card-white'>
+                            <Page className='sprintly-width-100'>
+                                <Header
+                                    title='Permissions'
+                                    titleSize={TitleSize.Medium}
+                                    titleIconProps={{ iconName: 'Permissions' }}
+                                />
+                                <div className='page-content page-content-top'>
+                                    By default the Azure groups{' '}
+                                    <u>
+                                        <code>Dev Team Leads</code>
+                                    </u>{' '}
+                                    and{' '}
+                                    <u>
+                                        <code>DevOps</code>
+                                    </u>{' '}
+                                    have access to this extension. Use the dropdowns
+                                    to add more groups or individual users.
+                                </div>
+                                {this.renderUserGroupsDropdown()}
+                                {this.renderUsersDropdown()}
+                            </Page>
+                        </Card>
+                    </div>
+                }
+
+                <div className={Common.USE_GRANULAR_ACCESS ? 'page-content' : 'page-content page-content-top'}>
                     <Card className='bolt-card-white'>
                         <Page className='sprintly-width-100'>
                             <Header
