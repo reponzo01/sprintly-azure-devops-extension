@@ -12,6 +12,7 @@
         "type": "git",
         "url": "https://github.com/reponzo01/sprintly-azure-devops-extension.git"
     },
+    "_notes": "Using Node v14.21.3 to run and compile this project. Also using the specific package-lock.json that has been committed to source control. For whatever reason, deleting this lock file and re-running npm install as well as npm run serve causes webpack to fail to compile the source code. The failure is in the @types module and I have not debugged that yet. So ensure that you are using an unmodified version of package-lock.json from source control.",
     "scripts": {
         "clean": "rimraf ./dist",
         "compile": "npm run clean && webpack --mode production",
