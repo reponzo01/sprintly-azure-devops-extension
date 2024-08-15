@@ -40,6 +40,7 @@ import { ZeroData } from 'azure-devops-ui/ZeroData';
 import * as Common from './SprintlyCommon';
 import { TagsModal, ITagsModalContent, getTagsModalContent } from './TagsModal';
 import { Card } from 'azure-devops-ui/Card';
+import { Link } from 'azure-devops-ui/Link';
 
 export interface ISprintlyPageState {
     userSettings?: Common.IUserSettings;
@@ -337,6 +338,8 @@ export default class SprintlyPage extends React.Component<
     ): JSX.Element {
         let color: IColor = Common.redColor;
         let text: string = 'No';
+        let viewChangesUrl: string = `${tableItem.webUrl}/branchCompare?baseVersion=GB${tableItem.hasMainBranch ? 'main' : 'master'}&targetVersion=GBdevelop&_a=files`;
+
         if (tableItem.createRelease === true) {
             color = Common.greenColor;
             text = 'Yes';
@@ -385,12 +388,22 @@ export default class SprintlyPage extends React.Component<
                 ></TwoLineTableCell>
             );
         }
+        const compareChangesLink = <Link
+            key='compareChangesLink'
+            excludeTabStop
+            href={viewChangesUrl}
+            target='_blank'
+        >
+            Compare Changes
+        </Link>
+
         return (
-            <SimpleTableCell
+            <TwoLineTableCell
+                className={'flex-direction-col'}
                 key={'col-' + columnIndex}
                 columnIndex={columnIndex}
                 tableColumn={tableColumn}
-                children={
+                line1={
                     <>
                         <Pill
                             color={color}
@@ -402,7 +415,8 @@ export default class SprintlyPage extends React.Component<
                         </Pill>
                     </>
                 }
-            ></SimpleTableCell>
+                line2={compareChangesLink}
+            ></TwoLineTableCell>
         );
     }
 
