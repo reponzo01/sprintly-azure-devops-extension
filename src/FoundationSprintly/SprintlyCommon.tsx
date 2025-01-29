@@ -563,7 +563,10 @@ export function getReleaseDefinitionForRepo(
                     if (releaseDefBuildDef) {
                         if (
                             releaseDefBuildDef.id ===
-                            buildDefinitionForRepo.id.toString()
+                            buildDefinitionForRepo.id.toString() &&
+
+                            // Ignore vue-upgrade release definitions
+                            !releaseDefinition.name.includes('vue-upgrade')
                         ) {
                             return releaseDefinition;
                         }
