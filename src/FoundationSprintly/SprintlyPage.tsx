@@ -337,24 +337,37 @@ export default class SprintlyPage extends React.Component<
         tableItem: Common.IGitRepositoryExtended
     ): JSX.Element {
         let color: IColor = Common.redColor;
-        let text: string = 'No';
+        let text: string = 'No Release Needed';
         let viewChangesUrl: string = `${tableItem.webUrl}/branchCompare?baseVersion=GB${tableItem.hasMainBranch ? 'main' : 'master'}&targetVersion=GBdevelop&_a=files`;
+
+        const compareChangesLink = <Link
+            key='compareChangesLink'
+            excludeTabStop
+            href={viewChangesUrl}
+            target='_blank'
+        >
+            Compare Changes
+        </Link>
 
         if (tableItem.createRelease === true) {
             color = Common.greenColor;
-            text = 'Yes';
+            text = 'Yes, Release Needed';
         }
         if (tableItem.hasExistingRelease === true) {
-            color = Common.orangeColor;
-            text = 'Release Exists';
+            color = tableItem.createRelease === true
+                ? Common.drakOrangeColor
+                : Common.orangeColor;
+            text = tableItem.createRelease === true
+                ? 'Release Exists, but there are changes'
+                : 'Release Exists';
         }
         if (tableItem.hasExistingRelease) {
-            const releaseBranchLinks: JSX.Element[] = [];
+            const lineTwoLinks: JSX.Element[] = [];
             let counter: number = 0;
             for (const releaseBranch of tableItem.existingReleaseBranches) {
                 const releaseBranchName: string =
                     releaseBranch.targetBranch.name.split('heads/')[1];
-                releaseBranchLinks.push(
+                lineTwoLinks.push(
                     Common.branchLinkJsxElement(
                         counter + 'link',
                         tableItem.webUrl,
@@ -363,6 +376,9 @@ export default class SprintlyPage extends React.Component<
                     )
                 );
                 counter++;
+            }
+            if (tableItem.createRelease === true) {
+                lineTwoLinks.push(compareChangesLink);
             }
 
             return (
@@ -384,18 +400,10 @@ export default class SprintlyPage extends React.Component<
                             </Pill>
                         </>
                     }
-                    line2={<>{releaseBranchLinks}</>}
+                    line2={<>{lineTwoLinks}</>}
                 ></TwoLineTableCell>
             );
         }
-        const compareChangesLink = <Link
-            key='compareChangesLink'
-            excludeTabStop
-            href={viewChangesUrl}
-            target='_blank'
-        >
-            Compare Changes
-        </Link>
 
         return (
             <TwoLineTableCell
@@ -415,7 +423,7 @@ export default class SprintlyPage extends React.Component<
                         </Pill>
                     </>
                 }
-                line2={compareChangesLink}
+                line2={tableItem.createRelease === true ? compareChangesLink : <></>}
             ></TwoLineTableCell>
         );
     }

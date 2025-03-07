@@ -102,6 +102,12 @@ export const orangeColor: IColor = {
     blue: 74,
 };
 
+export const drakOrangeColor: IColor = {
+    red: 225,
+    green: 116,
+    blue: 74,
+};
+
 export const successColor: IColor = {
     red: 47,
     green: 92,
