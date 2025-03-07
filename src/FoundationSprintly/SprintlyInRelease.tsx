@@ -54,6 +54,7 @@ export interface IReleaseBranchDeployTableItem {
     webUrl?: string;
     releaseInfo?: Common.IReleaseInfo;
     projectId?: string;
+    projectName?: string;
     isRepositoryItem: boolean;
 }
 
@@ -225,6 +226,7 @@ export default class SprintlyInRelease extends React.Component<
                             name: repo.name,
                             id: repo.id,
                             projectId: repo.project.id,
+                            projectName: repo.project.name,
                             isRepositoryItem: true,
                         },
                         expanded: true,
@@ -257,6 +259,7 @@ export default class SprintlyInRelease extends React.Component<
                                             releaseBranch.targetBranch.name
                                 ),
                             projectId: repo.project.id,
+                            projectName: repo.project.name,
                             isRepositoryItem: false,
                         },
                     });
@@ -282,7 +285,7 @@ export default class SprintlyInRelease extends React.Component<
         treeColumn: ITreeColumn<IReleaseBranchDeployTableItem>,
         treeItem: ITreeItemEx<IReleaseBranchDeployTableItem>
     ): JSX.Element {
-        let releaseUrl: string = `https://dev.azure.com/${this.organizationName}/${treeItem.underlyingItem.data.projectId}/_releaseProgress?_a=release-pipeline-progress&releaseId=`;
+        let releaseUrl: string = `https://dev.azure.com/${this.organizationName}/${treeItem.underlyingItem.data.projectName}/_releaseProgress?_a=release-pipeline-progress&releaseId=`;
 
         if (!treeItem.underlyingItem.data.isRepositoryItem) {
             if (treeItem.underlyingItem.data.releaseInfo) {
@@ -638,6 +641,7 @@ export default class SprintlyInRelease extends React.Component<
         data += 'Repository,Version,Release Artifact\r\n';
 
         let projectId: string = '';
+        let projectName: string = '';
         let repoName: string = '';
         let version: string = '';
         let releaseArtifact: string = '';
@@ -648,6 +652,7 @@ export default class SprintlyInRelease extends React.Component<
                 if (repoInfo.underlyingItem.data.id === repo) {
                     repoName = repoInfo.underlyingItem.data.name;
                     projectId = repoInfo.underlyingItem.data.projectId!;
+                    projectName = repoInfo.underlyingItem.data.projectName!;
                 }
             }
             const repoReleaseBranchesInfo: Common.IReleaseInfo[] = [];
@@ -667,7 +672,7 @@ export default class SprintlyInRelease extends React.Component<
                             this.state.allBranchesReleaseInfo
                         );
                     if (mostRecentRelease) {
-                        releaseArtifact = `https://dev.azure.com/${this.organizationName}/${projectId}/_releaseProgress?_a=release-pipeline-progress&releaseId=${mostRecentRelease.id}`;
+                        releaseArtifact = `https://dev.azure.com/${this.organizationName}/${projectName}/_releaseProgress?_a=release-pipeline-progress&releaseId=${mostRecentRelease.id}`;
                     }
 
                     data += `${repoName},${version},${releaseArtifact}\r\n`;
