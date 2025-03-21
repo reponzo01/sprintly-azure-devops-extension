@@ -686,7 +686,7 @@ export default class SprintlyInRelease extends React.Component<
             'data:text/csv;base64,' + window.btoa(data)
         );
         hiddenElement.target = '_blank';
-        hiddenElement.download = `Release_Candidates_as_of_${now.getMonth()}-${now.getDate()}-${now.getFullYear()}.csv`;
+        hiddenElement.download = `Release_Candidates_as_of_${now.getMonth()+1}-${now.getDate()}-${now.getFullYear()}.csv`;
         hiddenElement.click();
     }
 
