@@ -64,6 +64,8 @@ const isDeleteSingleBranchDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const isDeleteBatchBranchDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
+const selectedBranchesCountObservable: ObservableValue<number>
+    = new ObservableValue<number>(0);
 //#endregion "Observables"
 
 const enum SearchType {
@@ -162,6 +164,7 @@ export default class SprintlyBranchNameSearchPage extends React.Component<
         this.renderRepositoryCell = this.renderRepositoryCell.bind(this);
         this.renderStatsCell = this.renderStatsCell.bind(this);
         this.renderDeleteBranchCell = this.renderDeleteBranchCell.bind(this);
+        this.getSelectedBranches = this.getSelectedBranches.bind(this);
         this.deleteSingleBranchAction =
             this.deleteSingleBranchAction.bind(this);
         this.deleteBatchBranchAction = this.deleteBatchBranchAction.bind(this);
@@ -503,11 +506,13 @@ export default class SprintlyBranchNameSearchPage extends React.Component<
                     Common.getBranchShortName(branch.name.toLowerCase()).includes(
                         searchTerm.toLowerCase()
                     ) && branch.creator.uniqueName === this.userName
+                    && branch.name.indexOf('refs/tags') === -1
             );
         }
         if (searchType === SearchType.AllMyBranches) {
             repositoryBranches = repositoryBranches.filter(
                 (branch: GitRef) => branch.creator.uniqueName === this.userName
+                && branch.name.indexOf('refs/tags') === -1
             );
         }
         return repositoryBranches;
@@ -515,7 +520,7 @@ export default class SprintlyBranchNameSearchPage extends React.Component<
 
     private async searchAction(searchType: SearchType): Promise<void> {
         isLoadingObservable.value = true;
-        this.searchResultsSelection.clear();
+        this.clearSearchResultsSelection();
         this.setState({
             searchResultBranchesObservable:
                 new ObservableArray<Common.ISearchResultBranch>([]),
@@ -667,7 +672,7 @@ export default class SprintlyBranchNameSearchPage extends React.Component<
                     return props.isDeleteBatchBranchDialogOpen ? (
                         <Dialog
                             titleProps={{
-                                text: 'Delete branches',
+                                text: `Delete ${selectedBranchesCountObservable.value} branch(es)`,
                             }}
                             footerButtonProps={[
                                 {
@@ -695,6 +700,20 @@ export default class SprintlyBranchNameSearchPage extends React.Component<
                 }}
             </Observer>
         );
+    }
+
+    private getSelectedBranches(): Common.ISearchResultBranch[] {
+        const selectedBranches: Common.ISearchResultBranch[] =
+            this.getSelectedRange(
+                this.searchResultsSelection.value,
+                this.state.searchResultBranchesObservable.value
+            );
+        return selectedBranches;
+    }
+
+    private clearSearchResultsSelection(): void {
+        this.searchResultsSelection.clear();
+        selectedBranchesCountObservable.value = 0;
     }
 
     private deleteBranchesAction(
@@ -817,20 +836,17 @@ export default class SprintlyBranchNameSearchPage extends React.Component<
             this.deleteBranchesAction([this.branchToDelete]);
         }
 
-        this.searchResultsSelection.clear();
+        this.clearSearchResultsSelection();
         this.onDismissDeleteSingleBranchActionModal();
     }
 
     private deleteBatchBranchAction(): void {
         const branchesToDelete: Common.ISearchResultBranch[] =
-            this.getSelectedRange(
-                this.searchResultsSelection.value,
-                this.state.searchResultBranchesObservable.value
-            );
+            this.getSelectedBranches();
 
         this.deleteBranchesAction(branchesToDelete);
 
-        this.searchResultsSelection.clear();
+        this.clearSearchResultsSelection();
         this.onDismissDeleteBatchBranchActionModal();
     }
 
@@ -917,19 +933,28 @@ export default class SprintlyBranchNameSearchPage extends React.Component<
                 <Observer
                     searchResults={this.state.searchResultBranchesObservable}
                     isLoading={isLoadingObservable}
+                    selectedBranchesCount={selectedBranchesCountObservable}
                 >
                     {(observerProps: {
                         searchResults: Common.ISearchResultBranch[];
                         isLoading: boolean;
+                        selectedBranchesCount: number;
                     }) => {
                         if (observerProps.searchResults.length > 0) {
                             return (
                                 <>
                                     <ButtonGroup>
                                         <Button
-                                            text='Delete Selected'
+                                            text={
+                                                observerProps.selectedBranchesCount > 0 ?
+                                                    'Delete ' +
+                                                    observerProps.selectedBranchesCount +
+                                                    ' Selected' :
+                                                    'Delete Selected'
+                                                }
                                             iconProps={{ iconName: 'Delete' }}
                                             danger={true}
+                                            disabled={observerProps.selectedBranchesCount <= 0}
                                             onClick={() => {
                                                 isDeleteBatchBranchDialogOpenObservable.value =
                                                     true;
@@ -950,6 +975,10 @@ export default class SprintlyBranchNameSearchPage extends React.Component<
                                                 selection={
                                                     this.searchResultsSelection
                                                 }
+                                                onSelect={ ()=> {
+                                                    selectedBranchesCountObservable.value =
+                                                        this.getSelectedBranches().length;
+                                                }}
                                             />
                                         </Card>
                                         {this.renderDeleteSingleBranchActionModal()}

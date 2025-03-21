@@ -78,6 +78,8 @@ const isDeleteSingleBranchDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
 const isDeleteBatchBranchDialogOpenObservable: ObservableValue<boolean> =
     new ObservableValue<boolean>(false);
+const selectedBranchesCountObservable: ObservableValue<number>
+    = new ObservableValue<number>(0);
 //#endregion "Observables"
 
 let repositoriesToProcess: string[] = [];
@@ -158,6 +160,7 @@ export default class SprintlyBranchCreators extends React.Component<
         this.renderLatestCommitCell = this.renderLatestCommitCell.bind(this);
         this.renderStatsCell = this.renderStatsCell.bind(this);
         this.renderDeleteBranchCell = this.renderDeleteBranchCell.bind(this);
+        this.getSelectedBranches = this.getSelectedBranches.bind(this);
         this.deleteSingleBranchAction =
             this.deleteSingleBranchAction.bind(this);
         this.deleteBatchBranchAction = this.deleteBatchBranchAction.bind(this);
@@ -318,10 +321,12 @@ export default class SprintlyBranchCreators extends React.Component<
             <Observer
                 selectedItem={this.state.repositoryListSelectedItemObservable}
                 repositoryBranches={this.state.repositoryBranchesObservable}
+                selectedBranchesCount={selectedBranchesCountObservable}
             >
                 {(observerProps: {
                     selectedItem: GitRepository;
                     repositoryBranches: Common.ISearchResultBranch[];
+                    selectedBranchesCount: number;
                 }) => (
                     <Page className='flex-grow single-layer-details'>
                         {this.state.repositoryListSelection.selectedCount ===
@@ -338,11 +343,18 @@ export default class SprintlyBranchCreators extends React.Component<
                                     <div className='page-content page-content-top'>
                                         <ButtonGroup>
                                             <Button
-                                                text='Delete Selected'
+                                                text={
+                                                    observerProps.selectedBranchesCount > 0 ?
+                                                        'Delete ' +
+                                                        observerProps.selectedBranchesCount +
+                                                        ' Selected' :
+                                                        'Delete Selected'
+                                                    }
                                                 iconProps={{
                                                     iconName: 'Delete',
                                                 }}
                                                 danger={true}
+                                                disabled={observerProps.selectedBranchesCount <= 0}
                                                 onClick={() => {
                                                     isDeleteBatchBranchDialogOpenObservable.value =
                                                         true;
@@ -363,6 +375,10 @@ export default class SprintlyBranchCreators extends React.Component<
                                                 selection={
                                                     this.searchResultsSelection
                                                 }
+                                                onSelect={ ()=> {
+                                                    selectedBranchesCountObservable.value =
+                                                        this.getSelectedBranches().length;
+                                                }}
                                             />
                                         </Card>
                                     </div>
@@ -728,7 +744,7 @@ export default class SprintlyBranchCreators extends React.Component<
                     return props.isDeleteBatchBranchDialogOpen ? (
                         <Dialog
                             titleProps={{
-                                text: 'Delete branches',
+                                text: `Delete ${selectedBranchesCountObservable.value} branch(es)`,
                             }}
                             footerButtonProps={[
                                 {
@@ -756,6 +772,20 @@ export default class SprintlyBranchCreators extends React.Component<
                 }}
             </Observer>
         );
+    }
+
+    private getSelectedBranches(): Common.ISearchResultBranch[] {
+        const selectedBranches: Common.ISearchResultBranch[] =
+            this.getSelectedRange(
+                this.searchResultsSelection.value,
+                this.state.repositoryBranchesObservable.value
+            );
+        return selectedBranches;
+    }
+
+    private clearSearchResultsSelection(): void {
+        this.searchResultsSelection.clear();
+        selectedBranchesCountObservable.value = 0;
     }
 
     private deleteBranchesAction(
@@ -877,20 +907,17 @@ export default class SprintlyBranchCreators extends React.Component<
             this.deleteBranchesAction([this.branchToDelete]);
         }
 
-        this.searchResultsSelection.clear();
+        this.clearSearchResultsSelection();
         this.onDismissDeleteSingleBranchActionModal();
     }
 
     private deleteBatchBranchAction(): void {
         const branchesToDelete: Common.ISearchResultBranch[] =
-            this.getSelectedRange(
-                this.searchResultsSelection.value,
-                this.state.repositoryBranchesObservable.value
-            );
+            this.getSelectedBranches();
 
         this.deleteBranchesAction(branchesToDelete);
 
-        this.searchResultsSelection.clear();
+        this.clearSearchResultsSelection();
         this.onDismissDeleteBatchBranchActionModal();
     }
 
