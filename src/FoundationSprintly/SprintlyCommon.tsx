@@ -855,6 +855,12 @@ export function branchLinkJsxElement(
     className: string,
     isReleaseLink: boolean = false
 ): JSX.Element {
+    let linkDisplay = branchName;
+    if (branchName.includes('?')) {
+        const branchNameSplit = branchName.split('?');
+        branchName = branchNameSplit[0];
+        linkDisplay = `${branchName} (Created by ${branchNameSplit[1]})`;
+    }
     return (
         <Link
             key={key}
@@ -866,7 +872,7 @@ export function branchLinkJsxElement(
             target='_blank'
             className={className}
         >
-            {branchName}
+            {linkDisplay}
         </Link>
     );
 }

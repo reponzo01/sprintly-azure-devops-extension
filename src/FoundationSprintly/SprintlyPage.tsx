@@ -371,7 +371,7 @@ export default class SprintlyPage extends React.Component<
                     Common.branchLinkJsxElement(
                         counter + 'link',
                         tableItem.webUrl,
-                        releaseBranchName,
+                        `${releaseBranchName}?${releaseBranch.targetBranch.creator.displayName}`,
                         ''
                     )
                 );
