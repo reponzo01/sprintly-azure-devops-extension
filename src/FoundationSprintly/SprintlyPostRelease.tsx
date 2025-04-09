@@ -1474,13 +1474,19 @@ export default class SprintlyPostRelease extends React.Component<
                                             '' ||
                                         createTagDescriptionObservable.value.trim() ===
                                             '',
-                                    onClick: () => {
-                                        this.onDismissCreateTagActionModal();
-                                        this.createTagAction();
+                                    onClick: async () => {
+                                        await this.createTagAction();
                                     },
                                 },
                             ]}
                         >
+                            <>
+                                This will create a tag from the latest
+                                commit on the master (main) branch. Ensure
+                                all relevant PRs have been successfully
+                                completed.
+                            </>
+                            <br/><br/>
                             <Page className='flex-column rhythm-vertical-16 flex-grow scroll-auto'>
                                 <FormItem label='Title *'>
                                     <TextField
@@ -1533,8 +1539,18 @@ export default class SprintlyPostRelease extends React.Component<
         );
     }
 
-    private createTagAction(): void {
+    private async createTagAction(): Promise<void> {
         if (this.state.baseMasterMainBranch) {
+            const latestBranchInfo: GitRef[] = await Common.getRepositoryInfo(
+                this.state.repositoryListSelectedItemObservable.value.id,
+                this.state.baseMasterMainBranch?.name.substring(
+                    this.state.baseMasterMainBranch?.name.indexOf('heads/'))
+            );
+            if (latestBranchInfo.length > 0) {
+                this.setState({
+                    baseMasterMainBranch: latestBranchInfo[0]
+                });
+            }
             const tag: any = {
                 taggedObject: {
                     objectId: this.state.baseMasterMainBranch.objectId,
@@ -1568,7 +1584,7 @@ export default class SprintlyPostRelease extends React.Component<
                 });
         }
 
-        isCreatePullRequestDialogOpenObservable.value = false;
+        this.onDismissCreateTagActionModal();
     }
 
     private onDismissCreateTagActionModal(): void {
